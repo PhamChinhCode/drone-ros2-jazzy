@@ -247,15 +247,15 @@ hoạ) không chạy được. Dùng script không GUI của repo:
 
 ```bash
 # 0) Sinh bàn cờ để in (A4 ngang, 10x7 ô, ô 25 mm)
-./scripts/calibrate_camera.py pattern --size 9x6 --square 0.025 --out chessboard.svg
+./tools/calibrate_camera.py pattern --size 9x6 --square 0.025 --out chessboard.svg
 #    In ở tỉ lệ 100% (KHÔNG "fit to page"), đo lại thước 100 mm in kèm,
 #    rồi dán PHẲNG lên bìa cứng, giữ nguyên vành trắng quanh bàn cờ.
 
 # DỪNG T1 trước — /dev/video0 chỉ cho một tiến trình mở
 ./scripts/camera_v4l2_setup.sh --vblank 110 --exposure 800 --gain 120
 
-./scripts/calibrate_camera.py capture --size 9x6 --square 0.025   # chụp bộ ảnh bàn cờ
-./scripts/calibrate_camera.py solve  --size 9x6 --square 0.025 --write-ros
+./tools/calibrate_camera.py capture --size 9x6 --square 0.025   # chụp bộ ảnh bàn cờ
+./tools/calibrate_camera.py solve  --size 9x6 --square 0.025 --write-ros
 ```
 
 `--size` đếm **góc bên trong**, không đếm ô (bàn cờ 10×7 ô → `9x6`). `--square` là cạnh ô **đo
@@ -283,7 +283,7 @@ máy khách cần X server: XQuartz trên macOS, VcXsrv/MobaXterm trên Windows)
 ### d) Viết node optical flow
 
 Dùng `cv2.calcOpticalFlowPyrLK` / `Farneback` trong node `rclpy` tự viết.
-`src/camera_view.py` là điểm khởi đầu — logic mở camera dùng lại được gần như nguyên vẹn.
+`tools/camera_view.py` là điểm khởi đầu — logic mở camera dùng lại được gần như nguyên vẹn.
 
 ---
 

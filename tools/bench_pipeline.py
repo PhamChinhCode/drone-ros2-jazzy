@@ -10,11 +10,11 @@ song với node camera được), xử lý khung hình mới nhất và bỏ khu
 lúc còn bận — đúng cách một node điều khiển thật phải hành xử.
 
 Dùng:
-  ./scripts/bench_pipeline.py                          # cả aruco + flow, 20 s
-  ./scripts/bench_pipeline.py --mode none              # chỉ đo đường truyền ROS
-  ./scripts/bench_pipeline.py --mode aruco --seconds 30
-  ./scripts/bench_pipeline.py --scale 0.5              # hạ 1280x800 -> 640x400
-  ./scripts/bench_pipeline.py --best-effort            # nếu publisher dùng QoS best effort
+  ./tools/bench_pipeline.py                          # cả aruco + flow, 20 s
+  ./tools/bench_pipeline.py --mode none              # chỉ đo đường truyền ROS
+  ./tools/bench_pipeline.py --mode aruco --seconds 30
+  ./tools/bench_pipeline.py --scale 0.5              # hạ 1280x800 -> 640x400
+  ./tools/bench_pipeline.py --best-effort            # nếu publisher dùng QoS best effort
 
 Đọc kết quả:
   - "nhận" là nhịp khung hình tới, "xử lý" là nhịp thực sự chạy hết pipeline.

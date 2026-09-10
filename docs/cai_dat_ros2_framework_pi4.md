@@ -483,7 +483,7 @@ mkdir -p ~/ros2_ws/src
 ```
 
 Đặt các package tự viết (node camera publish `sensor_msgs/Image`, node optical flow, node PID,
-file launch tổng) vào `~/ros2_ws/src/`. `src/camera_view.py` trong repo này là điểm khởi đầu để
+file launch tổng) vào `~/ros2_ws/src/`. `tools/camera_view.py` trong repo này là điểm khởi đầu để
 viết node camera (logic mở camera dùng lại gần như nguyên vẹn).
 
 ```bash

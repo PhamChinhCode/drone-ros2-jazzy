@@ -8,10 +8,10 @@ tham số bằng OpenCV, toàn bộ phản hồi in ra terminal.
 Quy trình 2 bước:
 
   # 1) Chụp — cầm bàn cờ đi khắp khung hình, script tự lọc và lưu ảnh hợp lệ
-  ./scripts/calibrate_camera.py capture --size 9x6 --square 0.025
+  ./tools/calibrate_camera.py capture --size 9x6 --square 0.025
 
   # 2) Tính + ghi file camera_info cho ROS
-  ./scripts/calibrate_camera.py solve --size 9x6 --square 0.025 --write-ros
+  ./tools/calibrate_camera.py solve --size 9x6 --square 0.025 --write-ros
 
 LƯU Ý: bước `capture` đọc trực tiếp /dev/video0 nên phải DỪNG node camera trước
 (Ctrl+C ở terminal chạy run_camera_node.sh), vì thiết bị chỉ cho một tiến trình mở.

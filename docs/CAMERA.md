@@ -290,7 +290,7 @@ qua SSH thường là **không được**. Ba đường đi:
 
 | Cách | Ưu | Nhược |
 |---|---|---|
-| **A. Script không GUI** (`scripts/calibrate_camera.py`) | Chạy thẳng qua SSH, không cần cài gì thêm | Không xem được ảnh trực tiếp, phải dựa vào lưới phủ in ra terminal |
+| **A. Script không GUI** (`tools/calibrate_camera.py`) | Chạy thẳng qua SSH, không cần cài gì thêm | Không xem được ảnh trực tiếp, phải dựa vào lưới phủ in ra terminal |
 | **B. GUI qua X11 forwarding** (`ssh -X`, MobaXterm/VcXsrv/XQuartz) | Dùng đúng công cụ chuẩn của ROS, thấy ảnh trực tiếp | Máy khách phải có X server; qua Wi-Fi thì giật |
 | **C. Ghi rosbag rồi hiệu chỉnh trên laptop** | Chuẩn ROS, thoải mái làm lại | Phải có ROS 2 trên laptop, file bag nặng |
 
@@ -301,9 +301,9 @@ qua SSH thường là **không được**. Ba đường đi:
 **Sinh file in** (script tự tính kích thước, cảnh báo nếu tràn giấy):
 
 ```bash
-./scripts/calibrate_camera.py pattern --size 9x6 --square 0.025 --out chessboard.svg
+./tools/calibrate_camera.py pattern --size 9x6 --square 0.025 --out chessboard.svg
 # khổ lớn hơn cho dễ chụp xa:
-./scripts/calibrate_camera.py pattern --size 9x6 --square 0.035 --paper a3 --out chessboard_a3.svg
+./tools/calibrate_camera.py pattern --size 9x6 --square 0.035 --paper a3 --out chessboard_a3.svg
 ```
 
 Mặc định ra bàn cờ **10×7 ô, ô 25 mm** trên **A4 ngang** (250×175 mm, lề trắng còn 23.5×17.5 mm).
@@ -365,10 +365,10 @@ muốn đứng xa thoải mái hơn thì in A3.
 ./scripts/camera_v4l2_setup.sh --vblank 110 --exposure 800 --gain 120
 
 # 1) Chụp: cầm bàn cờ đi khắp khung hình, script tự lọc ảnh hợp lệ và in lưới phủ
-./scripts/calibrate_camera.py capture --size 9x6 --square 0.025
+./tools/calibrate_camera.py capture --size 9x6 --square 0.025
 
 # 2) Tính và ghi thẳng ra file camera_info của ROS
-./scripts/calibrate_camera.py solve --size 9x6 --square 0.025 --write-ros
+./tools/calibrate_camera.py solve --size 9x6 --square 0.025 --write-ros
 ```
 
 `--square` phải là **số đo thật sau khi in**, tính bằng mét (25 mm → `0.025`).

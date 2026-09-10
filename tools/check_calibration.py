@@ -9,10 +9,10 @@ ArUco/AprilTag sẽ làm. Khớp ở đây nghĩa là đo pose khi bay cũng kh�
 Dùng (node camera phải ĐANG CHẠY ở terminal khác):
 
   # đặt bàn cờ vuông góc trục ống kính, cách 1.00 m, rồi:
-  ./scripts/check_calibration.py --distance 1.0 --size 9x6 --square 0.025
+  ./tools/check_calibration.py --distance 1.0 --size 9x6 --square 0.025
 
   # lưu thêm ảnh đã khử méo để soi đường thẳng
-  ./scripts/check_calibration.py --distance 1.0 --save-undistort /tmp/undist.png
+  ./tools/check_calibration.py --distance 1.0 --save-undistort /tmp/undist.png
 
 Đọc kết quả: sai lệch < 2% là tốt, 2-5% tạm được, > 5% là có gì đó sai —
 thường do bàn cờ in bị co (phải đo lại cạnh ô thật rồi truyền vào --square).

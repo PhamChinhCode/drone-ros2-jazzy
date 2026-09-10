@@ -5,13 +5,13 @@ Cùng nguyên tắc với `calibrate_camera.py pattern`: xuất SVG theo mm th�
 thước 100 mm để kiểm tra máy in có co giấy không. Thêm PNG để xem nhanh trên màn hình.
 
   # một tag ArUco 4x4, id 0, cạnh đen 150 mm, in trên A4
-  ./scripts/make_tag.py tag --dict 4x4 --id 0 --size 150 --out tags/aruco4x4_id0.svg
+  ./tools/make_tag.py tag --dict 4x4 --id 0 --size 150 --out assets/tags/aruco4x4_id0.svg
 
   # AprilTag 36h11 — loại apriltag_ros dùng mặc định
-  ./scripts/make_tag.py tag --dict apriltag36h11 --id 0 --size 150
+  ./tools/make_tag.py tag --dict apriltag36h11 --id 0 --size 150
 
   # bãi đáp: tag lớn để bắt từ xa + tag nhỏ để giữ lock lúc sát đất
-  ./scripts/make_tag.py pad --dict apriltag36h11 --size 150 --inner-size 30 --paper a4
+  ./tools/make_tag.py pad --dict apriltag36h11 --size 150 --inner-size 30 --paper a4
 
 QUAN TRỌNG — `--size` là cạnh HÌNH VUÔNG ĐEN BÊN NGOÀI, tính bằng mm. Đó đúng là
 con số mà `aruco_opencv` (marker_size) và `apriltag_ros` (size) mong đợi. Đo nhầm
