@@ -30,6 +30,17 @@ def generate_launch_description():
              name='base_to_camera',
              arguments=['0', '0', '-0.05', '0', '1.5708', '0', 'base_link', 'camera_link']),
 
+        # Noi hai quy uoc truc (REP 103): camera_link la x-tien, z-len; con
+        # camera_optical_frame la x-phai, y-xuong, z-theo huong nhin. camera.yaml dat
+        # camera_frame_id='camera_optical_frame' nen apriltag phat pose trong khung do -
+        # thieu phep bien doi nay thi camera_optical_frame KHONG noi vao cay TF va moi
+        # lookupTransform cua marker_pose_republisher_node / landing_target_bridge_node
+        # deu that bai. Goc co dinh theo quy uoc, KHONG phai so do lap dat.
+        Node(package='tf2_ros', executable='static_transform_publisher',
+             name='camera_to_optical',
+             arguments=['0', '0', '0', '-1.5708', '0', '-1.5708',
+                        'camera_link', 'camera_optical_frame']),
+
         Node(package='drone_estimation', executable='marker_pose_republisher_node',
              name='marker_pose_republisher_node',
              parameters=[os.path.join(CONFIG, 'estimation.yaml')], output='screen'),

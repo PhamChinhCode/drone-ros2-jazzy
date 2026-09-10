@@ -4,6 +4,7 @@ optical_flow_node:
     quality_level: 0.3
     min_distance: 7
     min_tracked_features: 8      # duoi nguong nay thi KHONG publish gi ca
+    max_lk_error: 20.0           # loai diem bam sai: bam tot err~0, anh trang/nhieu err 70-150
     refresh_interval_s: 1.5
     process_every_n_frames: 2    # bo bot khung neu CPU khong kip
     base_covariance: 0.05
