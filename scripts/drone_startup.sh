@@ -22,9 +22,15 @@ CAM_VBLANK=1779       # 60 FPS. KHÔNG dùng 110 (246 FPS): Pi 4 bão hoà, vỡ
 CAM_EXPOSURE=400      # không có auto-exposure — phòng tối thì tăng (trần 2154 ở vblank này)
 CAM_GAIN=60
 
-ROS_SETUP=/opt/ros/jazzy/setup.bash
-WS_SETUP=/home/pc/ros2_ws/install/setup.bash
-CAM_SETUP=/home/pc/ros2_ws/scripts/camera_v4l2_setup.sh
+# Tự định vị: suy ra vị trí workspace từ chỗ script đang nằm, để clone về đâu
+# cũng chạy được mà không phải sửa đường dẫn (giống scripts/run_camera_node.sh).
+# BASH_SOURCE[0] đúng cả khi script được `source` lẫn khi chạy trực tiếp.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WS_ROOT="$(dirname "$SCRIPT_DIR")"
+
+ROS_SETUP=/opt/ros/jazzy/setup.bash          # ngoài workspace nên vẫn để tuyệt đối
+WS_SETUP="$WS_ROOT/install/setup.bash"
+CAM_SETUP="$SCRIPT_DIR/camera_v4l2_setup.sh"
 
 # Được source hay chạy trực tiếp? Quyết định lệnh dừng và có bật `set -u` hay không
 # (bật `set -u` trong shell tương tác của người dùng sẽ gây phiền).
