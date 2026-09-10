@@ -1,0 +1,11 @@
+gcs_link_node:
+  ros__parameters:
+    gcs_host: "127.0.0.1"        # dia chi GCS qua duong 4G/LTE
+    gcs_port: 14550
+    local_port: 14551
+    link_timeout_s: 5.0
+    heartbeat_interval_s: 1.0
+
+telemetry_aggregator_node:
+  ros__parameters:
+    publish_rate_hz: 2.0         # tan so thap co dinh, tranh lam ngap kenh 4G bang thong hep

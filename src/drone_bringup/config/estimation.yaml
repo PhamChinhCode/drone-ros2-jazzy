@@ -1,0 +1,14 @@
+marker_pose_republisher_node:
+  ros__parameters:
+    pos_covariance: 0.01         # m^2, thap vi marker la vi tri tuyet doi
+    target_frame: odom
+    # Toa do bai dap trong khung map, dang phang: [id, x, y, z, ...]
+    known_tags: [0.0, 0.0, 0.0, 0.0,
+                 1.0, 10.0, 0.0, 0.0]
+
+ekf_health_node:
+  ros__parameters:
+    max_pos_variance: 2.0
+    unhealthy_after_s: 2.0
+    odom_timeout_s: 1.0
+    publish_rate_hz: 5.0

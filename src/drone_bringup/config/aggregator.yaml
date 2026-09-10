@@ -1,0 +1,19 @@
+# diagnostic_aggregator: gop DiagnosticStatus tu cac node thanh cay trang thai tong,
+# dung thang cho man hinh "Quan tri he thong" phia GCS.
+# Can cai them: sudo apt install ros-jazzy-diagnostic-aggregator
+diagnostic_aggregator:
+  ros__parameters:
+    path: drone
+    analyzers:
+      perception:
+        type: diagnostic_aggregator/GenericAnalyzer
+        path: Perception
+        startswith: ['camera', 'apriltag', 'optical_flow', 'marker']
+      estimation:
+        type: diagnostic_aggregator/GenericAnalyzer
+        path: Estimation
+        startswith: ['ekf', 'odometry']
+      comms:
+        type: diagnostic_aggregator/GenericAnalyzer
+        path: Comms
+        startswith: ['mavros', 'gcs_link']

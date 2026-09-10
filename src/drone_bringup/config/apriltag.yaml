@@ -1,0 +1,24 @@
+# apriltag_ros. Moi bai dap gan mot tag ID rieng de mission_manager_node xac thuc dung diem.
+/**:
+  ros__parameters:
+    image_transport: raw
+    family: 36h11
+    # size PHAI dung kich thuoc canh tag IN THAT (met), DO BANG THUOC sau khi in.
+    # Sai bao nhieu % thi khoang cach uoc luong sai bay nhieu %.
+    # 0.13 khop /home/pc/PiDrone/tags/apriltag36h11_id0_130mm_a4.svg (ban in vua kho A4)
+    # va pad_apriltag_130_30.svg. Ban 150mm cung co san neu in kho lon hon.
+    size: 0.13
+    max_hamming: 0
+    qos_profile: sensor_data
+    detector:
+      threads: 2          # Pi 4 co 4 nhan, chua 2 cho optical flow + phan con lai
+      decimate: 2.0
+      blur: 0.0
+      refine: true
+      sharpening: 0.25
+      debug: false
+    pose_estimation_method: "pnp"
+    tag:
+      ids: [0, 1]
+      frames: [pad_home, pad_a]
+      sizes: [0.13, 0.13]

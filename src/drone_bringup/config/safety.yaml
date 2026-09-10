@@ -1,0 +1,16 @@
+# CAC NGUONG DUOI DAY PHAI KHOP bang system_config phia GCS. Lech nguong hai ben gay hoang
+# mang nguoi van hanh (GCS nghi pin con an toan trong khi Pi 4 da kich RTH).
+failsafe_monitor_node:
+  ros__parameters:
+    low_battery_pct: 25.0
+    critical_battery_pct: 15.0
+    link_lost_timeout_s: 10.0
+    marker_search_timeout_s: 20.0
+    fc_comm_timeout_s: 3.0
+    max_retries: 3
+    check_rate_hz: 2.0
+
+mission_logger_node:
+  ros__parameters:
+    log_root: "~/drone_logs"
+    save_photos: true

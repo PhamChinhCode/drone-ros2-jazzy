@@ -1,0 +1,18 @@
+# Dung plugin_allowlist thay vi de mac dinh bat toan bo: vua giam tai CPU Pi 4, vua tranh
+# plugin ngam gui lenh ma firmware tuy bien khong hieu.
+/**:
+  ros__parameters:
+    fcu_url: "/dev/ttyUSB0:921600"      # khop baudrate MAVLink da cau hinh tren H743
+    gcs_url: ""                          # de trong: GCS di duong rieng qua gcs_link_node
+    target_system_id: 1
+    target_component_id: 1
+    plugin_allowlist:
+      - 'sys_status'
+      - 'setpoint_position'
+      - 'setpoint_raw'
+      - 'command'
+      - 'imu'
+      - 'battery'
+      - 'landing_target'
+      - 'local_position'
+      - 'global_position'

@@ -1,0 +1,37 @@
+# ---------------------------------------------------------------------------
+# Sinh ra bởi colcon build — KHÔNG commit.
+# Xoá 3 thư mục này rồi `colcon build` là có lại y nguyên.
+# Lý do không commit: ~50 MB (so với 1.2 MB mã nguồn), thay đổi mỗi lần build,
+# và có đường dẫn tuyệt đối /home/pc/ros2_ws nung cứng trong 12 file của install/
+# nên không dùng lại được trên máy khác.
+# ---------------------------------------------------------------------------
+build/
+install/
+log/
+
+# ---------------------------------------------------------------------------
+# camera_ros — clone từ upstream, có .git riêng, KHÔNG phải mã của dự án này.
+#   https://github.com/christianrauch/camera_ros.git  (đang ở tag 0.5.2)
+# Hiện KHÔNG được dùng: camera.yaml và perception.launch.py đều chọn v4l2_camera
+# thay vì camera_ros/libcamera (docs/CAMERA.md mục 9).
+# Cần lại thì: git clone https://github.com/christianrauch/camera_ros.git src/camera_ros
+# ---------------------------------------------------------------------------
+src/camera_ros/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Ảnh chụp thử khi bấm "s" trong camera_view.py
+captures/
+
+# Môi trường ảo (nếu ai đó tạo venv để test ngoài Pi)
+.venv/
+venv/
+
+# Backup config.txt do install.sh tạo ra
+*.bak-*
+
+# OS
+.DS_Store

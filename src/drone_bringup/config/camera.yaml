@@ -1,0 +1,26 @@
+# v4l2_camera doc THANG /dev/video0 cua bcm2835-unicam.
+#
+# KHONG dung camera_ros/libcamera tren may nay: docs/CAMERA.md muc 9 ghi nhan hai loi
+# khong sua duoc tu phia ung dung tren Ubuntu 24.04 + libcamera 0.2.0
+# (ipa_base.cpp assertion trong prepareIsp, va IPA isolated crash -110).
+# Duong V4L2 truc tiep la duong DA KIEM CHUNG chay duoc.
+#
+# OV9281: mono global shutter 1280x800, KHONG co Bayer -> khong can ISP/debayer/IPA.
+/**:
+  ros__parameters:
+    video_device: "/dev/video0"
+    pixel_format: "GREY"          # cap voi Y8_1X8 tren subdev sensor
+    output_encoding: "mono8"      # mac dinh rgb8 gay canh bao chuyen doi cham + gap 3 bang thong
+    # 640x400 (binned). FPS KHONG dat o day ma do vertical_blanking cua sensor
+    # (xem --vblank trong camera_v4l2_setup.sh). Dat 60 FPS, khong phai 246 FPS toi da:
+    # do thuc cho thay 246 FPS lam Pi 4 bao hoa va pha vo dong bo apriltag.
+    # Dung 1280x800 neu tam phat hien AprilTag khong du xa - nho doi ca camera_info_url.
+    image_size: [640, 400]
+    camera_frame_id: "camera_optical_frame"
+    # PHAI TRO DUNG FILE KHOP DO PHAN GIAI DANG STREAM.
+    # De rong "" thi node roi ve URL mac dinh ~/.ros/camera_info/unicam.yaml - file do
+    # hieu chinh cho 1280x800, lech voi 640x400 nen camera_info_manager BO LUON va publish
+    # intrinsics RONG (k = toan 0, d = []). Node chi log INFO, KHONG canh bao gi.
+    # Hau qua: rectify thanh vo nghia va apriltag khong giai duoc PnP.
+    # Doi image_size sang 1280x800 thi phai doi file nay sang unicam.yaml cho khop.
+    camera_info_url: "file:///home/pc/.ros/camera_info/unicam_640x400.yaml"

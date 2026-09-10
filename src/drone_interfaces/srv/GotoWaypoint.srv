@@ -1,0 +1,8 @@
+float32[3] target_ned
+float32 yaw_deg
+float32 max_vel_mps
+float32 acceptance_radius_m
+---
+bool success
+string message
+uint32 seq

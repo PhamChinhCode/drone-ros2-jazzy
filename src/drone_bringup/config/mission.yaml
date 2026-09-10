@@ -1,0 +1,24 @@
+mission_manager_node:
+  ros__parameters:
+    search_timeout_s: 20.0
+    max_retries: 3
+    acceptance_radius_m: 1.5
+    pre_dropoff_settle_s: 2.0    # giu on dinh truoc khi mo gripper, tranh tha khi con dao dong
+    takeoff_alt_m: 5.0
+    state_publish_rate_hz: 5.0
+
+gripper_controller_node:
+  ros__parameters:
+    simulate: true               # dat false khi da lap servo that va pigpiod dang chay
+    servo_gpio: 18
+    confirm_switch_gpio: 23
+    open_pulse_us: 1000          # DO TAY theo co cau co khi that truoc khi chot
+    close_pulse_us: 2000
+    confirm_debounce_ms: 50
+    force_threshold_n: 1.0
+    status_rate_hz: 10.0
+
+fc_command_bridge_node:
+  ros__parameters:
+    ack_timeout_s: 5.0
+    setpoint_rate_hz: 20.0

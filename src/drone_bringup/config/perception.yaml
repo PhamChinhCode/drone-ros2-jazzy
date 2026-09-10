@@ -1,0 +1,15 @@
+optical_flow_node:
+  ros__parameters:
+    max_corners: 100
+    quality_level: 0.3
+    min_distance: 7
+    min_tracked_features: 8      # duoi nguong nay thi KHONG publish gi ca
+    refresh_interval_s: 1.5
+    process_every_n_frames: 2    # bo bot khung neu CPU khong kip
+    base_covariance: 0.05
+
+marker_quality_node:
+  ros__parameters:
+    publish_rate_hz: 10.0
+    visible_timeout_s: 0.5
+    expected_marker_id: -1       # -1 = chap nhan moi ID; mission_manager se ghi de khi bay

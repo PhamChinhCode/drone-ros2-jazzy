@@ -1,0 +1,11 @@
+# Cac lenh khong tham so, gop vao mot service de khoi lap lai 5 file gan giong nhau.
+uint8 HOLD=5
+uint8 PRECISION_LAND=6
+uint8 LAND_NOW=7
+uint8 RTH=8
+
+uint8 command
+---
+bool success
+string message
+uint32 seq

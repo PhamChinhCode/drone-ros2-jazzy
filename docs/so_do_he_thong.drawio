@@ -1,0 +1,270 @@
+<mxfile host="app.diagrams.net" agent="claude-code" version="24.7.17" type="device">
+  <diagram id="page-boot" name="1. Trình tự khởi động (boot)">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="1400" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="b_title" value="&lt;b&gt;QUÁ TRÌNH KHỞI ĐỘNG THỰC TẾ&lt;/b&gt;&lt;br&gt;(những gì thật sự xảy ra khi cắm điện Pi 4)" style="text;html=1;align=center;verticalAlign=middle;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="300" y="10" width="560" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b_pwr" value="Bật nguồn Pi 4" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="440" y="80" width="280" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b_sysd" value="&lt;b&gt;systemd&lt;/b&gt;&lt;br&gt;After=multi-user.target, network-online.target" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="440" y="160" width="280" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b_svc" value="&lt;b&gt;drone-startup.service&lt;/b&gt; &lt;i&gt;(enabled, active)&lt;/i&gt;&lt;br&gt;/etc/systemd/system/drone-startup.service&lt;br&gt;Type=oneshot · RemainAfterExit=yes&lt;br&gt;User=pc · SupplementaryGroups=video" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="410" y="240" width="340" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b_bg" value="&lt;b&gt;/home/pc/PiDrone/scripts/drone_startup.sh&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#666666;dashed=1;verticalAlign=top;spacingTop=6;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="180" y="360" width="800" height="440" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b_m1" value="&lt;b&gt;MỤC 1 — Cấu hình V4L2 cho camera&lt;/b&gt; &lt;i&gt;(bị RESET mỗi lần reboot ⇒ phải chạy lại)&lt;/i&gt;&lt;br&gt;• Vòng chờ tối đa 30 s cho udev tạo /dev/media* có entity &lt;i&gt;ov9281&lt;/i&gt;&lt;br&gt;&#160;&#160;(không dùng After=dev-video0.device được vì /dev/video0 không có TAG systemd)&lt;br&gt;• camera_v4l2_setup.sh → 640×400, Y8_1X8, vblank=1779 (60 FPS), exposure=400, gain=60&lt;br&gt;&lt;font color=&quot;#b85450&quot;&gt;✗ Bỏ qua bước này ⇒ mọi khung hình TOÀN SỐ 0 mà `ros2 topic hz` vẫn báo đúng nhịp&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;align=left;spacingLeft=10;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="210" y="400" width="740" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b_m2" value="&lt;b&gt;MỤC 2 — Nạp môi trường ROS 2&lt;/b&gt;&lt;br&gt;source /opt/ros/jazzy/setup.bash&#160;&#160;→&#160;&#160;source /home/pc/ros2_ws/install/setup.bash&lt;br&gt;&lt;i&gt;Khi chạy từ systemd, môi trường này CHỈ tồn tại bên trong script — không lan ra hệ thống.&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="210" y="540" width="740" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b_m3" value="&lt;b&gt;MỤC 3 — ĐANG ĐỂ TRỐNG&lt;/b&gt;&lt;br&gt;⇒ &lt;b&gt;KHÔNG một node ROS nào được khởi động lúc boot&lt;/b&gt; — kể cả foxglove_bridge.&lt;br&gt;Log boot xác nhận: &lt;i&gt;&quot;[3/3] Xong. Chưa có lệnh nào ở MỤC 3.&quot;&lt;/i&gt;&lt;br&gt;Script thoát (status 0) ⇒ service ở trạng thái &lt;i&gt;active (exited)&lt;/i&gt;." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="210" y="640" width="740" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b_todo" value="&lt;b&gt;ĐỂ HỆ THỐNG TỰ CHẠY LÚC BOOT — cần 2 thay đổi, không phải 1&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;1.&lt;/b&gt; Thêm vào MỤC 3:&#160;&#160;&lt;i&gt;ros2 launch drone_bringup full_system.launch.py&lt;/i&gt;&lt;br&gt;&lt;b&gt;2.&lt;/b&gt; Sửa unit: &lt;i&gt;Type=oneshot + RemainAfterExit=yes&lt;/i&gt; → &lt;i&gt;Type=simple&lt;/i&gt;, bỏ comment &lt;i&gt;KillSignal=SIGINT&lt;/i&gt; và &lt;i&gt;TimeoutStopSec=15&lt;/i&gt;&lt;br&gt;&#160;&#160;&#160;&#160;(vì `ros2 launch` chạy mãi không thoát — để oneshot thì systemd treo chờ)&lt;br&gt;&lt;br&gt;rồi: sudo systemctl daemon-reload &amp;&amp; sudo systemctl restart drone-startup.service" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;align=left;spacingLeft=10;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="210" y="840" width="740" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b_next" value="→ Xem trang &lt;b&gt;2. Cây launch&lt;/b&gt; để biết lệnh đó khởi động những node nào" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="380" y="1010" width="400" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b_e1" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;" edge="1" parent="1" source="b_pwr" target="b_sysd"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="b_e2" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;" edge="1" parent="1" source="b_sysd" target="b_svc"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="b_e3" value="ExecStart" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=10;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="b_svc" target="b_m1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="b_e4" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;" edge="1" parent="1" source="b_m1" target="b_m2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="b_e5" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;" edge="1" parent="1" source="b_m2" target="b_m3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="b_e6" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;dashed=1;strokeColor=#d6b656;" edge="1" parent="1" source="b_m3" target="b_todo"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="b_e7" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;dashed=1;strokeColor=#9673a6;" edge="1" parent="1" source="b_todo" target="b_next"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="page-launch" name="2. Cây launch &amp; node theo giai đoạn">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="l_title" value="&lt;b&gt;CÂY LAUNCH — node nào thuộc giai đoạn nào&lt;/b&gt;&lt;br&gt;Mũi tên = IncludeLaunchDescription (launch ngoài KÉO THEO toàn bộ launch trong)" style="text;html=1;align=center;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="60" y="10" width="660" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="l_s3" value="&lt;b&gt;full_system.launch.py&lt;/b&gt;&#160;&#160;— Giai đoạn 3–5: nhiệm vụ · GCS · an toàn · ghi log&lt;br&gt;&lt;br&gt;• fc_command_bridge_node&#160;&lt;i&gt;(drone_mission)&lt;/i&gt;&#160;← mission.yaml&lt;br&gt;• mission_manager_node&#160;&lt;i&gt;(drone_mission)&lt;/i&gt;&#160;← mission.yaml&lt;br&gt;• gripper_controller_node&#160;&lt;i&gt;(drone_mission)&lt;/i&gt;&#160;← mission.yaml&lt;br&gt;• telemetry_aggregator_node&#160;&lt;i&gt;(drone_comms)&lt;/i&gt;&#160;← comms.yaml&lt;br&gt;• gcs_link_node&#160;&lt;i&gt;(drone_comms)&lt;/i&gt;&#160;← comms.yaml&lt;br&gt;• failsafe_monitor_node&#160;&lt;i&gt;(drone_safety)&lt;/i&gt;&#160;← safety.yaml&lt;br&gt;• mission_logger_node&#160;&lt;i&gt;(drone_safety)&lt;/i&gt;&#160;← safety.yaml&lt;br&gt;• &lt;font color=&quot;#3333ff&quot;&gt;foxglove_bridge&#160;&lt;i&gt;(bên thứ 3)&lt;/i&gt;&#160;— port 8765, address 0.0.0.0&lt;/font&gt;&lt;br&gt;• ExecuteProcess: &lt;i&gt;ros2 bag record&lt;/i&gt; → ~/drone_logs/bag (9 topic)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;align=left;spacingLeft=12;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="60" y="70" width="620" height="220" as="geometry" />
+        </mxCell>
+
+        <mxCell id="l_s2" value="&lt;b&gt;control.launch.py&lt;/b&gt;&#160;&#160;— Giai đoạn 2: lớp điều khiển (hạ cánh chính xác)&lt;br&gt;&lt;br&gt;• landing_target_bridge_node&#160;&lt;i&gt;(drone_control)&lt;/i&gt;&#160;← control.yaml&lt;br&gt;• position_controller_node&#160;&lt;i&gt;(drone_control)&lt;/i&gt;&#160;← control.yaml&lt;br&gt;&lt;font color=&quot;#b85450&quot;&gt;⚠ control.yaml đang để gain PID = 0.0 (cảnh báo trong docstring)&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;align=left;spacingLeft=12;" vertex="1" parent="1">
+          <mxGeometry x="60" y="330" width="620" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="l_s1b" value="&lt;b&gt;estimation.launch.py&lt;/b&gt;&#160;&#160;— Giai đoạn 1b: MAVROS + EKF (position hold không trôi)&lt;br&gt;&lt;br&gt;• mavros&#160;&lt;i&gt;(bên thứ 3)&lt;/i&gt;&#160;← mavros.yaml&lt;br&gt;• base_to_camera&#160;&lt;i&gt;(tf2_ros static_transform_publisher)&lt;/i&gt;&#160;— base_link → camera_link&lt;br&gt;&#160;&#160;&#160;args: 0 0 -0.05&#160;&#160;0 1.5708 0&#160;&#160;&lt;font color=&quot;#b85450&quot;&gt;(PHẢI đo thật — sai ⇒ &quot;thấy đúng marker nhưng bay lệch tâm&quot;)&lt;/font&gt;&lt;br&gt;• marker_pose_republisher_node&#160;&lt;i&gt;(drone_estimation)&lt;/i&gt;&#160;← estimation.yaml&lt;br&gt;• ekf_filter_node&#160;&lt;i&gt;(robot_localization)&lt;/i&gt;&#160;← ekf.yaml&lt;br&gt;• ekf_health_node&#160;&lt;i&gt;(drone_estimation)&lt;/i&gt;&#160;← estimation.yaml" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;align=left;spacingLeft=12;" vertex="1" parent="1">
+          <mxGeometry x="60" y="490" width="620" height="170" as="geometry" />
+        </mxCell>
+
+        <mxCell id="l_s1a" value="&lt;b&gt;perception.launch.py&lt;/b&gt;&#160;&#160;— Giai đoạn 1a: camera → rectify → apriltag → chất lượng bám + optical flow&lt;br&gt;&lt;br&gt;• camera_node&#160;&lt;i&gt;(v4l2_camera, namespace=camera)&lt;/i&gt;&#160;← camera.yaml&lt;br&gt;• image_rectify&#160;&lt;i&gt;(image_proc, namespace=camera)&lt;/i&gt;&#160;— remap image→image_raw&lt;br&gt;• marker_detector_node&#160;&lt;i&gt;(apriltag_ros)&lt;/i&gt;&#160;← apriltag.yaml&lt;br&gt;• marker_quality_node&#160;&lt;i&gt;(drone_perception)&lt;/i&gt;&#160;← perception.yaml&lt;br&gt;• optical_flow_node&#160;&lt;i&gt;(drone_perception)&lt;/i&gt;&#160;← perception.yaml&lt;br&gt;&lt;font color=&quot;#b85450&quot;&gt;⚠ PHỤ THUỘC NGOÀI ROS: camera_v4l2_setup.sh phải chạy TRƯỚC (MỤC 1 của drone_startup.sh)&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;align=left;spacingLeft=12;" vertex="1" parent="1">
+          <mxGeometry x="60" y="700" width="620" height="170" as="geometry" />
+        </mxCell>
+
+        <mxCell id="l_e1" value="include" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=10;labelBackgroundColor=#ffffff;strokeWidth=2;" edge="1" parent="1" source="l_s3" target="l_s2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l_e2" value="include" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=10;labelBackgroundColor=#ffffff;strokeWidth=2;" edge="1" parent="1" source="l_s2" target="l_s1b"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l_e3" value="include" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=10;labelBackgroundColor=#ffffff;strokeWidth=2;" edge="1" parent="1" source="l_s1b" target="l_s1a"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="l_n1" value="&lt;b&gt;ĐIỂM DỄ HIỂU NHẦM NHẤT&lt;/b&gt;&lt;br&gt;&lt;br&gt;`ros2 launch` khởi động &lt;b&gt;tất cả tiến trình gần như ĐỒNG THỜI&lt;/b&gt;.&lt;br&gt;&lt;br&gt;Thứ tự các Node trong danh sách &lt;b&gt;KHÔNG&lt;/b&gt; đảm bảo node nào&lt;br&gt;sẵn sàng trước node nào. Không có barrier, không có &quot;chờ&lt;br&gt;node kia lên xong&quot;.&lt;br&gt;&lt;br&gt;Các node tự đồng bộ bằng cách &lt;b&gt;chờ dữ liệu tới trên topic&lt;/b&gt;&lt;br&gt;(hoặc chờ service khả dụng). Vì vậy lúc mới bật, vài giây&lt;br&gt;đầu có WARN/log rỗng là bình thường.&lt;br&gt;&lt;br&gt;⇒ Sơ đồ &quot;thứ tự&quot; thật sự có ý nghĩa là &lt;b&gt;luồng dữ liệu&lt;/b&gt;&lt;br&gt;(trang 3), không phải thứ tự spawn tiến trình." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;spacingLeft=12;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="730" y="70" width="420" height="260" as="geometry" />
+        </mxCell>
+
+        <mxCell id="l_n2" value="&lt;b&gt;THỨ TỰ KIỂM THỬ KHUYẾN NGHỊ&lt;/b&gt; &lt;i&gt;(theo docstring trong chính các launch file)&lt;/i&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;1a&lt;/b&gt; perception → verify:&lt;br&gt;&#160;&#160;• `ros2 topic hz /camera/image_raw` ≈ 60 Hz&lt;br&gt;&#160;&#160;• kiểm THỐNG KÊ PIXEL (std vài chục, max ~255) — hz KHÔNG bắt được ảnh toàn 0&lt;br&gt;&#160;&#160;• `/camera/camera_info` có k[0] ≠ 0 và d[] đủ 5 hệ số&lt;br&gt;&#160;&#160;• khoảng cách trong `/apriltag/detections` khớp thước đo tay (sai &amp;lt;5–10%)&lt;br&gt;&lt;br&gt;&lt;b&gt;1b&lt;/b&gt; estimation → verify: thêm từng nguồn một (IMU → optical flow → marker),&lt;br&gt;&#160;&#160;mỗi lần thêm kiểm `/odometry/filtered` không có bước nhảy đột ngột&lt;br&gt;&lt;br&gt;&lt;b&gt;2&lt;/b&gt; control → verify: tune PID trong Gazebo TRƯỚC khi bay thật&lt;br&gt;&lt;br&gt;&lt;b&gt;3–5&lt;/b&gt; full_system → verify: `/mission/state`, `/failsafe_event`, `/telemetry/outgoing`" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;align=left;spacingLeft=12;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="730" y="360" width="420" height="290" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="page-dataflow" name="3. Luồng dữ liệu &amp; phụ thuộc node">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2000" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="d_title" value="&lt;b&gt;LUỒNG DỮ LIỆU THẬT — ai phụ thuộc vào ai (trích từ create_subscription / create_publisher / create_client)&lt;/b&gt;" style="text;html=1;align=left;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="40" y="10" width="1200" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d_lg" value="&lt;b&gt;Chú giải&lt;/b&gt;&#160;&#160;&#160;&lt;font color=&quot;#82b366&quot;&gt;■&lt;/font&gt; node tự viết (drone_*)&#160;&#160;&#160;&lt;font color=&quot;#6c8ebf&quot;&gt;■&lt;/font&gt; node bên thứ 3&#160;&#160;&#160;&lt;font color=&quot;#666666&quot;&gt;■&lt;/font&gt; phần cứng / bên ngoài&#160;&#160;&#160;&lt;font color=&quot;#9673a6&quot;&gt;■&lt;/font&gt; chỉ ĐỌC (quan sát/ghi log)&#160;&#160;&#160;— topic —▸&#160;&#160;&#160;- - service - -▸" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;fontSize=11;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="45" width="1180" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d_c1" value="CẢM NHẬN" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#cccccc;dashed=1;verticalAlign=top;fontSize=11;fontColor=#999999;spacingTop=4;" vertex="1" parent="1">
+          <mxGeometry x="30" y="90" width="230" height="620" as="geometry" />
+        </mxCell>
+        <mxCell id="d_c2" value="ƯỚC LƯỢNG" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#cccccc;dashed=1;verticalAlign=top;fontSize=11;fontColor=#999999;spacingTop=4;" vertex="1" parent="1">
+          <mxGeometry x="290" y="90" width="230" height="620" as="geometry" />
+        </mxCell>
+        <mxCell id="d_c3" value="ĐIỀU KHIỂN" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#cccccc;dashed=1;verticalAlign=top;fontSize=11;fontColor=#999999;spacingTop=4;" vertex="1" parent="1">
+          <mxGeometry x="550" y="90" width="230" height="620" as="geometry" />
+        </mxCell>
+        <mxCell id="d_c4" value="MAVROS / FC" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#cccccc;dashed=1;verticalAlign=top;fontSize=11;fontColor=#999999;spacingTop=4;" vertex="1" parent="1">
+          <mxGeometry x="810" y="90" width="230" height="620" as="geometry" />
+        </mxCell>
+        <mxCell id="d_c5" value="NHIỆM VỤ" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#cccccc;dashed=1;verticalAlign=top;fontSize=11;fontColor=#999999;spacingTop=4;" vertex="1" parent="1">
+          <mxGeometry x="1070" y="90" width="230" height="620" as="geometry" />
+        </mxCell>
+        <mxCell id="d_c6" value="AN TOÀN / GCS" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#cccccc;dashed=1;verticalAlign=top;fontSize=11;fontColor=#999999;spacingTop=4;" vertex="1" parent="1">
+          <mxGeometry x="1330" y="90" width="230" height="620" as="geometry" />
+        </mxCell>
+
+        <mxCell id="hw_cam" value="/dev/video0&lt;br&gt;&lt;i&gt;OV9281 mono 640×400&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="50" y="120" width="190" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="n_cam" value="&lt;b&gt;camera_node&lt;/b&gt;&lt;br&gt;&lt;i&gt;v4l2_camera · ns=camera&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="50" y="200" width="190" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="n_rect" value="&lt;b&gt;image_rectify&lt;/b&gt;&lt;br&gt;&lt;i&gt;image_proc · ns=camera&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="50" y="290" width="190" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="n_tag" value="&lt;b&gt;marker_detector_node&lt;/b&gt;&lt;br&gt;&lt;i&gt;apriltag_ros&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="50" y="380" width="190" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="n_mq" value="&lt;b&gt;marker_quality_node&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="50" y="470" width="190" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="n_of" value="&lt;b&gt;optical_flow_node&lt;/b&gt;&lt;br&gt;&lt;i&gt;đọc ảnh THÔ, không rectify&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="50" y="590" width="190" height="44" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n_tf" value="&lt;b&gt;base_to_camera&lt;/b&gt;&lt;br&gt;&lt;i&gt;tf2_ros static_transform_publisher&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="310" y="290" width="190" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="n_mpr" value="&lt;b&gt;marker_pose_republisher_node&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="310" y="380" width="190" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="n_ekf" value="&lt;b&gt;ekf_filter_node&lt;/b&gt;&lt;br&gt;&lt;i&gt;robot_localization&lt;/i&gt;&lt;br&gt;imu0 + twist0 + pose0" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="310" y="480" width="190" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="n_ekfh" value="&lt;b&gt;ekf_health_node&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="310" y="600" width="190" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n_ltb" value="&lt;b&gt;landing_target_bridge_node&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="570" y="380" width="190" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="n_pc" value="&lt;b&gt;position_controller_node&lt;/b&gt;&lt;br&gt;&lt;i&gt;PID (gain đang = 0.0)&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="570" y="490" width="190" height="44" as="geometry" />
+        </mxCell>
+
+        <mxCell id="hw_fc" value="Pixhawk FC&lt;br&gt;&lt;i&gt;MAVLink qua UART/USB&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="830" y="120" width="190" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="n_mav" value="&lt;b&gt;mavros&lt;/b&gt;&lt;br&gt;&lt;i&gt;ra: /mavros/state, /battery, /imu/data,&lt;br&gt;/global_position/{rel_alt,global}&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="830" y="220" width="190" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="n_fcb" value="&lt;b&gt;fc_command_bridge_node&lt;/b&gt;&lt;br&gt;&lt;i&gt;srv: ~/arm, ~/takeoff,&lt;br&gt;~/goto_waypoint, ~/simple_command&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="830" y="490" width="190" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n_mm" value="&lt;b&gt;mission_manager_node&lt;/b&gt;&lt;br&gt;&lt;i&gt;máy trạng thái trung tâm&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="380" width="190" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="n_grip" value="&lt;b&gt;gripper_controller_node&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="600" width="190" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n_fs" value="&lt;b&gt;failsafe_monitor_node&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1350" y="380" width="190" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="n_tel" value="&lt;b&gt;telemetry_aggregator_node&lt;/b&gt;&lt;br&gt;&lt;i&gt;gom: /mission/state, /mavros/state,&lt;br&gt;/battery, /global_position/global,&lt;br&gt;/gripper/status, /marker/tracking_quality,&lt;br&gt;/failsafe_event&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1350" y="470" width="190" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="n_gcs" value="&lt;b&gt;gcs_link_node&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1350" y="600" width="190" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="hw_gcs" value="Trạm mặt đất (GCS)&lt;br&gt;&lt;i&gt;qua mạng&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1350" y="670" width="190" height="34" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d_sink" value="&lt;b&gt;LỚP CHỈ ĐỌC — không tác động ngược vào hệ thống&lt;/b&gt;&#160;&#160;&lt;i&gt;(3 nơi tiêu thụ dữ liệu, mục đích khác nhau)&lt;/i&gt;" style="text;html=1;align=left;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="40" y="730" width="900" height="24" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n_log" value="&lt;b&gt;mission_logger_node&lt;/b&gt;&#160;&lt;i&gt;(drone_safety)&lt;/i&gt;&lt;br&gt;&lt;b&gt;Log NGHIỆP VỤ&lt;/b&gt; — đối chiếu CSDL của GCS&lt;br&gt;sub: /mission/state · /failsafe_event ·&lt;br&gt;/marker/tracking_quality · /gripper/status · /camera/image_raw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="760" width="420" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="n_bag" value="&lt;b&gt;ros2 bag record&lt;/b&gt;&#160;&lt;i&gt;(ExecuteProcess)&lt;/i&gt; → ~/drone_logs/bag&lt;br&gt;&lt;b&gt;Log THÔ&lt;/b&gt; — debug kỹ thuật&lt;br&gt;9 topic: /camera/image_raw · /apriltag/detections · /optical_flow/velocity&lt;br&gt;/odometry/filtered · /mavros/state · /mavros/battery · /mission/state ·&lt;br&gt;/failsafe_event · /gripper/status" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="490" y="760" width="470" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="n_fox" value="&lt;b&gt;foxglove_bridge&lt;/b&gt;&#160;&lt;i&gt;(bên thứ 3 — vừa thêm)&lt;/i&gt;&lt;br&gt;&lt;b&gt;XEM TRỰC TIẾP&lt;/b&gt; — WebSocket ws://&amp;lt;ip-drone&amp;gt;:8765&lt;br&gt;topic_whitelist mặc định ['.*'] ⇒ thấy TOÀN BỘ topic + param + service&lt;br&gt;&lt;font color=&quot;#b85450&quot;&gt;⚠ /camera/image_raw là ảnh raw 60 FPS — nặng băng thông Wi-Fi&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;align=left;spacingLeft=10;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="990" y="760" width="470" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="de1" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;" edge="1" parent="1" source="hw_cam" target="n_cam"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de2" value="/camera/image_raw&lt;br&gt;/camera/camera_info" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_cam" target="n_rect"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de3" value="/camera/image_rect&lt;br&gt;(+ /camera/camera_info)" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_rect" target="n_tag"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de4" value="/apriltag/detections" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_tag" target="n_mq"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de5" value="/camera/image_raw&#10;/camera/camera_info" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n_cam" target="n_of"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de6" value="/apriltag/detections" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_tag" target="n_mpr"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de7" value="/apriltag/detections" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_tag" target="n_ltb"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de8" value="/tf_static&lt;br&gt;base_link→camera_link" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;dashed=1;" edge="1" parent="1" source="n_tf" target="n_mpr"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de9" value="/tf_static" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;dashed=1;" edge="1" parent="1" source="n_tf" target="n_ltb"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de10" value="pose0&lt;br&gt;/marker/pose_odom" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_mpr" target="n_ekf"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de11" value="twist0&lt;br&gt;/optical_flow/velocity" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_of" target="n_ekf"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de12" value="imu0 /mavros/imu/data" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_mav" target="n_ekf"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de13" value="/mavros/global_position/rel_alt&lt;br&gt;&lt;i&gt;(cần độ cao để quy đổi px→m/s)&lt;/i&gt;" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_mav" target="n_of"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de14" value="MAVLink" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;startArrow=classic;startFill=1;" edge="1" parent="1" source="hw_fc" target="n_mav"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de15" value="/odometry/filtered&lt;br&gt;/diagnostics" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_ekf" target="n_ekfh"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de16" value="/odometry/filtered" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_ekf" target="n_pc"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de17" value="/mavros/landing_target/raw" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_ltb" target="n_pc"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de18" value="/mavros/landing_target/raw&lt;br&gt;&lt;i&gt;(FC tự bám bằng PLND)&lt;/i&gt;" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_ltb" target="n_mav"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de19" value="&lt;b&gt;/mavros/setpoint_raw/local&lt;/b&gt;" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;strokeColor=#b85450;strokeWidth=2;" edge="1" parent="1" source="n_pc" target="n_mav"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de20" value="&lt;b&gt;/mavros/setpoint_raw/local&lt;/b&gt;&lt;br&gt;srv: /mavros/cmd/arming,&lt;br&gt;/mavros/cmd/takeoff, /mavros/set_mode" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;strokeColor=#b85450;strokeWidth=2;" edge="1" parent="1" source="n_fcb" target="n_mav"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de21" value="/mavros/state" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_mav" target="n_fcb"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de22" value="&lt;b&gt;service&lt;/b&gt;: arm, takeoff,&lt;br&gt;goto_waypoint, simple_command" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;dashed=1;strokeWidth=2;" edge="1" parent="1" source="n_mm" target="n_fcb"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de23" value="/mission/setpoint" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_mm" target="n_pc"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de24" value="/mission/expected_marker_id" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_mm" target="n_ltb"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de25" value="/mission/expected_marker_id" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="n_mm" target="n_mq"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de26" value="/marker/tracking_quality" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_mq" target="n_mm"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de27" value="/gripper/command" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_mm" target="n_grip"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de28" value="/gripper/status" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n_grip" target="n_mm"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de29" value="/mavros/state&lt;br&gt;/mavros/battery" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_mav" target="n_mm"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de30" value="/odometry/filtered" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;exitX=0.5;exitY=0;exitDx=0;exitDy=0;" edge="1" parent="1" source="n_ekf" target="n_mm"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de31" value="/landing_target/lost" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_ltb" target="n_mm"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de32" value="/ekf/health" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_ekfh" target="n_fs"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de33" value="/mission/state" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_mm" target="n_fs"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de34" value="/failsafe_event" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#b85450;" edge="1" parent="1" source="n_fs" target="n_mm"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de35" value="&lt;b&gt;service&lt;/b&gt; simple_command&lt;br&gt;&lt;i&gt;(RTL / LAND khẩn cấp)&lt;/i&gt;" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;dashed=1;strokeColor=#b85450;strokeWidth=2;" edge="1" parent="1" source="n_fs" target="n_fcb"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de36" value="/landing_target/lost" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="n_ltb" target="n_fs"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de37" value="/gcs_link/connected" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="n_gcs" target="n_fs"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de38" value="/telemetry/outgoing" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="n_tel" target="n_gcs"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de39" value="/mission/plan&lt;br&gt;&lt;i&gt;(GCS giao nhiệm vụ)&lt;/i&gt;" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="n_gcs" target="n_mm"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de40" value="TCP/UDP" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;fontSize=9;labelBackgroundColor=#ffffff;startArrow=classic;startFill=1;" edge="1" parent="1" source="n_gcs" target="hw_gcs"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="d_warn" value="&lt;b&gt;⚠ ĐIỂM CẦN BẠN XEM LẠI — HAI NODE CÙNG PUBLISH MỘT TOPIC ĐIỀU KHIỂN&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;position_controller_node&lt;/b&gt; (position_controller_node.py:57) và &lt;b&gt;fc_command_bridge_node&lt;/b&gt; (fc_command_bridge_node.py:42)&lt;br&gt;&lt;b&gt;cùng publish PositionTarget lên /mavros/setpoint_raw/local&lt;/b&gt; (2 đường đỏ đậm trong sơ đồ).&lt;br&gt;&lt;br&gt;ROS 2 không phân xử — FC nhận xen kẽ cả hai luồng theo thứ tự tới. Nếu cả hai cùng chạy timer&lt;br&gt;(control_rate_hz và setpoint_rate_hz), lệnh sẽ giằng nhau. Cần đảm bảo tại mỗi thời điểm chỉ MỘT&lt;br&gt;node thật sự phát (mission_manager chọn chế độ), hoặc gộp về một điểm phát duy nhất." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;align=left;spacingLeft=12;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="870" width="900" height="150" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d_key" value="&lt;b&gt;ĐỌC SƠ ĐỒ NÀY THEO 3 VÒNG LẶP&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;1. Vòng cảm nhận → ước lượng&lt;/b&gt; (nhanh, ~60 Hz)&lt;br&gt;camera → rectify → apriltag → EKF → /odometry/filtered&lt;br&gt;&lt;br&gt;&lt;b&gt;2. Vòng điều khiển&lt;/b&gt;&lt;br&gt;/odometry/filtered + /mission/setpoint → position_controller&lt;br&gt;→ /mavros/setpoint_raw/local → FC&lt;br&gt;&lt;br&gt;&lt;b&gt;3. Vòng nhiệm vụ / an toàn&lt;/b&gt; (chậm, theo sự kiện)&lt;br&gt;GCS → /mission/plan → mission_manager → service tới&lt;br&gt;fc_command_bridge; failsafe_monitor có quyền cắt ngang&lt;br&gt;bằng service simple_command (RTL/LAND).&lt;br&gt;&lt;br&gt;&lt;b&gt;mission_manager_node là trung tâm&lt;/b&gt; — 8 subscription,&lt;br&gt;4 publisher, 4 service client. Muốn hiểu hệ thống, đọc&lt;br&gt;máy trạng thái của node này trước." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;spacingLeft=12;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="990" y="870" width="470" height="300" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

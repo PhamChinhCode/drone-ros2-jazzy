@@ -1,0 +1,5 @@
+bool arm                      # true = arm, false = disarm
+---
+bool success
+string message
+uint32 seq                    # seq da gan cho lenh, doi chieu voi log FC
