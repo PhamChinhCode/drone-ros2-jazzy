@@ -28,7 +28,7 @@ def generate_launch_description():
         # (docs/CAMERA.md muc 9: hai loi khong sua duoc tu ung dung tren Ubuntu 24.04).
         #
         # BAT BUOC chay TRUOC launch nay, va lai sau MOI LAN REBOOT:
-        #   /home/pc/PiDrone/scripts/camera_v4l2_setup.sh --width 640 --height 400 --vblank 1779 --exposure 800 --gain 120
+        #   /home/pc/ros2_ws/scripts/camera_v4l2_setup.sh --width 640 --height 400 --vblank 1779 --exposure 800 --gain 120
         # Bo qua buoc do thi topic van ra dung nhip nhung MOI KHUNG HINH TOAN SO 0
         # (subdev con o Y10_1X10 trong khi node xin GREY 8-bit) - `ros2 topic hz` KHONG
         # phat hien duoc loi nay, phai kiem thong ke pixel.

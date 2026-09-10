@@ -1,0 +1,37 @@
+# Chạy drone_startup.sh sau mỗi lần boot (cấu hình V4L2 cho OV9281 + nạp môi trường ROS 2).
+#
+# Cài:
+#   sudo cp /home/pc/ros2_ws/systemd/drone-startup.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now drone-startup.service
+#
+# Khi MỤC 3 của drone_startup.sh có lệnh chạy dài (ví dụ `ros2 launch`), đổi 2 dòng:
+#   Type=oneshot + RemainAfterExit=yes   ->   Type=simple
+#   và bỏ comment 2 dòng KillSignal/TimeoutStopSec ở dưới để Ctrl+C-tương-đương tắt sạch.
+
+[Unit]
+Description=Khoi dong he thong drone (camera V4L2 + moi truong ROS 2)
+Documentation=file:///home/pc/ros2_ws/docs/CAMERA.md
+After=multi-user.target
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+# MỤC 3 đang trống nên script chạy xong là thoát -> oneshot.
+# RemainAfterExit=yes để `systemctl status` báo "active (exited)" thay vì "inactive",
+# nhờ đó unit khác có thể dùng After=/Requires= unit này.
+Type=oneshot
+RemainAfterExit=yes
+
+User=pc
+SupplementaryGroups=video
+Environment=HOME=/home/pc
+
+ExecStart=/home/pc/ros2_ws/scripts/drone_startup.sh
+
+# Chỉ dùng khi đã đổi sang Type=simple:
+#KillSignal=SIGINT
+#TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

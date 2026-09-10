@@ -462,3 +462,90 @@ Kiểm chứng không cần `sudo`:
 | Chạy script **dưới systemd thật** (`systemd-run --user --wait`) | **exit 0**, runtime 2,4 s, camera cấu hình xong, ROS nạp xong |
 
 **Chưa cài vào `/etc/systemd/system/`** — bước đó cần `sudo` (đòi mật khẩu), người dùng tự chạy.
+
+---
+
+## Phiên 5 — 10/09/2026
+
+### 5.1 Thêm `foxglove_bridge` vào `full_system.launch.py`
+
+`ros-jazzy-foxglove-bridge` 3.4.1 đã có sẵn trên máy. Thêm node với `port: 8765`,
+`address: 0.0.0.0`, các tham số khác giữ mặc định của package (`topic_whitelist` mặc
+định là `['.*']` nên thấy toàn bộ topic). Thêm `exec_depend` vào `package.xml`.
+
+Kiểm chứng: `ros2 launch ... --print` resolve được `ExecInPkg(pkg='foxglove_bridge')`.
+
+### 5.2 Trả lời: foxglove có tự chạy lúc boot không → **KHÔNG**
+
+`drone-startup.service` gọi `drone_startup.sh`, mà **MỤC 3 đang để trống**, nên lúc boot
+không node ROS nào chạy. Log boot 09:29:41 xác nhận: `[3/3] Xong. Chưa có lệnh nào ở MỤC 3.`
+Muốn tự chạy cần **hai** thay đổi, không phải một: điền MỤC 3 **và** đổi unit sang
+`Type=simple` (vì `ros2 launch` không thoát, để `oneshot` thì systemd treo chờ).
+
+### 5.3 Vẽ sơ đồ hệ thống — `docs/so_do_he_thong.drawio`
+
+Ba trang: (1) trình tự khởi động boot, (2) cây launch 4 tầng include và node theo giai
+đoạn, (3) luồng dữ liệu 19 node / 40 mũi tên, trích thẳng từ `create_subscription` /
+`create_publisher` / `create_client` chứ không suy đoán.
+
+**Phát hiện đáng lưu ý:** `position_controller_node` (dòng 57) và `fc_command_bridge_node`
+(dòng 42) **cùng publish `PositionTarget` lên `/mavros/setpoint_raw/local`**, cả hai đều
+phát theo timer riêng. ROS 2 không phân xử — FC nhận xen kẽ hai luồng. Đã đánh dấu đỏ
+trên sơ đồ, **chưa sửa** vì chưa rõ `mission_manager` có chủ ý chỉ cho một nhánh chạy tại
+mỗi thời điểm hay không. → **nợ mới**.
+
+### 5.4 Gộp `PiDrone` vào workspace + đưa workspace vào git
+
+Lý do gộp: README của `PiDrone` tự khai nó là repo bring-up camera, "làm nền để sau này
+ghép vào pipeline ROS 2" — gộp là hoàn tất đúng ý định ban đầu.
+
+Hướng gộp là `ros2_ws` **hút** `PiDrone` chứ không ngược lại, vì `/home/pc/ros2_ws` đã bị
+nung cứng vào 12 file trong `install/`; di chuyển workspace là phải build lại toàn bộ.
+
+`git init` tại `ros2_ws` (nhánh `main`), `.gitignore` loại `build/ install/ log/` — ~50 MB
+sinh ra so với 1.2 MB mã nguồn, và không dùng lại được trên máy khác do đường dẫn tuyệt
+đối. `src/camera_ros/` cũng gitignore: là clone upstream có `.git` riêng, và **đang không
+được dùng** (dự án chọn `v4l2_camera`).
+
+Bố cục mới: `scripts/` (chạy trên drone, ngoài môi trường ROS) · `tools/` (chạy tay lúc
+phát triển) · `systemd/` · `assets/{tags,examples}` · `docs/`.
+
+**Vì sao `scripts/` ở gốc workspace chứ không nhét vào package `drone_bringup`:**
+`camera_v4l2_setup.sh` phải chạy ở MỤC 1, tức **trước** khi source môi trường ROS ở MỤC 2.
+Muốn định vị nó qua `ros2 pkg prefix` thì phải source ROS trước — vòng luẩn quẩn. Thêm nữa,
+nhét vào package sẽ khiến mỗi script tồn tại hai bản (`src/` và `install/`), sửa bản này
+chạy bản kia.
+
+File được **copy**, không `mv` — `~/PiDrone` giữ nguyên 33 file làm kho lưu trữ đông lạnh.
+
+Đường dẫn đã sửa: `scripts/drone_startup.sh` (`CAM_SETUP` + 2 comment) ·
+`systemd/drone-startup.service` (`ExecStart`, `Documentation`, lệnh cài) ·
+`src/drone_bringup/{config/apriltag.yaml, launch/perception.launch.py}` ·
+`docs/ke_hoach_thiet_ke_node.md` · `docs/{CAMERA,RUNBOOK,cai_dat_ros2_framework_pi4}.md` ·
+`docs/so_do_he_thong.drawio`.
+
+**File này (`nhat_ky_lam_viec.md`) cố ý KHÔNG sửa** — 7 chỗ nhắc `PiDrone` ở các phiên
+trước là ghi chép lịch sử, sửa đi sẽ làm sai sự thật đã xảy ra. Đường dẫn hiện hành nằm ở
+`README.md` và `docs/RUNBOOK.md`.
+
+Kiểm chứng:
+
+| Việc kiểm | Kết quả |
+|---|---|
+| `bash -n scripts/drone_startup.sh` | Cú pháp sạch |
+| Chạy thật `./scripts/drone_startup.sh` từ vị trí mới | **exit 0**, camera Y8_1X8 640×400 @60 FPS, ROS nạp xong |
+| `systemd-analyze verify systemd/drone-startup.service` | Sạch |
+| `ExecStart` trỏ tới file có thật và executable | OK |
+| `colcon build --packages-select drone_bringup` | Finished |
+| Còn sót `PiDrone` ngoài nhật ký | Không |
+
+### 5.5 Việc còn nợ
+
+1. **Cài lại unit vào `/etc/systemd/system/`** — bản đang chạy vẫn trỏ `ExecStart` sang
+   `/home/pc/PiDrone/scripts/drone_startup.sh` (file cũ còn nguyên nên boot chưa gãy).
+   Cần `sudo`, người dùng tự chạy 3 lệnh trong `README.md`.
+2. **Hai node cùng publish `/mavros/setpoint_raw/local`** (mục 5.3) — cần đọc máy trạng
+   thái `mission_manager_node` để xác định là thiết kế hay lỗi.
+3. Nợ 4.5 #2 (`COLCON_IGNORE` cho `src/camera_ros`) — nay đã gitignore, nhưng colcon **vẫn
+   đang build** package này. Vẫn nên đặt `COLCON_IGNORE` để khỏi tốn thời gian build.
+4. Ba nợ cũ của nhánh camera ở mục 3.7 vẫn nguyên.

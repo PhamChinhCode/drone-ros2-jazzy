@@ -11,7 +11,7 @@ Cập nhật 08/09/2026 — ROS 2 Jazzy, Ubuntu 24.04, Raspberry Pi 4.*
 | # | Điểm để ngỏ trong tài liệu gốc | Quyết định | Lý do |
 |---|---|---|---|
 | 1 | `usb_cam` / `v4l2_camera` / `camera_ros` | ~~`camera_ros`~~ → **`v4l2_camera`** đọc thẳng `/dev/video0` (*sửa 08/09, xem mục 1b*) | `camera_ros`/libcamera có hai lỗi không sửa được từ ứng dụng trên máy này |
-| 2 | ArUco hay AprilTag | **AprilTag**, family `tag36h11`, cạnh **0.13 m** | chính xác góc tốt hơn khi nghiêng lớn; 0.13 m khớp bản in sẵn trong `/home/pc/PiDrone/tags/` |
+| 2 | ArUco hay AprilTag | **AprilTag**, family `tag36h11`, cạnh **0.13 m** | chính xác góc tốt hơn khi nghiêng lớn; 0.13 m khớp bản in sẵn trong `/home/pc/ros2_ws/assets/tags/` |
 | 3 | Kênh GCS: FC forward (a) hay đường riêng (b) | **(b)** — 4G/LTE gắn thẳng Pi 4 | không phải sửa firmware FC; đúng lựa chọn mục 1 tài liệu kiến trúc |
 | 4 | `smach` / `py_trees` / lifecycle tự quản | **FSM tự viết dạng lớp Python thuần** | `python3-smach` chưa cài, và FSM ở đây tuyến tính; lớp thuần dễ `pytest` không cần ROS |
 | 5 | `LandingTarget` plugin hay `setpoint_raw` | **`mavros_msgs/LandingTarget`** qua plugin `landing_target` | đúng thiết kế `landing_target_t`; có đường lùi sang `setpoint_raw` nếu firmware không nhận |
@@ -19,7 +19,7 @@ Cập nhật 08/09/2026 — ROS 2 Jazzy, Ubuntu 24.04, Raspberry Pi 4.*
 
 ### 1b. Sửa quyết định số 1 (08/09/2026)
 
-`/home/pc/PiDrone/docs/CAMERA.md` — tài liệu đã kiểm chứng trên đúng máy này — ghi nhận
+`/home/pc/ros2_ws/docs/CAMERA.md` — tài liệu đã kiểm chứng trên đúng máy này — ghi nhận
 `camera_ros`/libcamera **không dùng được** trên Ubuntu 24.04 + libcamera 0.2.0 (hai lỗi IPA không
 sửa được từ phía ứng dụng). Đường đã kiểm chứng chạy được là **đọc thẳng V4L2** qua `v4l2_camera`.
 
@@ -117,7 +117,7 @@ trạng thái nội bộ → điểm dễ sai → tiêu chí xong. Cột "Phiên
   thì node rơi về `unicam.yaml` (1280×800), lệch độ phân giải nên `camera_info_manager` bỏ im
   lặng và publish intrinsics rỗng (`k` toàn 0), node **chỉ log INFO**.
 - **Bước bắt buộc trước mỗi lần chạy, và lặp lại sau MỖI LẦN REBOOT**:
-  `/home/pc/PiDrone/scripts/camera_v4l2_setup.sh --width 640 --height 400 --vblank 1779 --exposure 800 --gain 120`
+  `/home/pc/ros2_ws/scripts/camera_v4l2_setup.sh --width 640 --height 400 --vblank 1779 --exposure 800 --gain 120`
   — ép subdev về `Y8_1X8` cho khớp `GREY`, và đặt exposure/gain bằng tay (không có IPA thì
   không có auto-exposure). Bỏ qua bước này thì topic vẫn ra đúng nhịp nhưng **mọi khung hình
   toàn số 0**, và `ros2 topic hz` **không phát hiện được** — phải kiểm thống kê pixel.
@@ -127,7 +127,7 @@ trạng thái nội bộ → điểm dễ sai → tiêu chí xong. Cột "Phiên
   WARN liên tục). Ở 60 FPS: 373/375 khung khớp stamp, log sạch, apriltag xử lý đủ 60 Hz.
   Công thức: `FPS = pixel_rate / ((400+vblank)×(640+890))`, `pixel_rate=200e6`.
 - **Điểm dễ sai**: bỏ qua hiệu chỉnh camera → sai lệch **hệ thống** ở mọi phép đo khoảng cách
-  marker. Máy không có GUI nên dùng `/home/pc/PiDrone/scripts/calibrate_camera.py`.
+  marker. Máy không có GUI nên dùng `/home/pc/ros2_ws/tools/calibrate_camera.py`.
 - **Phiên này**: chỉ launch + YAML.
 
 #### `image_rectify` — dùng `image_proc/rectify_node` (không viết code)

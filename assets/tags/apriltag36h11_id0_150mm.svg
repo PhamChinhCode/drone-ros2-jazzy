@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="297.0mm" height="210.0mm" viewBox="0 0 297.0 210.0">
+<rect x="0" y="0" width="297.0" height="210.0" fill="#ffffff"/>
+<rect x="73.5000" y="30.0000" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="92.2500" y="30.0000" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="111.0000" y="30.0000" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="129.7500" y="30.0000" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="148.5000" y="30.0000" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="167.2500" y="30.0000" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="186.0000" y="30.0000" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="204.7500" y="30.0000" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="73.5000" y="48.7500" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="92.2500" y="48.7500" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="111.0000" y="48.7500" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="148.5000" y="48.7500" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="167.2500" y="48.7500" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="186.0000" y="48.7500" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="204.7500" y="48.7500" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="73.5000" y="67.5000" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="92.2500" y="67.5000" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="148.5000" y="67.5000" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="186.0000" y="67.5000" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="204.7500" y="67.5000" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="73.5000" y="86.2500" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="92.2500" y="86.2500" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="111.0000" y="86.2500" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="129.7500" y="86.2500" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="167.2500" y="86.2500" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="204.7500" y="86.2500" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="73.5000" y="105.0000" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="92.2500" y="105.0000" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="111.0000" y="105.0000" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="129.7500" y="105.0000" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="186.0000" y="105.0000" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="204.7500" y="105.0000" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="73.5000" y="123.7500" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="111.0000" y="123.7500" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="186.0000" y="123.7500" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="204.7500" y="123.7500" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="73.5000" y="142.5000" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="111.0000" y="142.5000" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="148.5000" y="142.5000" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="204.7500" y="142.5000" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="73.5000" y="161.2500" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="92.2500" y="161.2500" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="111.0000" y="161.2500" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="129.7500" y="161.2500" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="148.5000" y="161.2500" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="167.2500" y="161.2500" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="186.0000" y="161.2500" width="18.7500" height="18.7500" fill="#000000"/>
+<rect x="204.7500" y="161.2500" width="18.7500" height="18.7500" fill="#000000"/>
+<line x1="10.0" y1="204.0" x2="110.0" y2="204.0" stroke="#000" stroke-width="0.3"/>
+<line x1="10.0" y1="202.0" x2="10.0" y2="206.0" stroke="#000" stroke-width="0.3"/>
+<line x1="20.0" y1="202.8" x2="20.0" y2="205.2" stroke="#000" stroke-width="0.3"/>
+<line x1="30.0" y1="202.8" x2="30.0" y2="205.2" stroke="#000" stroke-width="0.3"/>
+<line x1="40.0" y1="202.8" x2="40.0" y2="205.2" stroke="#000" stroke-width="0.3"/>
+<line x1="50.0" y1="202.8" x2="50.0" y2="205.2" stroke="#000" stroke-width="0.3"/>
+<line x1="60.0" y1="202.0" x2="60.0" y2="206.0" stroke="#000" stroke-width="0.3"/>
+<line x1="70.0" y1="202.8" x2="70.0" y2="205.2" stroke="#000" stroke-width="0.3"/>
+<line x1="80.0" y1="202.8" x2="80.0" y2="205.2" stroke="#000" stroke-width="0.3"/>
+<line x1="90.0" y1="202.8" x2="90.0" y2="205.2" stroke="#000" stroke-width="0.3"/>
+<line x1="100.0" y1="202.8" x2="100.0" y2="205.2" stroke="#000" stroke-width="0.3"/>
+<line x1="110.0" y1="202.0" x2="110.0" y2="206.0" stroke="#000" stroke-width="0.3"/>
+<text x="114.0" y="205.6" font-family="sans-serif" font-size="3.2" fill="#000">vach nay phai dai dung 100 mm sau khi in</text>
+<text x="10.0" y="199.0" font-family="sans-serif" font-size="3.2" fill="#000">apriltag36h11 id=0 | canh den = 150 mm | marker_size = 0.150 m</text>
+</svg>

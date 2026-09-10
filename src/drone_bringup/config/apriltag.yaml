@@ -5,7 +5,7 @@
     family: 36h11
     # size PHAI dung kich thuoc canh tag IN THAT (met), DO BANG THUOC sau khi in.
     # Sai bao nhieu % thi khoang cach uoc luong sai bay nhieu %.
-    # 0.13 khop /home/pc/PiDrone/tags/apriltag36h11_id0_130mm_a4.svg (ban in vua kho A4)
+    # 0.13 khop /home/pc/ros2_ws/assets/tags/apriltag36h11_id0_130mm_a4.svg (ban in vua kho A4)
     # va pad_apriltag_130_30.svg. Ban 150mm cung co san neu in kho lon hon.
     size: 0.13
     max_hamming: 0

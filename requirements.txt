@@ -1,0 +1,8 @@
+# Dùng cho máy KHÔNG PHẢI Raspberry Pi (ví dụ laptop test backend v4l2/gstreamer).
+#
+# Trên Raspberry Pi: KHÔNG dùng file này để cài opencv/numpy/picamera2 bằng pip.
+# picamera2 chỉ có qua apt (python3-picamera2) và được build sẵn cho numpy 1.x
+# của Debian/Ubuntu; cài "opencv-python" bằng pip sẽ kéo theo numpy 2.x và làm
+# hỏng picamera2. Trên Pi, dùng scripts/install.sh (apt) thay vì file này.
+opencv-python>=4.6
+numpy>=1.24,<2
