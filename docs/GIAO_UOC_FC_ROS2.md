@@ -572,7 +572,7 @@ tắt nên không có `/mavros/time_reference` và không trao đổi `TIMESYNC`
 | `SET_POSITION_TARGET_LOCAL_NED` | 84 | setpoint vận tốc — mục 5.2 | [THOẢ THUẬN] — FC **đã hiện thực**, chưa đo đầu-cuối (11.1 #2). **Trước 09-13 FC loại mọi khung `0x07C7`** — mục 5.2 |
 | `COMMAND_LONG` / `MAV_CMD_COMPONENT_ARM_DISARM` (400) | 76 | arm/disarm theo hợp đồng mục 6.2 | [CHỐT] |
 | `COMMAND_LONG` / `MAV_CMD_REQUEST_AUTOPILOT_CAPABILITIES` (520) | 76 | trả `AUTOPILOT_VERSION` | [CHỐT] |
-| `COMMAND_LONG` / `MAV_CMD_REQUEST_MESSAGE` (512) | 76 | trả lời khi `param1 = 148`; ID khác → `UNSUPPORTED` | [CHỐT] — Pi đo 09-13: `param1 = 148` → `ACCEPTED` + `AUTOPILOT_VERSION`; `param1 = 33` → `UNSUPPORTED`; qua `/mavros/cmd/command` (`1`/`191`) → `result = 0` |
+| `COMMAND_LONG` / `MAV_CMD_REQUEST_MESSAGE` (512) | 76 | trả lời khi `param1 = 148`; ID khác → `UNSUPPORTED` | [CHỐT] — Pi đo 09-13: `param1 = 148` → `ACCEPTED` + `AUTOPILOT_VERSION`; `param1 = 33` → `UNSUPPORTED`; qua `/mavros/cmd/command` (`1`/`191`) → `result = 0` *(sai: `confirmation = 0` nên MAVROS không chờ ACK — 7; Pi đo lại 09-14 với `confirmation = 1`: 520 → `0`, 22 → `3`, ACK thật)* |
 | `SET_MODE` | 11 | **KHÔNG hiện thực** — đừng gửi | — |
 | `LANDING_TARGET` | 149 | **chưa xử lý** | [ĐANG LÀM] |
 | `COMMAND_LONG` / `MAV_CMD_NAV_TAKEOFF` (22) | 76 | ACK `UNSUPPORTED` | — |
@@ -907,6 +907,21 @@ không phải của FC — đúng đặc tả.
 có ACK. Thiếu ACK thì mọi lệnh treo tới timeout và **nhìn từ ROS sẽ giống "lệnh thất bại"
 dù FC đã làm xong**.
 
+> **Bẫy MAVROS — Pi phát hiện 09-14: phải đặt `confirmation != 0`.** MAVROS (Jazzy, plugin `command`)
+> chỉ chờ `COMMAND_ACK` khi `confirmation != 0` **hoặc** FC tự nhận là PX4/ArduPilot:
+> `is_ack_required = (confirmation != 0 || is_ardupilotmega() || is_px4()) && !broadcast`. FC khai
+> `MAV_AUTOPILOT_GENERIC`, nên gọi `/mavros/cmd/command` với `confirmation = 0` thì MAVROS **trả ngay
+> `success = true, result = 0` mà không chờ FC**; ACK tới sau bị log `CMD: Unexpected command N`.
+> Kiểm bằng FC giả qua UDP: FC giả trả 1, 2, và không trả — MAVROS vẫn báo `result = 0` cả ba, 0,0 s.
+> Đặt `confirmation = 1`: FC giả trả 1 → `result = 1`, trả 2 → `2`, không trả → `success = false`
+> sau 5 s (`CMD: Command 400 -- ack timeout`). `/mavros/cmd/arming` của MAVROS tự đặt `confirmation = 1`.
+>
+> **Trên FC thật 09-14, `confirmation = 1`:** lệnh 22 → `result = 3` (UNSUPPORTED), lệnh 520 → `0`, DISARM
+> lúc chưa arm → `0` — đều ACK thật trong 0,01–0,24 s. FC xử lý `confirmation = 1` bình thường.
+> **Hệ quả:** số `result = 0` Pi ghi ngày 09-13 cho lệnh 512/520 "qua `/mavros/cmd/command`" (5.1, 11.1 #6)
+> **không phải ACK thật** — đã đo lại và sửa ở hai chỗ đó. `fc_command_bridge_node` luôn gửi
+> `confirmation = 1`.
+
 `COMMAND_ACK` chứa đúng `command` vừa nhận (không để 0); `target_system`/`target_component`
 lấy thẳng từ `sysid`/`compid` của khung gửi tới — **`1`/`191` với MAVROS** (mục 2), `255`/`190` với
 script `pymavlink`. Lần nghiệm thu 09-12 bên dưới đi bằng `255`/`190`.
@@ -951,7 +966,7 @@ Bảng này là giao diện mà node phía Pi được phép dựa vào. Cột c
 | Topic MAVROS | Kiểu | Sinh bản tin | Node publisher |
 |---|---|---|---|
 | `/mavros/setpoint_raw/local` | `mavros_msgs/PositionTarget` | `SET_POSITION_TARGET_LOCAL_NED` | **`position_controller_node` — DUY NHẤT** |
-| `/mavros/cmd/arming` (service) | `mavros_msgs/srv/CommandBool` | `COMMAND_LONG` 400 | `fc_command_bridge_node` |
+| `/mavros/cmd/command` (service) | `mavros_msgs/srv/CommandLong`, **`confirmation = 1`** (mục 7) | `COMMAND_LONG` 400 — ARM, DISARM thường, DISARM `21196` | `fc_command_bridge_node` — DUY NHẤT (service `~/arm`, `~/emergency_disarm`) |
 | `/mavros/landing_target/pose` | `geometry_msgs/PoseStamped` | `LANDING_TARGET` | `landing_target_bridge_node` |
 
 > **Cạm bẫy topic hạ cánh chính xác.** `/mavros/landing_target/raw` **KHÔNG tồn tại** —
@@ -1374,7 +1389,7 @@ hợp đồng**, để không ai viết code dựa vào chỗ chưa xong.
 | **3** | `fields_updated` vẫn bật cờ từ kế | **FC** | tin cậy `HIGHRES_IMU.mag`; cổng mở `FRAME_LOCAL_NED` | **ĐÃ TRẢ LỜI 09-13** — đúng thiết kế |
 | ~~4~~ | ~~Launch MAVROS crash~~ | Pi | — | **XONG 2026-09-13** — xem mục 8.3 |
 | **5** | Đường arm đi qua cổng nào? | **FC** | nghiệm thu 12.B | **ĐÃ TRẢ LỜI 09-13** — chỉ UART8 |
-| **6** | Pi dùng `1`/`191` trùng `sysid` với FC — FC có lọc bỏ không? | **FC** | `mavros.yaml`, heartbeat, mọi lệnh | **XONG 09-13** — FC không lọc; Pi đo: `/mavros/cmd/command` 520 và 512 qua `1`/`191` đều `result = 0` |
+| **6** | Pi dùng `1`/`191` trùng `sysid` với FC — FC có lọc bỏ không? | **FC** | `mavros.yaml`, heartbeat, mọi lệnh | **XONG 09-13** — FC không lọc; Pi đo: `/mavros/cmd/command` 520 và 512 qua `1`/`191` đều `result = 0`. *Sửa 09-14: phép đo đó không đọc ACK thật (bẫy `confirmation`, mục 7). Đo lại với `confirmation = 1` qua `1`/`191`: 520 → `0`, 22 → `3`, DISARM → `0` — FC trả ACK cho `1`/`191`, kết luận không đổi* |
 | **7** | Ba mâu thuẫn + hai điểm nhỏ Pi báo | **FC** | — | **ĐÃ TRẢ LỜI 09-13** — xem chi tiết |
 | **8** | Timeout heartbeat Pi 3000 ms không được dùng | **FC** → hai bên chốt | hiểu đúng lưới an toàn | [ĐỀ XUẤT] — xem chi tiết |
 | **9** | Thứ tự byte `flight_custom_version` | **FC** | đọc đúng bản build từ log MAVROS | **ĐÃ TRẢ LỜI 09-13** — đổi sang `uint64` little-endian từ 1.2 |
@@ -2083,15 +2098,15 @@ ch1–8 = 1500/1500/1503/1498/2000/2000/999/2000 — **khớp FC**. Qua `rc_io`:
 | # | Việc | Trạng thái |
 |---|---|---|
 | P1 | `position_controller_node:55` vẫn subscribe `/mavros/landing_target/raw` (topic **không tồn tại**, mồ côi sau khi sửa `landing_target_bridge_node`) | **chưa sửa** — kiến trúc: chủ dự án chốt 09-13 **Pi đóng vòng vận tốc theo marker**, FC không xử lý `LANDING_TARGET` (đề xuất 11.1 #12) |
-| P2 | `mission_manager_node` theo hợp đồng ARM mới + `OB_AUTH` | chờ #1 |
+| P2 | `mission_manager_node` theo hợp đồng ARM mới + `OB_AUTH` | **một phần 09-14:** `fc_command_bridge_node` chặn phía Pi khi `OB_AUTH ≠ 1` / quá hạn (không gửi kể cả DISARM, trừ lúc chưa arm) và chỉ gửi ARM khi `OB_ARM_RDY = 1`; trả `result` 0/1/2. Thân máy trạng thái chưa viết |
 | P3 | Bộ lọc vận tốc theo bit flow (mục 4.2a) | chưa cần — EKF hiện lấy vận tốc từ camera Pi, **chưa dùng vận tốc FC**. **Chưa chốt:** khi chuyển sang `ODOMETRY`, Pi chỉ thấy covariance `1e6` (MAVROS bỏ `quality`, 11.2) — chấp nhận `1e6` thay cho "bỏ hẳn mẫu", hay Pi tự loại mẫu có covariance ≥ ngưỡng trước khi vào EKF |
 | P4 | Cảnh báo `errors_count*` theo tốc độ tăng | chưa viết |
 | P5 | Đo lại `linear_acceleration_stdev` khi có điện động cơ | giai đoạn C |
 | P6 | Watchdog nội bộ: `position_controller_node` ngừng phát setpoint khi `mission_manager_node` treo (FC không dùng heartbeat Pi — 11.1 #8) | chưa viết |
 | P7 | Bật `rc_io` khi FC phát `RC_CHANNELS`; không bao giờ publish `/mavros/rc/override` | **XONG 09-13** — bật cùng `odometry` trong `mavros.yaml` |
-| P8 | Subscriber `/mavros/debug_value/named_value_int` phải có **depth ≥ 10** (10 tên tới một cụm, 4.1) — áp khi viết `mission_manager_node` (P2) | chưa có node nào subscribe |
-| P9 | `position_controller_node` tự kẹp setpoint ở ~95 % trần 9.6 (±1,9 / ±0,95 m/s, ±85 °/s) ~~và không ra lệnh xuống khi dưới `offboard_min_alt_m`~~ — tránh `KEP_DAI` (11.1 #11). *FC 09-13: sàn đã bỏ — thay bằng tự kẹp xuống ≤ 0,3 m/s khi laser ≤ 1,2 m (9.6)* | chưa viết |
-| P10 | Hạ cánh: tiêu chí chạm đất (11.1 #12e) + DISARM thường qua `fc_command_bridge_node`; cắt khẩn cấp `21196` là lệnh riêng, không gọi tự động; subscriber `named_value_int` depth ≥ 20 khi FC thêm `OB_DIS_RDY` | chưa viết — chờ FC 1.3 |
+| P8 | Subscriber `/mavros/debug_value/named_value_int` phải có **depth ≥ 10** (10 tên tới một cụm, 4.1) — áp khi viết `mission_manager_node` (P2) | **XONG 09-14** — `fc_command_bridge_node` depth 20 |
+| P9 | `position_controller_node` tự kẹp setpoint ở ~95 % trần 9.6 (±1,9 / ±0,95 m/s, ±85 °/s) ~~và không ra lệnh xuống khi dưới `offboard_min_alt_m`~~ — tránh `KEP_DAI` (11.1 #11). *FC 09-13: sàn đã bỏ — thay bằng tự kẹp xuống ≤ 0,3 m/s khi laser ≤ 1,2 m (9.6)* | **XONG 09-14** — `setpoint_limits.py` (±1,9 / +0,95 / −0,95 hoặc −0,285 khi laser ≤ 1,2 m hay mất laser / ±85,5 °/s), có pytest. Trên FC: 20 Hz, frame 8, `0x07C7`, `OB_RX_OK` +20/s, `REJ`/`CLP` = 0 |
+| P10 | Hạ cánh: tiêu chí chạm đất (11.1 #12e) + DISARM thường qua `fc_command_bridge_node`; cắt khẩn cấp `21196` là lệnh riêng, không gọi tự động; subscriber `named_value_int` depth ≥ 20 khi FC thêm `OB_DIS_RDY` | **một phần 09-14:** `landing_detector.py` (tiêu chí + mốc mặt đất, có pytest) nối vào `mission_manager_node` → `landed`; `~/arm` (DISARM thường) và `~/emergency_disarm` (`21196`) tách riêng. Chưa viết: trình tự gửi DISARM khi `landed` + `OB_DIS_RDY = 1`, thử lại 3 s — nằm trong thân máy trạng thái |
 
 ### 11.4 Chưa ai đo — cả hai bên nên biết
 
@@ -2239,6 +2254,7 @@ Lệnh đo nhanh: xem mục 12.A1.
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.3 *(Pi viết lớp giao tiếp FC, không tăng số)* | 2026-09-14 | **Bẫy MAVROS (mục 7):** FC khai `GENERIC` nên MAVROS chỉ chờ ACK khi `confirmation != 0`; với `0` nó tự trả `result = 0`. Số đo 09-13 "512/520 qua MAVROS → 0" không phải ACK thật — đo lại với `confirmation = 1` (520 → 0, 22 → 3), sửa 5.1, 11.1 #6. Pi hiện thực `fc_command_bridge_node` (ARM/DISARM/`21196` qua `/mavros/cmd/command`, chặn theo `OB_*`), `position_controller_node` (20 Hz, frame 8, `0x07C7`, tự kẹp 9.6), tiêu chí chạm đất; sửa 8.2. P8, P9 xong; P2, P10 một phần. |
 | **1.3** | 2026-09-14 | **MINOR — FC hiện thực 11.1 #12d–f**, firmware phát `FC_CTR_VER = 10300`. **Cổng DISARM theo độ cao:** DISARM thường từ Pi chỉ nhận khi độ cao ước lượng ≤ 0,17 + 0,20 m; cao hơn `TEMPORARILY_REJECTED`; `param2 = 21196` cắt ở mọi độ cao nhưng không vượt quyền. **`OB_DIS_RDY`** (nghĩa theo đề nghị Pi: 0 khi chưa arm/mất quyền). Mốc mặt đất đổi từ "lúc arm" sang **hằng số 0,17 m** (trả lời Pi: arm cầm tay). Trả lời Pi: nghiêng > 25° cổng không tự đóng (EKF chạy bằng baro, trôi). Không MAJOR (Pi xác nhận chưa node nào disarm trên không). Ghi cam kết phía Pi. Gộp bỏ sàn + xuống chậm sát đất (nạp 09-13). FC thử 11 ca trên target qua SWD. |
 | 1.2 *(Pi trả lời #12, không tăng số)* | 2026-09-14 | **Pi đo phần (a) đã nạp:** nằm bàn, xuống 0,3 / 0,29 → không kẹp; xuống 0,5 / 10 → −0,300, `CLP` tăng; trái/phải/lên đúng. `min_distance = 15`, `Range.min_range = 0.15`. **Pi trả lời #12 (d)–(f):** đồng ý cổng DISARM 20 cm + `21196`; rà `src/` — **không node nào gửi DISARM** (đường `on_arm` còn TODO, `failsafe_monitor` chỉ hạ cánh) → đề nghị MINOR 1.3, không MAJOR. Đồng ý tên `OB_DIS_RDY`, đề nghị = 0 khi chưa arm/không quyền. **Chốt tiêu chí chạm đất (e):** laser ≤ mốc + 0,05 m, \|vz\| < 0,05 m/s, đang lệnh xuống, giữ 1 s, `OB_DIS_RDY = 1` — ngưỡng tạm, đo lại 12.B. Thêm P10. |
 | 1.2 *(FC bỏ sàn độ cao, không tăng số)* | 2026-09-13 | Theo lệnh chủ dự án: **bỏ sàn `offboard_min_alt_m`** (tham số giữ, không tác dụng) và **bỏ `MAV_CMD_NAV_LAND`/pha `HA_CANH`/`OB_LAND`** khỏi đề xuất #12 — Pi hạ cánh bằng setpoint thường. Thay sàn bằng **xuống chậm ≤ 0,3 m/s khi laser ≤ 1,2 m** (kẹp bao, không vào `KEP_DAI`). Đã nạp, FC thử 10 ca trên target qua SWD, cấu hình đã lưu còn nguyên. Cập nhật 9.6, 3.4, P9, 12.A3. Cổng DISARM 20 cm + `OB_DIS_RDY` vẫn là đề xuất. |
