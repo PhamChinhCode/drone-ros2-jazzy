@@ -900,7 +900,7 @@ Bản tin chuẩn đã cấp:
 | 106 | `OPTICAL_FLOW_RAD` | FC→Pi | [ĐỀ XUẤT] — cần đo hệ số quy đổi radian trước |
 | 132 | `DISTANCE_SENSOR` | FC→Pi | [CHỐT] — Pi đã bật plugin và đo 09-13 (mục 4.1). `min_distance` vẫn là số tạm |
 | 147 | `BATTERY_STATUS` | FC→Pi | [CHỐT] |
-| 148 | `AUTOPILOT_VERSION` | FC→Pi | [CHỐT] — Pi đo 09-13: `flight_sw_version = 0x00010000`, hash có. **Thứ tự byte của hash chờ FC chốt** (11.1 #9); cờ capability mục 9.5 |
+| 148 | `AUTOPILOT_VERSION` | FC→Pi | [CHỐT] — Pi đo 09-13: `flight_sw_version = 0x00010000`, hash có. **Thứ tự byte: FC chốt `uint64` little-endian từ hợp đồng 1.2** (9.5, 11.1 #9); cờ capability mục 9.5 |
 | 149 | `LANDING_TARGET` | Pi→FC | [ĐANG LÀM] — FC chưa xử lý |
 | 241 | `VIBRATION` | FC→Pi | [ĐỀ XUẤT] — giai đoạn có điện động cơ |
 | 245 | `EXTENDED_SYS_STATE` | FC→Pi | [CHỐT] |
@@ -991,9 +991,16 @@ Hai trường còn lại, [THOẢ THUẬN — FC đã điền 09-13, chờ Pi đ
 | `flight_sw_version` | `0x00010000` | MAJOR.MINOR.PATCH.TYPE = 0.1.0 `DEV`, mã hoá chuẩn MAVLink |
 | `flight_custom_version` | 8 byte **nhị phân** | 16 chữ số hex đầu của SHA commit `HEAD`, sinh **mỗi lần build** |
 
-> **Thứ tự byte — Pi đo 09-13, chờ FC chốt (11.1 #9).** Trên dây, 8 byte theo đúng thứ tự
-> chuỗi hash: `pymavlink` đọc `8b9b35f7b2223c3a`. Nhưng MAVROS coi 8 byte là một `uint64`
-> little-endian nên log in **ngược**: `VER: Flight software: 00010000 (3a3c22b2f7359b8b)`.
+> **Thứ tự byte — FC chốt 09-13 (11.1 #9).** 16 chữ số hex đầu của SHA được coi là **một số
+> `uint64`**, rồi ghi lên dây theo **little-endian** (byte thấp nhất trước). Hash
+> `8b9b35f7b2223c3a` lên dây thành `3a 3c 22 b2 f7 35 9b 8b`, và MAVROS in **đúng chiều**:
+> `VER: Flight software: 00010000 (8b9b35f7b2223c3a)`. Đọc mảng thô bằng `pymavlink` thì phải
+> ghép lại như `uint64` little-endian: `struct.unpack('<Q', bytes(msg.flight_custom_version))`.
+>
+> | Firmware phát `FC_CTR_VER` | Thứ tự byte của hash |
+> |---|---|
+> | `10100` (hợp đồng 1.1, bản `8b9b35f7…` đang chạy) | theo **chuỗi** — MAVROS in ngược |
+> | `10200` trở đi | **`uint64` little-endian** — MAVROS in đúng |
 
 > **Giới hạn cần biết:** build từ cây có thay đổi chưa commit thì hash là của `HEAD`, **không
 > đại diện** cho bản build. Bản đang chạy 09-13 là trường hợp này (`8b9b35f7b2223c3a` +
@@ -1081,7 +1088,9 @@ là lý do `NAMED_VALUE_INT` được ưu tiên trên `STATUSTEXT`.
    là thấy ngay. Plugin sai tên thì im lặng (bài học `'battery'`).
 6. **Đo tần số và nội dung trên dây bằng `pymavlink`**, đối chiếu bảng 4.1. Cập nhật bảng.
 7. **Khai cờ capability tương ứng** (mục 9.5) — chỉ sau khi bước 6 xong.
-8. **Đổi trạng thái sang [CHỐT]** và tăng MINOR của hợp đồng.
+8. **Đổi trạng thái sang [CHỐT].** Bước này **không** tăng số hợp đồng. MINOR đã tăng từ lúc
+   firmware **bắt đầu phát** thứ mới (bước 4), đồng thời ở hai chỗ: `MAV_CONTRACT_MINOR` trong
+   firmware và bảng lịch sử ở đây — để `FC_CTR_VER` trên dây luôn khớp tài liệu (11.1 #10).
 
 > Bước 3 là bước hay bị bỏ nhất, và là bước đắt nhất khi bỏ. Ba lần sửa lại `type_mask`,
 > bảng `custom_mode`, và hợp đồng ARM đều vì bước này làm sau code.
@@ -1158,8 +1167,8 @@ hợp đồng**, để không ai viết code dựa vào chỗ chưa xong.
 | **6** | Pi dùng `1`/`191` trùng `sysid` với FC — FC có lọc bỏ không? | **FC** | `mavros.yaml`, heartbeat, mọi lệnh | **XONG 09-13** — FC không lọc; Pi đo: `/mavros/cmd/command` 520 và 512 qua `1`/`191` đều `result = 0` |
 | **7** | Ba mâu thuẫn + hai điểm nhỏ Pi báo | **FC** | — | **ĐÃ TRẢ LỜI 09-13** — xem chi tiết |
 | **8** | Timeout heartbeat Pi 3000 ms không được dùng | **FC** → hai bên chốt | hiểu đúng lưới an toàn | [ĐỀ XUẤT] — xem chi tiết |
-| **9** | Thứ tự byte `flight_custom_version` | **FC** | đọc đúng bản build từ log MAVROS | **[CHỜ FC TRẢ LỜI]** — xem chi tiết |
-| **10** | Chuyển [CHỐT] có phải tăng MINOR không (10.3 bước 8) | **hai bên** | số `FC_CTR_VER` | **[CHỜ HAI BÊN]** — xem chi tiết |
+| **9** | Thứ tự byte `flight_custom_version` | **FC** | đọc đúng bản build từ log MAVROS | **ĐÃ TRẢ LỜI 09-13** — đổi sang `uint64` little-endian từ 1.2 |
+| **10** | Chuyển [CHỐT] có phải tăng MINOR không (10.3 bước 8) | **hai bên** | số `FC_CTR_VER` | **FC TRẢ LỜI 09-13** — không; MINOR tăng khi firmware phát thứ mới. Đã sửa 10.3 bước 8, chờ Pi phản đối nếu có |
 
 **Chi tiết #3 — trả lời của FC:** phép đo của Pi **đúng**, câu trả lời đợt 1 của FC **sai**.
 `0x1BFF` (bit từ kế bật) là hành vi đúng thiết kế.
@@ -1254,11 +1263,42 @@ QGroundControl in đúng chiều. **Câu hỏi cho FC:** đảo thứ tự byte 
 nguyên và ghi vào đây "đọc log MAVROS thì đảo ngược"? Pi không phụ thuộc chiều nào, chỉ cần
 hai bên ghi một chiều.
 
+**Chi tiết #9 — trả lời của FC:** **đổi sang `uint64` little-endian**, áp dụng từ firmware hợp
+đồng **1.2** (đợt A–E). Cách ghi cụ thể ở 9.5.
+
+- **Lý do:** để công cụ chuẩn đọc đúng — người tra hash thường đọc từ log MAVROS hoặc GCS, không
+  đọc mảng byte thô. Lý do này đứng vững nhờ **hành vi MAVROS Pi đã đo**, không cần dựa vào
+  nhận định về PX4 (Pi tự ghi là chưa kiểm; FC cũng chưa kiểm PX4).
+- **Vì sao không phải MAJOR** dù đổi cách ghi một trường đã [CHỐT]: trường mới chốt trong ngày
+  và Pi xác nhận **không bên nào dựa vào chiều cũ**. Đây là ngoại lệ có ghi lại, không phải
+  tiền lệ — sau hôm nay, đổi cách ghi trường đã chốt vẫn là MAJOR theo 10.1.
+- **Không nhầm được giữa hai bản:** cùng khung 2 Hz đã có `FC_CTR_VER` — `10100` là thứ tự
+  chuỗi, `10200` trở đi là `uint64` little-endian (bảng ở 9.5).
+
 **Chi tiết #10 — câu hỏi của Pi 09-13:** 10.3 bước 8 ghi "đổi sang [CHỐT] **và tăng MINOR**".
 Ngày 09-13 Pi đã chuyển `DISTANCE_SENSOR`, `AUTOPILOT_VERSION`, `REQUEST_MESSAGE` và 4 tên
 `NAMED_VALUE_INT` sang [CHỐT] theo phép đo, nhưng **chưa tăng số** — tăng lên 1.2 thì
 `FC_CTR_VER` trên dây (`10100`) lệch tài liệu cho tới khi FC nạp lại. Cần chốt: bước 8 áp cho
 bản tin FC **đã** tính vào 1.1 (thì không tăng), hay mỗi lần [CHỐT] đều tăng?
+
+**Chi tiết #10 — trả lời của FC:** **không tăng khi chuyển [CHỐT].** Pi làm đúng khi giữ 1.1.
+
+Số hợp đồng theo dõi **cái gì đang đi trên dây**, không theo trạng thái nghiệm thu. Chốt một thứ
+FC đã phát từ 1.1 không làm dây thay đổi gì, nên tăng số lúc đó chỉ sinh ra đúng cái lệch Pi
+nêu: tài liệu 1.2 trong khi `FC_CTR_VER = 10100`.
+
+Quy tắc đề xuất — đã sửa vào 10.3 bước 8:
+
+| Sự kiện | Số hợp đồng |
+|---|---|
+| Firmware **bắt đầu phát** bản tin / tên / mã / cờ mới | tăng MINOR, **cùng lúc** ở `MAV_CONTRACT_MINOR` và bảng lịch sử |
+| Pi đo xong, chuyển [CHỐT] | không tăng |
+| Sửa câu chữ, thêm số đo, trả lời câu hỏi | không tăng |
+
+Áp vào đợt kế tiếp: A–E (`OB_ARM_RDY`, `OB_T_*`, `FC_DIRTY`, `ODOMETRY`, `RC_CHANNELS`, thứ tự byte
+hash) là thứ mới → **hợp đồng 1.2**, firmware đó phát `FC_CTR_VER = 10200`.
+
+Nếu Pi phản đối cách hiểu này, ghi ngay dưới đây; FC chưa nạp 1.2 cho tới khi hai bên thống nhất.
 
 ### 11.2 Đã thoả thuận, chờ hiện thực — thứ tự đã chốt hai bên
 
@@ -1521,6 +1561,7 @@ Lệnh đo nhanh: xem mục 12.A1.
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.1 *(FC trả lời #9 #10, không tăng số)* | 2026-09-13 | **FC trả lời 11.1 #9:** thứ tự byte `flight_custom_version` đổi sang `uint64` little-endian từ firmware 1.2 để MAVROS/GCS in đúng hash; phân biệt bằng `FC_CTR_VER` (9.5). **FC trả lời 11.1 #10:** chuyển [CHỐT] không tăng số; MINOR tăng khi firmware bắt đầu phát thứ mới, đồng thời ở firmware và tài liệu; sửa 10.3 bước 8. Đợt A–E sẽ là 1.2 (`FC_CTR_VER = 10200`). |
 | 1.1 *(Pi nghiệm thu, không tăng số)* | 2026-09-13 | **Phía Pi đo bản FC 1.1** trên dây (`pymavlink` 40 s) và qua MAVROS. [CHỐT]: `DISTANCE_SENSOR` 20 Hz, `AUTOPILOT_VERSION` + `REQUEST_MESSAGE` 512, 4 tên `NAMED_VALUE_INT` @2 Hz, `FC_CTR_VER = 10100`; 11.1 #1, #6 xong. Băng thông đo 9,8 %. Bật plugin `distance_sensor` (topic `/mavros/mtf01p`, 8.3); `Range.variance` luôn 0. Kiểm plugin `odometry` bằng FC giả qua UDP: đổi hệ và covariance đúng, nhưng MAVROS **bỏ qua `frame_id`/`child_frame_id`** và không chuyển `quality` (11.2). Câu hỏi mới: thứ tự byte git hash (11.1 #9), có tăng MINOR khi chuyển [CHỐT] không (11.1 #10); P3 chưa chốt. **Phản hồi đề xuất FC → [THOẢ THUẬN]:** `OB_ARM_RDY`/`OB_ARM_BLK`, `OB_T_*`/`OB_RX_*` (kiểm `named_value_float` bằng FC giả), `FC_DIRTY` (đăng ký 9.3), cách điền `ODOMETRY` và `RC_CHANNELS` (kiểm `rc_io` bằng FC giả), không hành động khi mất heartbeat (#8), điều kiện từ kế (10.6a). Nghiệm thu 12.A4 "node restart": ≤ 0,43 s sau khi DDS nối. Thêm nợ P6, P7; thứ tự đề nghị đợt FC tiếp theo (11.2). Sửa lỗi hợp nhất: 3 dòng bảng suy diễn 6.3 bị tách khỏi bảng. |
 | 1.1 *(hợp nhất hai bản, không tăng số)* | 2026-09-13 | **Hợp nhất ba chiều** bản FC (repo firmware) với bản Pi (repo ROS), gốc chung 1.0. Từ bản Pi giữ: `sysid`/`compid` Pi = `1`/`191` kèm cách đọc, dòng heartbeat Pi, người tiêu thụ `SYS_STATUS`/`ATTITUDE` (8.1), quy tắc launch MAVROS đã sửa (8.3), 11.1 #4 xong, câu hỏi #6 #7, 12.A2 `ros2 launch` chạy được. 3 xung đột phân giải bằng tay (mục 2, mục 7, bảng 11.1). Sửa câu "heartbeat Pi đáp ứng timeout 3000 ms của FC" cho khớp 11.1 #8. **Chốt bản gốc duy nhất ở repo ROS** (0.2). |
 | 1.1 *(bổ sung, không tăng số)* | 2026-09-13 | Trả lời phản hồi Pi: `sysid`/`compid` Pi = `1`/`191`, FC không lọc nguồn (11.1 #6); ba mâu thuẫn + hai điểm nhỏ (11.1 #7) — (a), (b) đã sửa từ 1.1, viết lại quy tắc `NAMED_VALUE_*` (9.1), sửa dòng TAT (6.3). Phát hiện: timeout heartbeat không được dùng (11.1 #8); `OB_AUTH = 1` mà ARM vẫn `DENIED` (6.2). Đề xuất: `OB_ARM_RDY`/`OB_ARM_BLK`, `OB_T_*` + `OB_RX_*` để Pi tự kiểm dấu (bỏ đề xuất `POSITION_TARGET_LOCAL_NED` vì không kiểm được dấu), một bản gốc duy nhất (0.2). |
