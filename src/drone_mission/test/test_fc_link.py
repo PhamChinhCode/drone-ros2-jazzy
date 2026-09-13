@@ -23,7 +23,7 @@ def test_gia_tri_qua_han_la_khong_biet():
 
 
 def test_arm_chi_khi_ob_arm_rdy():
-    st = status_voi(OB_AUTH=1, OB_ARM_RDY=0, OB_ARM_BLK=0x1000)
+    st = status_voi(OB_AUTH=1, OB_ARM_RDY=0, OB_ARM_BLK=0x1000, FC_CTR_VER=10400)
     assert 'OB_ARM_RDY' in local_refusal(True, False, st, 10.0)
     st.update('OB_ARM_RDY', 1, 10.0)
     assert local_refusal(True, False, st, 10.0) == ''
@@ -54,3 +54,19 @@ def test_disarm_khi_co_quyen_khong_can_ob_dis_rdy():
 def test_armed_khong_biet_coi_nhu_dang_arm():
     st = status_voi(OB_AUTH=0)
     assert local_refusal(False, None, st, 10.0) != ''
+
+
+def test_arm_can_biet_phien_ban_hop_dong():
+    st = status_voi(OB_AUTH=1, OB_ARM_RDY=1)
+    assert 'FC_CTR_VER' in local_refusal(True, False, st, 10.0)
+
+
+def test_arm_khac_major_bi_chan():
+    st = status_voi(OB_AUTH=1, OB_ARM_RDY=1, FC_CTR_VER=20000)
+    assert 'MAJOR 2' in local_refusal(True, False, st, 10.0)
+
+
+def test_disarm_khong_phu_thuoc_phien_ban():
+    """Khac MAJOR van phai disarm duoc - chan bay, khong chan cat dong co."""
+    st = status_voi(OB_AUTH=1, FC_CTR_VER=20000)
+    assert local_refusal(False, True, st, 10.0) == ''

@@ -24,17 +24,18 @@
       - 'command'
       - 'imu'
       - 'vfr_hud'
-      - 'landing_target'
       - 'local_position'
       - 'global_position'
       - 'debug_value'   # NAMED_VALUE_INT OB_STATE/OB_AUTH/OB_EXIT tu FC (tra_loi_dot_2_pi4.md muc 2.1)
       - 'distance_sensor'  # DISTANCE_SENSOR laser MTF01P - GIAO_UOC_FC_ROS2.md muc 8.3, 11.2
       - 'odometry'      # ODOMETRY 331 tu FC hop dong 1.2 -> /mavros/odometry/in (GIAO_UOC muc 11.2)
       - 'rc_io'         # RC_CHANNELS 65 tu FC hop dong 1.2 -> /mavros/rc/in, CHI hien thi (GIAO_UOC muc 6.3)
+    # KHONG bat 'landing_target': LANDING_TARGET (149) phe bo tu hop dong 1.4 - FC khong xu ly,
+    # Pi tu dong vong van toc theo marker (GIAO_UOC 11.1 #12, #13c).
 
 # Laser MTF01P: FC phat id=0, PITCH_270, 20 Hz (GIAO_UOC muc 11.2). Plugin chi phat topic cho id da
 # khai o day. send_tf=false: chua do vi tri lap laser tren khung - khong bia TF.
-# min_distance=1 cm tu FC la SO TAM, khong dung lam nguong.
+# min_distance = 15 cm tu FC (chot 09-13, laser doc ~17 cm khi nam dat - GIAO_UOC 11.2).
 /**/distance_sensor:
   ros__parameters:
     config: |

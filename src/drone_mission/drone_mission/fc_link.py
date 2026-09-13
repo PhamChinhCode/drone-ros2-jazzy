@@ -25,6 +25,9 @@ OB_EXIT_NAMES = {
 # Bang bit OB_ARM_BLK (9.3). Co mot trong cac bit nay thi ARM se bi DENIED - can nguoi (6.3).
 ARM_BLK_DENIED_MASK = 0x0001 | 0x0040 | 0x0080 | 0x0400 | 0x1000
 
+# MAJOR hop dong Pi duoc viet theo (giao uoc 10.1). FC_CTR_VER = MAJOR * 10000 + MINOR * 100.
+KNOWN_CONTRACT_MAJOR = 1
+
 # Hai chu ky phat 2 Hz + tre duong truyen.
 DEFAULT_STALE_S = 1.5
 
@@ -64,6 +67,8 @@ def local_refusal(arm, armed, status, now_s):
     - Mat quyen hoac khong biet quyen -> khong gui lenh nao, ke ca DISARM (6.3), tru DISARM
       khi dang khong arm: FC luon tra ACCEPTED va khong lam gi (6.2).
     - ARM chi gui khi OB_ARM_RDY = 1 (6.3) - khong thu lai mu.
+    - ARM chi gui khi FC_CTR_VER cung MAJOR voi KNOWN_CONTRACT_MAJOR (10.1) - khac MAJOR hoac chua
+      biet phien ban thi khong bay, chi doc telemetry.
     """
     if not arm and armed is False:
         return ''
@@ -72,6 +77,13 @@ def local_refusal(arm, armed, status, now_s):
         return 'khong biet quyen: chua co OB_AUTH tu FC hoac da qua han'
     if not auth:
         return 'Pi mat quyen (OB_AUTH = 0) - cho nguoi lai gat ch8 xuong-len'
+    if arm:
+        ver = status.get('FC_CTR_VER', now_s)
+        if ver is None:
+            return 'chua biet phien ban hop dong FC (FC_CTR_VER)'
+        if ver // 10000 != KNOWN_CONTRACT_MAJOR:
+            return (f'FC chay hop dong MAJOR {ver // 10000} (FC_CTR_VER = {ver}), '
+                    f'Pi viet theo MAJOR {KNOWN_CONTRACT_MAJOR} - khong arm')
     if arm and not status.arm_ready(now_s):
         blk = status.get('OB_ARM_BLK', now_s)
         return f'FC chua san sang arm (OB_ARM_RDY != 1, OB_ARM_BLK = {blk})'

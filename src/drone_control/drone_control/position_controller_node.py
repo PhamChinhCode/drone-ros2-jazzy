@@ -23,7 +23,7 @@ import math
 
 import rclpy
 from geometry_msgs.msg import PoseStamped
-from mavros_msgs.msg import LandingTarget, PositionTarget
+from mavros_msgs.msg import PositionTarget
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from sensor_msgs.msg import Range
@@ -70,8 +70,9 @@ class PositionControllerNode(Node):
         self.create_subscription(Odometry, '/odometry/filtered', self.on_odom, SENSOR_QOS)
         self.create_subscription(Range, '/mavros/mtf01p', self.on_range, SENSOR_QOS)
         self.create_subscription(PoseStamped, '/mission/setpoint', self.on_mission_setpoint, EVENT_QOS)
+        # Pose marker da xac thuc ID tu landing_target_bridge_node (P1).
         self.create_subscription(
-            LandingTarget, '/mavros/landing_target/raw', self.on_landing_target, SENSOR_QOS)
+            PoseStamped, '/landing_target/pose', self.on_landing_target, SENSOR_QOS)
 
         self.pub_setpoint = self.create_publisher(
             PositionTarget, '/mavros/setpoint_raw/local', SENSOR_QOS)

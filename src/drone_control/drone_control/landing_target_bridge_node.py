@@ -40,10 +40,9 @@ class LandingTargetBridgeNode(Node):
         self.create_subscription(
             Int32, '/mission/expected_marker_id', self.on_expected_id, EVENT_QOS)
 
-        # Plugin landing_target cua MAVROS (ROS2 jazzy) nhan dau vao Pi->FC o
-        # /mavros/landing_target/pose kieu PoseStamped. KHONG co topic /raw (da xac minh).
-        self.pub_target = self.create_publisher(
-            PoseStamped, '/mavros/landing_target/pose', SENSOR_QOS)
+        # Topic NOI BO cho position_controller_node. KHONG gui LANDING_TARGET len FC: ban tin 149
+        # phe bo tu giao uoc 1.4 - Pi tu dong vong van toc theo marker (11.1 #12, #13c).
+        self.pub_target = self.create_publisher(PoseStamped, '/landing_target/pose', SENSOR_QOS)
         self.pub_lost = self.create_publisher(Bool, '/landing_target/lost', EVENT_QOS)
 
         self.create_timer(1.0 / self.get_parameter('publish_rate_hz').value, self.check_timeout)
