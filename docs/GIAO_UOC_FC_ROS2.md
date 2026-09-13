@@ -1335,6 +1335,33 @@ hợp đồng**, để không ai viết code dựa vào chỗ chưa xong.
 
 ### 11.1 Đang chặn — không viết code dựa vào
 
+> **📣 Thông báo FC → Pi — thay đổi sau lần Pi nghiệm thu `e2ea193` (FC, 2026-09-13/14).** Đọc bảng này
+> trước; chi tiết ở mục ghi kèm.
+>
+> **Đã nạp vào FC** (vẫn phát `FC_CTR_VER = 10200`, cùng hash vì `FC_DIRTY = 1` — phân biệt bằng mốc nạp):
+>
+> | # | Thay đổi | Ảnh hưởng tới Pi | Mục |
+> |---|---|---|---|
+> | 1 | `DISTANCE_SENSOR.min_distance` 1 → **15 cm** (laser đọc ~17 cm khi nằm đất) | `Range.min_range` = 0,15. Đo lại trường này | 11.2 |
+> | 2 | **Bỏ sàn độ cao 0,3 m** — `offboard_min_alt_m` không còn tác dụng | Pi **hạ cánh bằng setpoint vận tốc thường**, xuống tới chạm đất. Pi lỗi ra lệnh xuống giờ **chạm đất** (nhẹ) thay vì lơ lửng ~13 cm | 9.6, 11.1 #12a |
+> | 3 | **Xuống chậm sát đất:** laser ≤ 1,2 m → tốc độ xuống kẹp **0,3 m/s** (kẹp bao: đếm `OB_RX_CLP`, không vào `KEP_DAI`) | Tự kẹp ≤ 0,3 m/s dưới ~1,2 m (P9) để khỏi chạm `CLP`. Nằm bàn: "xuống 0,3" nay ra `−0,300` (trước `0`) | 9.6, 12.A3 |
+>
+> **Chưa làm — đề xuất chờ Pi trả lời (11.1 #12):**
+>
+> | # | Đề xuất | Pi cần trả lời |
+> |---|---|---|
+> | 4 | **Cổng DISARM theo độ cao:** DISARM từ Pi chỉ nhận khi ≤ **20 cm** trên mặt đất (laser ≤ ~37 cm); cao hơn → `TEMPORARILY_REJECTED`; `param2 = 21196` cắt ở mọi độ cao. Người lái ch5 không đổi | Đồng ý? **Node nào đang dùng DISARM trên không** (vd `failsafe_monitor`)? Nếu có → phải thêm `21196`, và có thể là **MAJOR** |
+> | 5 | `NAMED_VALUE_INT` **`OB_DIS_RDY`** (1 = DISARM lúc này sẽ `ACCEPTED`) | Đồng ý tên/nghĩa? |
+> | 6 | **Pi tự nhận ra chạm đất** — gợi ý: laser ≈ 0,17 m + `vz` ≈ 0 dù đang lệnh xuống, giữ ~1 s. **Không dùng "ga thấp"**: chạm đất ga vẫn ~27 %, không bao giờ < 10 % | Pi chốt tiêu chí của mình |
+>
+> **Đã bỏ khỏi đề xuất:** `MAV_CMD_NAV_LAND`, pha `HA_CANH`, `OB_LAND`, FC tự phát hiện chạm đất, đổi nghĩa
+> `landed_state` — không cần nữa khi không còn sàn.
+>
+> **Cần biết khi thiết kế hạ cánh:** flow bị loại khi laser < 0,20 m (~3 cm cuối) — chỉ mất **kênh ngang**,
+> giữ độ cao/`vz`/`yaw_rate` vẫn chạy; Pi căn marker xong trước khi xuống dưới ~0,3 m và không lơ lửng lâu
+> dưới ~0,25 m (11.1 #12h). Kiến trúc P1 đã chốt: Pi đóng vòng vận tốc theo marker, FC không xử lý
+> `LANDING_TARGET`.
+
 | # | Việc | Chủ | Chặn gì | Trạng thái |
 |---|---|---|---|---|
 | ~~1~~ | ~~Phát `NAMED_VALUE_INT` `OB_STATE`/`OB_AUTH`/`OB_EXIT` @2 Hz~~ | FC → Pi đo | — | **XONG 09-13** — Pi đo trên dây và qua MAVROS (4.1). Hành vi chuyển trạng thái còn ở 12.A4 |
