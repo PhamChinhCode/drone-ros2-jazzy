@@ -1574,8 +1574,13 @@ Sau khi thử, FC reset board: `OB_RX_* = 0`, `FC_CTR_VER = 10200`, bộ đếm 
 Trả lời ba câu:
 
 - **(a)** Kẹp tốc độ xuống **không** cố ý bằng 0 — cận là `−1,0 m/s`. **Sàn 0,3 m là cố ý:** Pi
-  **không** hạ cánh bằng setpoint trong OFFBOARD. Dưới 0,3 m chỉ đi lên được. Muốn hạ cánh chính
-  xác thì Pi đưa máy bay xuống ~0,3–0,5 m đúng vị trí, rồi **DISARM** (hoặc người lái hạ). Nếu 12.B
+  **không** hạ cánh bằng setpoint trong OFFBOARD. Dưới 0,3 m chỉ đi lên được. ~~Muốn hạ cánh chính
+  xác thì Pi đưa máy bay xuống ~0,3–0,5 m đúng vị trí, rồi **DISARM** (hoặc người lái hạ).~~
+  **FC rút lại câu này 09-13 — Pi đúng: DISARM ở 0,3–0,5 m là thả rơi.** Firmware hiện **không có
+  hạ cánh tự động**, nên đường hạ cánh duy nhất hiện nay là **người lái**: chạm cần → OFFBOARD rời về
+  POSHOLD (6.3) → hạ ga tới đất → gạt ch5 disarm. Pi đưa máy bay tới đúng vị trí trên sàn rồi giữ
+  chỗ, **không** tự gửi DISARM khi chưa chạm đất — FC **không chặn** DISARM trên không (6.2: Pi tự do
+  arm/disarm), nên lệnh đó cắt động cơ ngay. Nếu 12.B
   cần hạ bằng setpoint tới đất thì đó là đề xuất đổi bao — ghi vào 11.1, không tự đặt
   `offboard_min_alt_m = 0` (tham số cho phép 0–3 m).
 - **(b)** `OB_RX_CLP` và `KEP_DAI` **chung điều kiện kẹp giới hạn tốc độ**. "Liên tục" =
@@ -1944,6 +1949,7 @@ Lệnh đo nhanh: xem mục 12.A1.
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.2 *(FC sửa trả lời #11a, không tăng số)* | 2026-09-13 | FC rút lại khuyên "xuống 0,3–0,5 m rồi DISARM" (Pi chỉ ra là thả rơi). Hạ cánh hiện chỉ do người lái (chạm cần → POSHOLD → hạ ga → ch5); Pi không gửi DISARM trên không vì FC không chặn lệnh đó. |
 | 1.2 *(Pi nghiệm thu bản sửa #11, không tăng số)* | 2026-09-13 | **Pi chạy ca dưới sàn** (người lái hạ drone, laser 0,17–0,19 m, `ODOMETRY z` 0,166): trái 0,5 / 0,1 / 0,001 → Δ`CLP` = 0 (bản cũ +37); xuống 0,3 → `UP` = 0, `CLP` tăng; xuống 0,005 → −0,005 không kẹp; xuống 0,02 → kẹp; lên 0,3 và tới 10 đúng. **Bản sửa đã chạy trên FC — 11.1 #11 XONG.** 3.4 và `OB_RX_CLP` → [CHỐT]. Chuỗi `KEP_DAI` để 12.B. |
 | 1.2 *(Pi kiểm trả lời #11, không tăng số)* | 2026-09-13 | **Pi kiểm trả lời FC 11.1 #11:** FC giả qua UDP bắt được MAVROS gửi `vz = +6,1232e-17` cho lệnh trái 0,5 — giải thích đúng. Chạy lại bảng 3.4 trên FC đã nạp bản sửa, drone kê 0,9 m: đạt mọi ca (xuống −0,300, xuống 10 → −1,000, yaw ±90, tới 1,9 không kẹp). Chưa phân biệt được bản sửa — cần ca dưới sàn 0,3 m (12.A3, cần người hạ drone). `OB_RX_CLP` → [CHỐT] kẹp tốc độ. Pi chấp nhận sàn 0,3 m giai đoạn này, ghi chú DISARM ở 0,3 m là thả rơi cho 12.B. Thêm P9 (tự kẹp 95 %). |
 | 1.2 *(FC trả lời #11, không tăng số)* | 2026-09-13 | **FC trả lời 11.1 #11:** cả hai hiện tượng do bao độ cao — drone trên bàn 0,18 m dưới sàn `offboard_min_alt_m = 0,3`; lệnh trái chạm sàn vì MAVROS rò `vz` ≈ 6e-17 từ phép quay quaternion. Kẹp tốc độ đối xứng, không có lỗi cận dưới. **Lỗi thật lộ ra:** bay trái hoặc giữ độ cao sát sàn làm Pi mất quyền (`KEP_DAI`) sau 1 s. **Sửa firmware, nạp 09-13, FC thử trên target qua SWD (12 ca, đạt):** dải chết 0,01 m/s khi xét sàn/trần; kẹp bao độ cao không còn dồn vào `KEP_DAI` (vẫn đếm `OB_RX_CLP`). Chờ Pi chạy lại bảng 3.4 (drone đang kê cao 0,9 m). Ghi giới hạn bao vào 9.6; timestamp bản tin 1.2 vào 4.4. |
