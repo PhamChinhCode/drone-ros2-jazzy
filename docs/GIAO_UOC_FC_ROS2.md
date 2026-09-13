@@ -1038,7 +1038,7 @@ Bản tin chuẩn đã cấp:
 | 251 | `NAMED_VALUE_FLOAT` | FC→Pi | [CHỐT] — Pi đo 09-13, kiểm dấu 3.4 xong — `OB_T_*`, mục tiêu đã nhận để Pi tự kiểm dấu 3.4. *(Bỏ đề xuất `POSITION_TARGET_LOCAL_NED` (85): phép đổi hệ hai chiều của MAVROS triệt tiêu nên không kiểm được dấu — mục 3.4)* |
 | 105 | `HIGHRES_IMU` | FC→Pi | [CHỐT] |
 | 106 | `OPTICAL_FLOW_RAD` | FC→Pi | [ĐỀ XUẤT] — cần đo hệ số quy đổi radian trước |
-| 132 | `DISTANCE_SENSOR` | FC→Pi | [CHỐT] — Pi đã bật plugin và đo 09-13 (mục 4.1). `min_distance` vẫn là số tạm |
+| 132 | `DISTANCE_SENSOR` | FC→Pi | [CHỐT] — Pi đã bật plugin và đo 09-13 (mục 4.1). `min_distance = 15` cm từ 09-13 (11.2) — **chờ Pi đo lại** trường này |
 | 147 | `BATTERY_STATUS` | FC→Pi | [CHỐT] |
 | 148 | `AUTOPILOT_VERSION` | FC→Pi | [CHỐT] — Pi đo 09-13: `flight_sw_version = 0x00010000`, hash có. **Thứ tự byte: `uint64` little-endian từ hợp đồng 1.2** — FC đọc lại flash 09-13: `3a 3c 22 b2 f7 35 9b 8b`; **Pi đo trên dây cùng chuỗi đó, MAVROS in đúng chiều** (9.5, 11.1 #9); cờ capability mục 9.5 |
 | 149 | `LANDING_TARGET` | Pi→FC | [ĐANG LÀM] — FC chưa xử lý |
@@ -1687,9 +1687,11 @@ mới vì `HA_CANH` không phải trạng thái OFFBOARD riêng.
   (6.3). Ở 3 cm cuối và tốc độ xuống 0,3 m/s, đoạn trôi này ≤ 0,1 s — chấp nhận được, nhưng
   **Pi phải căn marker xong trước khi xuống dưới ~0,3 m**, không trông vào sửa ngang ở đoạn cuối.
   Chưa đo: chất lượng flow (`flow_quality_min`) có tụt sớm hơn ngưỡng độ cao khi sát nền không.
-- **Mất độ cao hợp lệ** (`altitude_valid` sai) mới là ca tệ: giữ độ cao nhả ga về **cần** — chế độ Pi
-  cần đang ở giữa ≈ 50 % ga. Hạ cánh dựa vào laser nên cần biết `min_distance` thật (dòng dưới).
-- **`min_distance` laser** vẫn chưa đo (11.4) — ngưỡng (d)2 dựa vào laser đọc được ở 0,17 m.
+- **Mất độ cao hợp lệ** (`altitude_valid` sai) là ca tệ: giữ độ cao nhả ga về **cần** — chế độ Pi
+  cần đang ở giữa ≈ 50 % ga. **Không xảy ra vì laser quá gần:** nằm trên mặt đất laser đọc ~17 cm
+  (17–19 cm, `signal_quality = 100`) và độ cao ước lượng vẫn hợp lệ (phương sai z 9e-5, đo 09-13) —
+  máy bay không xuống thấp hơn mặt đất nên laser không bao giờ phải đo dưới ~17 cm. Còn lại các
+  nguyên nhân khác (mặt nền hấp thụ laser, nghiêng > 25°) — chưa đo.
 - **Hiệu ứng mặt đất** làm vòng độ cao dao động dưới ~0,3 m — có thể làm tiêu chí (d)3 chập chờn;
   0,5 s liên tục là để lọc.
 
@@ -1720,7 +1722,7 @@ Phiên bản: thêm lệnh nhận, tên `OB_LAND`, trạng thái `LANDING` → M
 |---|---|---|---|
 | 1 | Trạng thái OFFBOARD lên dây | FC | `mission_manager_node` — **XONG, Pi nghiệm thu 09-13** |
 | 2 | `AUTOPILOT_VERSION` đầy đủ + `REQUEST_MESSAGE` (512) | FC | phiên bản hoá hợp đồng (10.1) — **XONG, Pi nghiệm thu 09-13**, trừ cờ capability (9.5) và thứ tự byte hash (11.1 #9) |
-| 3 | `DISTANCE_SENSOR` (132) | FC | hạ cánh chính xác — **XONG, Pi nghiệm thu 09-13**; còn `min_distance` thật |
+| 3 | `DISTANCE_SENSOR` (132) | FC | hạ cánh chính xác — **XONG, Pi nghiệm thu 09-13**; `min_distance` chốt 15 cm (09-13) |
 | 4 | `ODOMETRY` (331) | FC | đưa vận tốc FC vào EKF (10.6c) — **FC phát từ 1.2, Pi đo trên dây và MAVROS 09-13: khớp**; còn thử dấu vận tốc bằng tay (12.A1) |
 | 5 | `RC_CHANNELS` (65) | FC | **chỉ hiển thị** — không suy quyền từ nó — **XONG, Pi nghiệm thu 09-13** |
 
@@ -1754,13 +1756,17 @@ Cách điền `DISTANCE_SENSOR` đã thống nhất: `type = MAV_DISTANCE_SENSOR
 `id = 0`, FOV = 0 (không biết), quaternion = 0 (chỉ dùng khi hướng `CUSTOM`). `max_distance`
 lấy từ tham số `flow_range_max_mm` lúc chạy, nên luôn khớp ngưỡng firmware đang loại mẫu.
 
-**`min_distance` CHƯA XÁC ĐỊNH** — firmware không đặt cận dưới, chưa ai đo. Khi phát bản
-tin trước lúc đo xong, phải **ghi rõ trong tài liệu con số đang điền là tạm**, để Pi không
-dùng nó làm ngưỡng. Đo trên bàn: ổn định 0,19–0,23 m, `range_quality = 255`.
+**`min_distance = 15` cm — chốt 09-13, thay số tạm 1 cm.** Chủ dự án xác nhận: máy bay **nằm trên
+mặt đất thì laser đọc ~17 cm** — đó là khoảng cách từ laser tới đất theo cách lắp. Máy bay không
+xuống thấp hơn mặt đất, nên laser **không bao giờ phải đo dưới ~17 cm**; cận dưới thật của MTF01P
+không còn ảnh hưởng dự án. Chọn **15** chứ không 17: ROS coi mẫu dưới `min_range` là không hợp lệ,
+nhiễu 1–2 cm lúc nằm đất sẽ làm mất mẫu đúng lúc chạm đất. Đo trên target sau khi nạp 09-13:
+`min_distance = 15`, `current_distance = 18` (nằm đất), `signal_quality = 100`. Pi: `Range.min_range`
+thành 0,15.
 
-**FC đang điền `min_distance = 1` cm — SỐ TẠM.** Chọn thấp để MAVROS không vứt mẫu gần mặt đất
-đang đọc được. **Pi không dùng số này làm ngưỡng.** Đo trên target 09-13: `current_distance =
-17` cm, `signal_quality = 100`, các trường còn lại đúng như trên. **Pi đo lại trên dây và qua
+*Lịch sử:* trước 09-13 FC điền `min_distance = 1` cm là số tạm, Pi không dùng làm ngưỡng. Đo trên
+target 09-13 lúc đó: `current_distance = 17` cm, `signal_quality = 100`, các trường còn lại đúng
+như trên. **Pi đo lại trên dây và qua
 MAVROS 09-13: khớp toàn bộ** (mục 4.1). Riêng `covariance = 25` **không** tới được ROS —
 `Range.variance` luôn 0.
 
@@ -1919,7 +1925,8 @@ ch1–8 = 1500/1500/1503/1498/2000/2000/999/2000 — **khớp FC**. Qua `rc_io`:
 
 - **Sai số góc TUYỆT ĐỐI** của bộ ước lượng — cần bàn xoay hoặc mặt phẳng chuẩn.
 - **Trôi yaw khi có điện động cơ** — con số 0,00°/phút chỉ đúng lúc nằm im, nhiệt độ ổn định.
-- **`min_distance` thật của MTF01P.**
+- ~~**`min_distance` thật của MTF01P.**~~ — không cần: nằm đất laser đọc ~17 cm, máy bay không
+  xuống thấp hơn; FC điền 15 cm (09-13, 11.2).
 - **Rung khi có điện động cơ** ảnh hưởng covariance IMU thế nào.
 - `BATTERY_STATUS` với pin thật — chưa gắn pin nên chưa xác minh được cách điền `voltages[]`.
 
@@ -2053,6 +2060,7 @@ Lệnh đo nhanh: xem mục 12.A1.
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.2 *(FC chốt `min_distance`, không tăng số)* | 2026-09-13 | Chủ dự án xác nhận laser đọc ~17 cm khi nằm đất → `DISTANCE_SENSOR.min_distance` 1 → **15** cm (đã nạp, đo trên target: `min=15`, `cur=18`). Bỏ mục `min_distance` khỏi 11.4. Sửa rủi ro 11.1 #12g: độ cao vẫn hợp lệ khi nằm đất. Đổi giá trị số tạm đã báo trước, không đổi nghĩa trường → không tăng số. |
 | 1.2 *(FC đề xuất hạ cánh, không tăng số)* | 2026-09-13 | **Đề xuất 11.1 #12** theo quyết định chủ dự án: Pi hạ cánh bằng marker. `MAV_CMD_NAV_LAND` vào pha `HA_CANH` trong OFFBOARD (bỏ sàn, xuống ≤ 0,5/0,3 m/s); FC phát hiện chạm đất → `landed_state`; DISARM từ Pi chỉ nhận khi `ON_GROUND`, trừ `param2 = 21196`; `OB_LAND`. Chốt kiến trúc P1: FC không xử lý `LANDING_TARGET`. Chờ Pi phản hồi trước khi viết code; hỏi Pi về đổi nghĩa `landed_state` (MAJOR?). |
 | 1.2 *(FC sửa trả lời #11a, không tăng số)* | 2026-09-13 | FC rút lại khuyên "xuống 0,3–0,5 m rồi DISARM" (Pi chỉ ra là thả rơi). Hạ cánh hiện chỉ do người lái (chạm cần → POSHOLD → hạ ga → ch5); Pi không gửi DISARM trên không vì FC không chặn lệnh đó. |
 | 1.2 *(Pi nghiệm thu bản sửa #11, không tăng số)* | 2026-09-13 | **Pi chạy ca dưới sàn** (người lái hạ drone, laser 0,17–0,19 m, `ODOMETRY z` 0,166): trái 0,5 / 0,1 / 0,001 → Δ`CLP` = 0 (bản cũ +37); xuống 0,3 → `UP` = 0, `CLP` tăng; xuống 0,005 → −0,005 không kẹp; xuống 0,02 → kẹp; lên 0,3 và tới 10 đúng. **Bản sửa đã chạy trên FC — 11.1 #11 XONG.** 3.4 và `OB_RX_CLP` → [CHỐT]. Chuỗi `KEP_DAI` để 12.B. |
