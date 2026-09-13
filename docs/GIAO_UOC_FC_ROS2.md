@@ -2186,10 +2186,18 @@ ros2 topic echo /mavros/state --once
 - [x] `FC_CTR_VER = 10100` — Pi đo 09-13, cả `pymavlink` lẫn MAVROS. Firmware 1.2: `10200`, đo lại 09-13
 - [x] 14 tên của 1.2 (`NAMED_VALUE_INT` 10, `NAMED_VALUE_FLOAT` 4) mỗi tên 2,00 Hz ở trạng thái `KHOA`
       lúc khởi động (`OB_STATE = 0`, `OB_AUTH = 0`, ch8 lên từ lúc bật nguồn) — *Pi đo 09-13*
-- [ ] `OB_ARM_RDY` lên 1 khi người lái gạt ch8 xuống-lên rồi gạt ch5 một vòng; `OB_ARM_BLK` đổi
-      đúng bit theo từng bước (6.3) — **cần người gạt công tắc, không cần điện động cơ**
+- [x] `OB_ARM_RDY` lên 1 khi người lái gạt ch8, ch5 lên và ch6 ở POSHOLD — *Pi đo 09-14:
+      `OB_STATE = 1`, `OB_AUTH = 1`, `OB_ARM_RDY = 1`, `OB_ARM_BLK = 0`*
+- [ ] `OB_ARM_BLK` đổi đúng bit theo **từng bước** gạt công tắc (6.3) — chưa đo từng bước
+- [x] **Đường ARM/DISARM đầu-cuối qua node Pi** — *Pi 09-14, cánh tháo, drone cố định trên bàn (laser
+      ~0,18 m).* `position_controller_node` phát setpoint 0 @20 Hz trước; `fc_command_bridge_node`
+      `~/arm`: **ARM → `ACCEPTED` (0,43 s)**, 0,5 s sau `armed = true`, `OB_STATE = 2`, `OB_EXIT = 0`,
+      `OB_ARM_RDY = 0`, `OB_DIS_RDY = 1`, `mode = CMODE(1)` — OFFBOARD chạy nhưng tụt ANGLE vì flow không
+      hợp lệ sát bàn, đúng dòng 2 bảng suy diễn 6.3. **DISARM thường → `ACCEPTED` (0,02 s)**, `armed = false`,
+      `OB_STATE = 1`, `OB_EXIT = 5` (`DISARM`), `OB_ARM_RDY = 1` — Pi arm lại được, đúng 6.3. Tắt node
+      sau khi disarm: HEARTBEAT `base_mode = 81`, trạng thái giữ nguyên
 - [x] *(1.3)* `FC_CTR_VER = 10300`, `OB_DIS_RDY` 2 Hz, bằng 0 khi chưa arm — *Pi đo 09-14, 20 s: 11 tên, 22,0 Hz tổng, mỗi tên 2,0 Hz, `OB_DIS_RDY = 0`*
-- [ ] *(1.3, 12.B — tháo cánh)* Arm qua Pi, kê cao > 0,4 m: DISARM thường → `TEMPORARILY_REJECTED`,
+- [ ] *(1.3, 12.B — tháo cánh)* **Nửa nằm bàn đạt 09-14** (`OB_DIS_RDY = 1`, DISARM thường → `ACCEPTED`, xem trên). Còn: arm qua Pi, kê cao > 0,4 m: DISARM thường → `TEMPORARILY_REJECTED`,
       `OB_DIS_RDY = 0`; hạ xuống ≤ 0,37 m → `OB_DIS_RDY = 1`, DISARM thường → `ACCEPTED`; kê cao lại,
       DISARM + `21196` → `ACCEPTED`
 - [ ] Gạt ch8 xuống rồi lên → `STATUSTEXT` `OFFBOARD: TAT (...)` severity `NOTICE`
@@ -2254,6 +2262,7 @@ Lệnh đo nhanh: xem mục 12.A1.
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.3 *(Pi thử ARM/DISARM qua node, không tăng số)* | 2026-09-14 | Cánh tháo, drone cố định trên bàn, người lái gạt ch8/ch5 lên, ch6 POSHOLD: `OB_ARM_RDY = 1`. Qua `fc_command_bridge_node` + setpoint 20 Hz: ARM → `ACCEPTED`, `OB_STATE = 2`, `OB_DIS_RDY = 1`, `CMODE(1)` (mất flow sát bàn); DISARM thường → `ACCEPTED`, `OB_EXIT = 5`, `OB_ARM_RDY = 1`. 12.A4. |
 | 1.3 *(Pi viết lớp giao tiếp FC, không tăng số)* | 2026-09-14 | **Bẫy MAVROS (mục 7):** FC khai `GENERIC` nên MAVROS chỉ chờ ACK khi `confirmation != 0`; với `0` nó tự trả `result = 0`. Số đo 09-13 "512/520 qua MAVROS → 0" không phải ACK thật — đo lại với `confirmation = 1` (520 → 0, 22 → 3), sửa 5.1, 11.1 #6. Pi hiện thực `fc_command_bridge_node` (ARM/DISARM/`21196` qua `/mavros/cmd/command`, chặn theo `OB_*`), `position_controller_node` (20 Hz, frame 8, `0x07C7`, tự kẹp 9.6), tiêu chí chạm đất; sửa 8.2. P8, P9 xong; P2, P10 một phần. |
 | **1.3** | 2026-09-14 | **MINOR — FC hiện thực 11.1 #12d–f**, firmware phát `FC_CTR_VER = 10300`. **Cổng DISARM theo độ cao:** DISARM thường từ Pi chỉ nhận khi độ cao ước lượng ≤ 0,17 + 0,20 m; cao hơn `TEMPORARILY_REJECTED`; `param2 = 21196` cắt ở mọi độ cao nhưng không vượt quyền. **`OB_DIS_RDY`** (nghĩa theo đề nghị Pi: 0 khi chưa arm/mất quyền). Mốc mặt đất đổi từ "lúc arm" sang **hằng số 0,17 m** (trả lời Pi: arm cầm tay). Trả lời Pi: nghiêng > 25° cổng không tự đóng (EKF chạy bằng baro, trôi). Không MAJOR (Pi xác nhận chưa node nào disarm trên không). Ghi cam kết phía Pi. Gộp bỏ sàn + xuống chậm sát đất (nạp 09-13). FC thử 11 ca trên target qua SWD. |
 | 1.2 *(Pi trả lời #12, không tăng số)* | 2026-09-14 | **Pi đo phần (a) đã nạp:** nằm bàn, xuống 0,3 / 0,29 → không kẹp; xuống 0,5 / 10 → −0,300, `CLP` tăng; trái/phải/lên đúng. `min_distance = 15`, `Range.min_range = 0.15`. **Pi trả lời #12 (d)–(f):** đồng ý cổng DISARM 20 cm + `21196`; rà `src/` — **không node nào gửi DISARM** (đường `on_arm` còn TODO, `failsafe_monitor` chỉ hạ cánh) → đề nghị MINOR 1.3, không MAJOR. Đồng ý tên `OB_DIS_RDY`, đề nghị = 0 khi chưa arm/không quyền. **Chốt tiêu chí chạm đất (e):** laser ≤ mốc + 0,05 m, \|vz\| < 0,05 m/s, đang lệnh xuống, giữ 1 s, `OB_DIS_RDY = 1` — ngưỡng tạm, đo lại 12.B. Thêm P10. |
