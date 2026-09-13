@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | Phiên bản hợp đồng | **1.3** |
-| Ngày | 2026-09-13 |
+| Ngày | 2026-09-14 |
 | Trạng thái | Đang hiệu lực |
 | Phạm vi | Mọi thứ đi qua đường dây MAVLink giữa FC và Pi. Kiến trúc nội bộ mỗi bên nằm ngoài phạm vi. |
 
@@ -569,12 +569,12 @@ tắt nên không có `/mavros/time_reference` và không trao đổi `TIMESYNC`
 | Message / lệnh | ID | FC làm gì | Trạng thái |
 |---|---|---|---|
 | `HEARTBEAT` | 0 | chỉ ghi lại thời điểm nhận. **FC KHÔNG làm gì khi mất heartbeat** — mục 11.1 #8 | [CHỐT] |
-| `SET_POSITION_TARGET_LOCAL_NED` | 84 | setpoint vận tốc — mục 5.2 | [THOẢ THUẬN] — FC **đã hiện thực**, chưa đo đầu-cuối (11.1 #2). **Trước 09-13 FC loại mọi khung `0x07C7`** — mục 5.2 |
+| `SET_POSITION_TARGET_LOCAL_NED` | 84 | setpoint vận tốc — mục 5.2 | [CHỐT] — Pi đo đầu-cuối 09-13/14: kiểm dấu 3.4 bốn trục, bao 9.6, `position_controller_node` 20 Hz → `OB_RX_OK` +20/s, FC vào OFFBOARD (`OB_STATE = 2`). **Trước 09-13 FC loại mọi khung `0x07C7`** — mục 5.2 |
 | `COMMAND_LONG` / `MAV_CMD_COMPONENT_ARM_DISARM` (400) | 76 | arm/disarm theo hợp đồng mục 6.2 | [CHỐT] |
 | `COMMAND_LONG` / `MAV_CMD_REQUEST_AUTOPILOT_CAPABILITIES` (520) | 76 | trả `AUTOPILOT_VERSION` | [CHỐT] |
 | `COMMAND_LONG` / `MAV_CMD_REQUEST_MESSAGE` (512) | 76 | trả lời khi `param1 = 148`; ID khác → `UNSUPPORTED` | [CHỐT] — Pi đo 09-13: `param1 = 148` → `ACCEPTED` + `AUTOPILOT_VERSION`; `param1 = 33` → `UNSUPPORTED`; qua `/mavros/cmd/command` (`1`/`191`) → `result = 0` *(sai: `confirmation = 0` nên MAVROS không chờ ACK — 7; Pi đo lại 09-14 với `confirmation = 1`: 520 → `0`, 22 → `3`, ACK thật)* |
 | `SET_MODE` | 11 | **KHÔNG hiện thực** — đừng gửi | — |
-| `LANDING_TARGET` | 149 | **chưa xử lý** | [ĐANG LÀM] |
+| `LANDING_TARGET` | 149 | **không xử lý** | **[ĐỀ XUẤT BỎ — 11.1 #13c]** — kiến trúc 11.1 #12: Pi đóng vòng vận tốc theo marker, FC không dùng bản tin này |
 | `COMMAND_LONG` / `MAV_CMD_NAV_TAKEOFF` (22) | 76 | ACK `UNSUPPORTED` | — |
 
 > **`SET_MODE` không dùng được và cũng KHÔNG báo lỗi rõ.** Nó không dùng `COMMAND_ACK`;
@@ -844,7 +844,7 @@ trạng thái nào).
 > Sai — `OB_AUTH = 1` nghĩa là ch8 **đã** lên; theo 6.2 thì lúc đó người lái chờ ch5, còn Pi
 > là bên gửi ARM.
 
-**[CHỐT định dạng — Pi đo 09-13; `OB_ARM_RDY = 1` chờ phiên gạt công tắc] Kênh sẵn sàng arm — thêm vào nhóm `NAMED_VALUE_INT` 2 Hz:**
+**[CHỐT — Pi đo 09-14: `OB_ARM_RDY = 1` → ARM `ACCEPTED`, 12.A4] Kênh sẵn sàng arm — thêm vào nhóm `NAMED_VALUE_INT` 2 Hz:**
 
 | `name` | Giá trị |
 |---|---|
@@ -1056,18 +1056,18 @@ Bản tin chuẩn đã cấp:
 | 74 | `VFR_HUD` | FC→Pi | [CHỐT] |
 | 76 | `COMMAND_LONG` | Pi→FC | [CHỐT] |
 | 77 | `COMMAND_ACK` | FC→Pi | [CHỐT] |
-| 84 | `SET_POSITION_TARGET_LOCAL_NED` | Pi→FC | [THOẢ THUẬN] — chờ kiểm dấu |
+| 84 | `SET_POSITION_TARGET_LOCAL_NED` | Pi→FC | [CHỐT] — Pi đo đầu-cuối 09-14 (3.4, 5.1) |
 | 251 | `NAMED_VALUE_FLOAT` | FC→Pi | [CHỐT] — Pi đo 09-13, kiểm dấu 3.4 xong — `OB_T_*`, mục tiêu đã nhận để Pi tự kiểm dấu 3.4. *(Bỏ đề xuất `POSITION_TARGET_LOCAL_NED` (85): phép đổi hệ hai chiều của MAVROS triệt tiêu nên không kiểm được dấu — mục 3.4)* |
 | 105 | `HIGHRES_IMU` | FC→Pi | [CHỐT] |
 | 106 | `OPTICAL_FLOW_RAD` | FC→Pi | [ĐỀ XUẤT] — cần đo hệ số quy đổi radian trước |
 | 132 | `DISTANCE_SENSOR` | FC→Pi | [CHỐT] — Pi đã bật plugin và đo 09-13 (mục 4.1). `min_distance = 15` cm từ 09-13 (11.2) — *Pi đo lại 09-14: `min_distance = 15` trên dây, `Range.min_range = 0.15` qua MAVROS* |
 | 147 | `BATTERY_STATUS` | FC→Pi | [CHỐT] |
 | 148 | `AUTOPILOT_VERSION` | FC→Pi | [CHỐT] — Pi đo 09-13: `flight_sw_version = 0x00010000`, hash có. **Thứ tự byte: `uint64` little-endian từ hợp đồng 1.2** — FC đọc lại flash 09-13: `3a 3c 22 b2 f7 35 9b 8b`; **Pi đo trên dây cùng chuỗi đó, MAVROS in đúng chiều** (9.5, 11.1 #9); cờ capability mục 9.5 |
-| 149 | `LANDING_TARGET` | Pi→FC | [ĐANG LÀM] — FC chưa xử lý |
+| 149 | `LANDING_TARGET` | Pi→FC | **[ĐỀ XUẤT BỎ — 11.1 #13c]** — FC không xử lý; Pi tắt plugin `landing_target` (P1) |
 | 241 | `VIBRATION` | FC→Pi | [ĐỀ XUẤT] — giai đoạn có điện động cơ |
 | 245 | `EXTENDED_SYS_STATE` | FC→Pi | [CHỐT] |
 | 252 | `NAMED_VALUE_INT` | FC→Pi | [CHỐT] cho `OB_STATE`/`OB_AUTH`/`OB_EXIT`/`FC_CTR_VER` — Pi đo 09-13 (mục 4.1). Hành vi chuyển trạng thái còn ở 12.A4. Tên mới từ 1.2 (`OB_ARM_*`, `OB_RX_*`, `FC_DIRTY`): Pi đo 09-13, trạng thái từng tên ở 9.3 |
-| 253 | `STATUSTEXT` | FC→Pi | [THOẢ THUẬN] — FC đã hiện thực 09-13, chờ Pi đo |
+| 253 | `STATUSTEXT` | FC→Pi | [THOẢ THUẬN] — FC đã hiện thực 09-13, **Pi chưa đo** (P12, không chặn FC) |
 | 331 | `ODOMETRY` | FC→Pi | [THOẢ THUẬN — Pi đo 09-13 trên dây và qua MAVROS, khớp; còn thử dấu vận tốc bằng tay] — 30 Hz song song `LOCAL_POSITION_NED` (10.4); cách điền và **ba chỗ FC điền khác bảng** ở 11.2 |
 
 > *Sửa 09-13 theo mâu thuẫn (c) Pi nêu ở 11.1 #7.* Bản cũ ghi `NAMED_VALUE_*` "không dùng cho
@@ -1112,8 +1112,8 @@ So khớp **nguyên văn, phân biệt hoa thường**.
 | `OB_AUTH` | INT | FC | 1 = Pi còn quyền, 0 = đã mất | [CHỐT] — đo 09-13 |
 | `OB_EXIT` | INT | FC | lý do rời gần nhất, bảng 6.3 | [CHỐT] — đo 09-13 |
 | `FC_CTR_VER` | INT | FC | phiên bản hợp đồng, mục 10.1 | [CHỐT] — đo 09-13, `10100`; firmware 1.2 phát `10200` (FC đo trên target, Pi đo trên dây và MAVROS 09-13) |
-| `OB_ARM_RDY` | INT | FC | 1 = đang chờ Pi arm, mọi điều kiện thoả (6.3) | [CHỐT định dạng] — Pi đo 09-13 (chỉ thấy `0`); `= 1` chờ phiên gạt công tắc |
-| `OB_ARM_BLK` | INT | FC | bitmask lý do chưa sẵn sàng arm (6.3) — bảng bit ngay dưới | [CHỐT định dạng] — Pi đo 09-13 (`0x0480`); các bit khác chờ phiên gạt công tắc |
+| `OB_ARM_RDY` | INT | FC | 1 = đang chờ Pi arm, mọi điều kiện thoả (6.3) | [CHỐT] — Pi đo 09-14: `1` khi ch8, ch5 lên, ch6 POSHOLD → ARM `ACCEPTED`; `0` sau khi arm |
+| `OB_ARM_BLK` | INT | FC | bitmask lý do chưa sẵn sàng arm (6.3) — bảng bit ngay dưới | [CHỐT] — Pi thấy `0x0480`, `0x0082`, `0x0002`, `0x0000` (09-13/14), khớp bảng; chỉ để hiển thị |
 | `OB_RX_OK` | INT | FC | số setpoint hợp lệ đã nhận, cộng dồn (3.4) | [CHỐT] — Pi đo 09-13, kiểm dấu 3.4 |
 | `OB_RX_REJ` | INT | FC | số setpoint bị loại vì sai `type_mask`/frame/NaN (3.4) | [CHỐT] — Pi đo 09-13 (lệnh `yaw` tuyệt đối → tăng) |
 | `OB_RX_CLP` | INT | FC | số setpoint bị kẹp dải — **gồm cả kẹp theo bao độ cao** (3.4, 9.6) | [CHỐT] — Pi đo 09-13 ở 0,9 m và dưới sàn 0,17 m (3.4) |
@@ -1121,10 +1121,10 @@ So khớp **nguyên văn, phân biệt hoa thường**.
 | `OB_T_RGT` | FLOAT | FC | mục tiêu bay sang phải, m/s (3.4) | [CHỐT] — Pi đo 09-13, dấu đúng (3.4) |
 | `OB_T_UP` | FLOAT | FC | mục tiêu đi lên, m/s (3.4) | [CHỐT] — Pi đo 09-13, dấu đúng (3.4) |
 | `OB_T_YAWR` | FLOAT | FC | mục tiêu quay phải, °/s (3.4) | [CHỐT] — Pi đo 09-13, dấu đúng (3.4) |
-| `OB_DIS_RDY` | INT | FC | 1 = đã arm, Pi có quyền, và gần đất (≤ 20 cm) — DISARM thường lúc này sẽ `ACCEPTED` **và cắt động cơ**; 0 = mọi trường hợp khác, kể cả chưa arm (11.1 #12d) *(thêm ở 1.3)* | [CHỐT định dạng — Pi đo 09-14, `0` khi chưa arm; `= 1` chờ 12.B] |
+| `OB_DIS_RDY` | INT | FC | 1 = đã arm, Pi có quyền, và gần đất (≤ 20 cm) — DISARM thường lúc này sẽ `ACCEPTED` **và cắt động cơ**; 0 = mọi trường hợp khác, kể cả chưa arm (11.1 #12d) *(thêm ở 1.3)* | [CHỐT] — Pi đo 09-14: `0` chưa arm; arm nằm bàn `1` → DISARM `ACCEPTED`; arm kê cao 0,95 m `0` → DISARM `TEMPORARILY_REJECTED` |
 | `FC_DIRTY` | INT | FC | 1 = firmware build từ cây có thay đổi chưa commit, 0 = sạch (9.5) | [CHỐT] — Pi đo 09-13: `1` (đúng, bản 1.2 build từ cây chưa commit) |
 
-**Bảng bit `OB_ARM_BLK`** [THOẢ THUẬN — Pi thấy `0x0480` 09-13, khớp; từng bit chờ phiên gạt công tắc]. Bit mới chỉ **thêm vào cuối**,
+**Bảng bit `OB_ARM_BLK`** [CHỐT — chỉ để hiển thị; Pi thấy `0x0480`, `0x0082`, `0x0002`, `0x0000`, khớp; chưa đo từng bit riêng (P12)]. Bit mới chỉ **thêm vào cuối**,
 không đánh lại số — firmware có `_Static_assert` giữ việc này. Pi coi bit lạ là "lý do chưa rõ".
 Cột "chế độ": *tay* = ch8 xuống (arm bằng ch5), *Pi* = ch8 lên. Bit chỉ có nghĩa ở chế độ kia
 thì **không bao giờ bật** ở chế độ này.
@@ -1241,9 +1241,9 @@ Hợp đồng mang số **MAJOR.MINOR**:
 Hai bên biết nhau đang ở phiên bản nào bằng ba mốc, theo thứ tự tin cậy giảm dần:
 
 1. **`flight_custom_version`** (8 byte git hash) trong `AUTOPILOT_VERSION` — chính xác
-   tuyệt đối, biết đúng bản build nào **nếu build từ commit sạch** (mục 9.5). [THOẢ THUẬN]
+   tuyệt đối, biết đúng bản build nào **nếu build từ commit sạch** (mục 9.5). [CHỐT — Pi đo 09-13; mọi bản đã nạp tới 1.3 đều `FC_DIRTY = 1`, 11.1 #13b]
 2. **`NAMED_VALUE_INT` `FC_CTR_VER`** = `MAJOR × 10000 + MINOR × 100`. Hợp đồng 1.1 →
-   `10100`, 1.2 → `10200`, 1.3 → `10300`. Phát 2 Hz cùng nhóm `OB_*`. [THOẢ THUẬN — FC đã phát 09-13; tên đổi từ `CONTRACT`,
+   `10100`, 1.2 → `10200`, 1.3 → `10300`. Phát 2 Hz cùng nhóm `OB_*`. [CHỐT — Pi đo `10100`, `10200`, `10300` trên dây và MAVROS; tên đổi từ `CONTRACT`,
    mục 9.3]
 3. `flight_sw_version` — thô, chỉ cho biết đại khái.
 
@@ -1353,6 +1353,23 @@ kỳ rồi mới phế bỏ `LOCAL_POSITION_NED` theo mục 10.4.
 Sổ theo dõi chi tiết vẫn là `viec_can_lam_mavlink.md`. Bảng này chỉ liệt kê thứ **chạm vào
 hợp đồng**, để không ai viết code dựa vào chỗ chưa xong.
 
+### 11.0 Tổng hợp trạng thái — Pi, 2026-09-14, hợp đồng 1.3 (`FC_CTR_VER = 10300`)
+
+Đọc bảng này trước. Mọi số đo nằm ở mục ghi kèm; bảng chỉ gom lại.
+
+| Nhóm | Mục | Ở đâu |
+|---|---|---|
+| **[CHỐT] hôm nay** | `SET_POSITION_TARGET_LOCAL_NED` đầu-cuối: dấu 4 trục, bao 9.6, node Pi 20 Hz, FC vào OFFBOARD | 3.4, 5.1, 9.1 |
+| **[CHỐT] hôm nay** | `OB_ARM_RDY`, `OB_ARM_BLK`, `OB_DIS_RDY`; ARM/DISARM thật qua `fc_command_bridge_node` | 6.3, 9.3, 12.A4 |
+| **[CHỐT] hôm nay** | Cổng DISARM 20 cm cả hai phía + `21196` | 11.1 #12, 12.A4 |
+| **[CHỐT] hôm nay** | `COMMAND_ACK` qua MAVROS — bắt buộc `confirmation = 1` | 7 |
+| **[CHỐT] hôm nay** | `FC_CTR_VER`, `flight_custom_version` | 10.1 |
+| **Đóng** | 11.1 #2, #3, #5, #7, #8, #9, #12 | 11.1 |
+| **Đề xuất cho FC** | **11.1 #13** — (a) khai cờ capability `0x0080`; (b) nạp bản sạch `FC_DIRTY = 0` trước 12.B; (c) bỏ `LANDING_TARGET` (149). **Ngoài #13, Pi không còn yêu cầu nào với FC** | 11.1 #13 |
+| Việc đo còn lại **phía Pi** — không chặn FC | `STATUSTEXT`; thử dấu `ODOMETRY` bằng tay; `OB_ARM_BLK` từng bit; xuống chậm khi laser > 1,2 m; 12.A1 (`relative_alt`, bit flow, `CMODE`); 12.A4 (`OB_AUTH` khi chạm cần, ch8 xuống) | P12, 12.A |
+| Chờ **điện động cơ** (12.B) | chuỗi `KEP_DAI`, hết hạn setpoint, ngưỡng chạm đất khi cánh quay, covariance IMU khi rung, điều kiện từ kế 10.6a | 12.B, 10.6a |
+| **Để sau**, chưa ai làm | `OPTICAL_FLOW_RAD` (106), `VIBRATION` (241) | 9.1 |
+
 ### 11.1 Đang chặn — không viết code dựa vào
 
 > **📣 Thông báo FC → Pi — thay đổi sau lần Pi nghiệm thu `e2ea193` (FC, 2026-09-13/14).** Đọc bảng này
@@ -1385,17 +1402,18 @@ hợp đồng**, để không ai viết code dựa vào chỗ chưa xong.
 | # | Việc | Chủ | Chặn gì | Trạng thái |
 |---|---|---|---|---|
 | ~~1~~ | ~~Phát `NAMED_VALUE_INT` `OB_STATE`/`OB_AUTH`/`OB_EXIT` @2 Hz~~ | FC → Pi đo | — | **XONG 09-13** — Pi đo trên dây và qua MAVROS (4.1). Hành vi chuyển trạng thái còn ở 12.A4 |
-| **2** | Chạy quy trình kiểm dấu (mục 3.4) | **Pi** | mọi lệnh điều khiển; đóng mục 3.1–3.2 bằng phép đo | **XONG phần dấu 09-13** — Pi đo qua `OB_T_*` (3.4): bốn trục đúng dấu, 3.1–3.2 đóng bằng phép đo. Lộ lỗi kẹp dải → #11 |
-| **3** | `fields_updated` vẫn bật cờ từ kế | **FC** | tin cậy `HIGHRES_IMU.mag`; cổng mở `FRAME_LOCAL_NED` | **ĐÃ TRẢ LỜI 09-13** — đúng thiết kế |
+| **2** | Chạy quy trình kiểm dấu (mục 3.4) | **Pi** | mọi lệnh điều khiển; đóng mục 3.1–3.2 bằng phép đo | **XONG 09-14** — bốn trục đúng dấu qua `OB_T_*` (3.4); bao 9.6 đúng sau #11; đầu-cuối qua `position_controller_node` |
+| **3** | `fields_updated` vẫn bật cờ từ kế | **FC** | tin cậy `HIGHRES_IMU.mag`; cổng mở `FRAME_LOCAL_NED` | **XONG 09-13** — đúng thiết kế; điều kiện thật ở 10.6a |
 | ~~4~~ | ~~Launch MAVROS crash~~ | Pi | — | **XONG 2026-09-13** — xem mục 8.3 |
-| **5** | Đường arm đi qua cổng nào? | **FC** | nghiệm thu 12.B | **ĐÃ TRẢ LỜI 09-13** — chỉ UART8 |
+| **5** | Đường arm đi qua cổng nào? | **FC** | nghiệm thu 12.B | **XONG 09-14** — chỉ UART8; Pi đã arm/disarm qua UART8 (12.A4) |
 | **6** | Pi dùng `1`/`191` trùng `sysid` với FC — FC có lọc bỏ không? | **FC** | `mavros.yaml`, heartbeat, mọi lệnh | **XONG 09-13** — FC không lọc; Pi đo: `/mavros/cmd/command` 520 và 512 qua `1`/`191` đều `result = 0`. *Sửa 09-14: phép đo đó không đọc ACK thật (bẫy `confirmation`, mục 7). Đo lại với `confirmation = 1` qua `1`/`191`: 520 → `0`, 22 → `3`, DISARM → `0` — FC trả ACK cho `1`/`191`, kết luận không đổi* |
-| **7** | Ba mâu thuẫn + hai điểm nhỏ Pi báo | **FC** | — | **ĐÃ TRẢ LỜI 09-13** — xem chi tiết |
-| **8** | Timeout heartbeat Pi 3000 ms không được dùng | **FC** → hai bên chốt | hiểu đúng lưới an toàn | [ĐỀ XUẤT] — xem chi tiết |
-| **9** | Thứ tự byte `flight_custom_version` | **FC** | đọc đúng bản build từ log MAVROS | **ĐÃ TRẢ LỜI 09-13** — đổi sang `uint64` little-endian từ 1.2 |
+| **7** | Ba mâu thuẫn + hai điểm nhỏ Pi báo | **FC** | — | **XONG 09-13** — đã sửa câu chữ, xem chi tiết |
+| **8** | Timeout heartbeat Pi 3000 ms không được dùng | **FC** → hai bên chốt | hiểu đúng lưới an toàn | **XONG 09-14** — hai bên đồng ý **không** thêm hành động khi mất heartbeat; giám sát nội bộ là nợ Pi P6 |
+| **9** | Thứ tự byte `flight_custom_version` | **FC** | đọc đúng bản build từ log MAVROS | **XONG 09-13** — `uint64` little-endian từ 1.2, Pi đo MAVROS in đúng chiều |
 | **10** | Chuyển [CHỐT] có phải tăng MINOR không (10.3 bước 8) | **hai bên** | số `FC_CTR_VER` | **XONG 09-13** — FC: không tăng; MINOR tăng khi firmware phát thứ mới (10.3 bước 8). **Pi đồng ý** |
 | **11** | Kẹp dải sai: `OB_RX_CLP` tăng với mọi lệnh sang trái; lệnh xuống bị kẹp về 0 | **FC** | **mọi phép thử OFFBOARD** (kẹp dải liên tục → `KHOA`); hạ độ cao bằng setpoint | **FC TRẢ LỜI 09-13** — cả hai do **sàn độ cao 0,3 m** (bàn test ở 0,18 m); lệnh trái chạm sàn vì MAVROS sinh `vz` ≈ 6e-17. Có lỗi thật (Pi mất quyền khi bay trái sát sàn) — **đã sửa, đã nạp 09-13, FC thử trên target: đạt**. **XONG 09-13** — Pi: giải thích đúng (FC giả bắt được `vz` rò); bảng 3.4 đạt ở 0,9 m **và dưới sàn 0,17 m** — bản sửa đã chạy. Chuỗi `KEP_DAI` để 12.B |
-| **12** | **Hạ cánh chính xác do Pi đọc marker** — Pi hạ bằng setpoint thường; cổng DISARM theo độ cao (≤ 20 cm trên mặt đất) | **hai bên** | hạ cánh chính xác 12.B; nợ Pi P1 | **Phần (a) ĐÃ LÀM 09-13** theo lệnh chủ dự án: bỏ sàn + xuống chậm sát đất. **Phần (d)–(f) cổng DISARM + `OB_DIS_RDY`: Pi đồng ý 09-13, FC hiện thực 09-14 — hợp đồng 1.3**, nạp, FC thử 11 ca trên target. **Phần (a): Pi đo 09-14, đạt.** Chờ Pi đo 1.3. Xem chi tiết |
+| **12** | **Hạ cánh chính xác do Pi đọc marker** — Pi hạ bằng setpoint thường; cổng DISARM theo độ cao (≤ 20 cm trên mặt đất) | **hai bên** | hạ cánh chính xác 12.B; nợ Pi P1 | **Phần (a) ĐÃ LÀM 09-13** theo lệnh chủ dự án: bỏ sàn + xuống chậm sát đất. **Phần (d)–(f) cổng DISARM + `OB_DIS_RDY`: Pi đồng ý 09-13, FC hiện thực 09-14 — hợp đồng 1.3**, nạp, FC thử 11 ca trên target. **Phần (a): Pi đo 09-14, đạt.** **XONG 09-14** — Pi đo 1.3 cả hai phía cổng (nằm bàn `ACCEPTED`, kê 0,95 m `TEMPORARILY_REJECTED`, `21196` `ACCEPTED`). Còn đo: xuống chậm khi > 1,2 m (P12), chuỗi `KEP_DAI` (12.B). Xem chi tiết |
+| **13** | **Đề xuất gom cho lần nạp FC tiếp theo** — (a) khai cờ capability, (b) nạp bản sạch trước 12.B, (c) bỏ `LANDING_TARGET` | **FC** | không chặn bàn test; (b) chặn 12.B | **[ĐỀ XUẤT — Pi 09-14]** — xem chi tiết |
 
 **Chi tiết #3 — trả lời của FC:** phép đo của Pi **đúng**, câu trả lời đợt 1 của FC **sai**.
 `0x1BFF` (bit từ kế bật) là hành vi đúng thiết kế.
@@ -1474,7 +1492,7 @@ Hệ quả cho Pi: node **publish setpoint** chết thì FC phát hiện trong 5
 setpoint vẫn sống mà phần còn lại của Pi treo (ví dụ `mission_manager` kẹt, setpoint vẫn phát
 đều lệnh cũ), **FC không biết** — việc giám sát đó thuộc về Pi.
 
-[THOẢ THUẬN — Pi đồng ý 09-13] **Không thêm** hành động khi mất heartbeat: timeout setpoint đã chặt hơn cho
+[CHỐT — hai bên đồng ý 09-13, đóng 09-14] **Không thêm** hành động khi mất heartbeat: timeout setpoint đã chặt hơn cho
 đường điều khiển, còn khi chưa OFFBOARD thì người lái đang cầm máy bay. Chỉ cần sửa lại câu chữ
 ở 5.1 và 9.6 (đã sửa) để không ai tưởng heartbeat là một cổng an toàn.
 
@@ -1647,7 +1665,7 @@ Trả lời ba câu:
   (ví dụ 95 %) vì phép so của FC là `≠` trên `float` — gửi đúng bằng trần là không kẹp, nhưng
   làm tròn phía Pi/MAVROS có thể đẩy vượt.
 
-**Chi tiết #12 — đề xuất hạ cánh chính xác (FC 09-13) [ĐỀ XUẤT].**
+**Chi tiết #12 — đề xuất hạ cánh chính xác (FC 09-13)** — *[CHỐT: FC làm ở 1.3, Pi đo 09-14; lịch sử trao đổi giữ bên dưới].*
 
 Chủ dự án chốt hướng 09-13: **Pi hạ cánh bằng cách đọc marker.** Các quyết định đã chốt phía chủ dự án:
 (1) ~~Pi báo bắt đầu hạ bằng `MAV_CMD_NAV_LAND`~~ — **bỏ 09-13**: chủ dự án bỏ luôn sàn độ cao, nên
@@ -1884,6 +1902,25 @@ rồi chốt.
   `21196`; lật máy thì người lái cắt ch5.
 - `OB_DIS_RDY` theo đúng nghĩa Pi đề nghị — đồng ý. Pi đo 1.3: 12.A4.
 
+**Chi tiết #13 — đề xuất của Pi 09-14, gom cho lần nạp FC tiếp theo [ĐỀ XUẤT].** Không mục nào chặn
+bàn test; không cần nạp riêng.
+
+- **(a) Khai cờ `MAV_PROTOCOL_CAPABILITY_SET_POSITION_TARGET_LOCAL_NED` (`0x0080`)** → `capabilities =
+  0x2080`. Theo 9.5 và 10.3 bước 7, cờ chỉ khai sau khi kiểm dấu 3.4 đạt — nay đã đạt và đo đầu-cuối.
+  Đây là thứ mới lên dây → theo #10 là **MINOR 1.4** (`FC_CTR_VER = 10400`). Pi không có code dựa vào
+  cờ này; Pi sẽ đo lại `AUTOPILOT_VERSION` khi FC nạp.
+- **(b) Bản firmware dùng cho 12.B build từ commit sạch (`FC_DIRTY = 0`).** Mọi bản đã nạp từ 1.1 tới 1.3
+  đều `FC_DIRTY = 1` và cùng hash `8b9b35f7b2223c3a`; ba lần sửa hành vi (#11, bỏ sàn, 1.3) Pi chỉ phân
+  biệt được bằng `FC_CTR_VER` và mốc nạp ghi tay. Đúng quy tắc 9.5 — Pi thêm "`FC_DIRTY = 0` và hash có
+  trong lịch sử phiên bản" vào điều kiện bắt đầu 12.B.
+- **(c) Bỏ `LANDING_TARGET` (149)** khỏi 5.1 và 9.1 theo 10.4. FC chưa từng xử lý, kiến trúc #12 không dùng
+  → không phá gì, không tăng số. Phía Pi: tắt plugin `landing_target` trong `mavros.yaml` và cho
+  `landing_target_bridge_node` phát topic nội bộ cho `position_controller_node` (P1).
+
+**Pi chốt:** ngoài (a)–(c), mọi mục đang [CHỐT] giữ nguyên, Pi không yêu cầu FC thay đổi gì thêm. Việc
+còn lại là đo phía Pi (P12) và giai đoạn có điện động cơ (12.B). FC đồng ý hoặc sửa (a)–(c) ngay dưới
+đây.
+
 **Chi tiết #11 — Pi kiểm lại 09-13.** Kết quả ở 3.4.
 
 - **Giải thích `vz` rò: đúng**, Pi bắt được trên dây bằng FC giả: trái 0,5 → `vz = +6,1232e-17`.
@@ -1907,7 +1944,7 @@ rồi chốt.
 | # | Việc | Chủ | Mở khoá gì |
 |---|---|---|---|
 | 1 | Trạng thái OFFBOARD lên dây | FC | `mission_manager_node` — **XONG, Pi nghiệm thu 09-13** |
-| 2 | `AUTOPILOT_VERSION` đầy đủ + `REQUEST_MESSAGE` (512) | FC | phiên bản hoá hợp đồng (10.1) — **XONG, Pi nghiệm thu 09-13**, trừ cờ capability (9.5) và thứ tự byte hash (11.1 #9) |
+| 2 | `AUTOPILOT_VERSION` đầy đủ + `REQUEST_MESSAGE` (512) | FC | phiên bản hoá hợp đồng (10.1) — **XONG, Pi nghiệm thu 09-13**, thứ tự byte hash xong (11.1 #9); **cờ capability `0x0080` → đề xuất 11.1 #13a** |
 | 3 | `DISTANCE_SENSOR` (132) | FC | hạ cánh chính xác — **XONG, Pi nghiệm thu 09-13**; `min_distance` chốt 15 cm (09-13) |
 | 4 | `ODOMETRY` (331) | FC | đưa vận tốc FC vào EKF (10.6c) — **FC phát từ 1.2, Pi đo trên dây và MAVROS 09-13: khớp**; còn thử dấu vận tốc bằng tay (12.A1) |
 | 5 | `RC_CHANNELS` (65) | FC | **chỉ hiển thị** — không suy quyền từ nó — **XONG, Pi nghiệm thu 09-13** |
@@ -2097,7 +2134,7 @@ ch1–8 = 1500/1500/1503/1498/2000/2000/999/2000 — **khớp FC**. Qua `rc_io`:
 
 | # | Việc | Trạng thái |
 |---|---|---|
-| P1 | `position_controller_node:55` vẫn subscribe `/mavros/landing_target/raw` (topic **không tồn tại**, mồ côi sau khi sửa `landing_target_bridge_node`) | **chưa sửa** — kiến trúc: chủ dự án chốt 09-13 **Pi đóng vòng vận tốc theo marker**, FC không xử lý `LANDING_TARGET` (đề xuất 11.1 #12) |
+| P1 | `position_controller_node:55` vẫn subscribe `/mavros/landing_target/raw` (topic **không tồn tại**, mồ côi sau khi sửa `landing_target_bridge_node`) | **chưa sửa** — kiến trúc: chủ dự án chốt 09-13 **Pi đóng vòng vận tốc theo marker**, FC không xử lý `LANDING_TARGET` (11.1 #12). Kèm: tắt plugin `landing_target`, `landing_target_bridge_node` phát topic nội bộ thay vì `/mavros/landing_target/pose` (11.1 #13c) |
 | P2 | `mission_manager_node` theo hợp đồng ARM mới + `OB_AUTH` | **một phần 09-14:** `fc_command_bridge_node` chặn phía Pi khi `OB_AUTH ≠ 1` / quá hạn (không gửi kể cả DISARM, trừ lúc chưa arm) và chỉ gửi ARM khi `OB_ARM_RDY = 1`; trả `result` 0/1/2. Thân máy trạng thái chưa viết |
 | P3 | Bộ lọc vận tốc theo bit flow (mục 4.2a) | chưa cần — EKF hiện lấy vận tốc từ camera Pi, **chưa dùng vận tốc FC**. **Chưa chốt:** khi chuyển sang `ODOMETRY`, Pi chỉ thấy covariance `1e6` (MAVROS bỏ `quality`, 11.2) — chấp nhận `1e6` thay cho "bỏ hẳn mẫu", hay Pi tự loại mẫu có covariance ≥ ngưỡng trước khi vào EKF |
 | P4 | Cảnh báo `errors_count*` theo tốc độ tăng | chưa viết |
@@ -2107,6 +2144,8 @@ ch1–8 = 1500/1500/1503/1498/2000/2000/999/2000 — **khớp FC**. Qua `rc_io`:
 | P8 | Subscriber `/mavros/debug_value/named_value_int` phải có **depth ≥ 10** (10 tên tới một cụm, 4.1) — áp khi viết `mission_manager_node` (P2) | **XONG 09-14** — `fc_command_bridge_node` depth 20 |
 | P9 | `position_controller_node` tự kẹp setpoint ở ~95 % trần 9.6 (±1,9 / ±0,95 m/s, ±85 °/s) ~~và không ra lệnh xuống khi dưới `offboard_min_alt_m`~~ — tránh `KEP_DAI` (11.1 #11). *FC 09-13: sàn đã bỏ — thay bằng tự kẹp xuống ≤ 0,3 m/s khi laser ≤ 1,2 m (9.6)* | **XONG 09-14** — `setpoint_limits.py` (±1,9 / +0,95 / −0,95 hoặc −0,285 khi laser ≤ 1,2 m hay mất laser / ±85,5 °/s), có pytest. Trên FC: 20 Hz, frame 8, `0x07C7`, `OB_RX_OK` +20/s, `REJ`/`CLP` = 0 |
 | P10 | Hạ cánh: tiêu chí chạm đất (11.1 #12e) + DISARM thường qua `fc_command_bridge_node`; cắt khẩn cấp `21196` là lệnh riêng, không gọi tự động; subscriber `named_value_int` depth ≥ 20 khi FC thêm `OB_DIS_RDY` | **một phần 09-14:** `landing_detector.py` (tiêu chí + mốc mặt đất, có pytest) nối vào `mission_manager_node` → `landed`; `~/arm` (DISARM thường) và `~/emergency_disarm` (`21196`) tách riêng. Chưa viết: trình tự gửi DISARM khi `landed` + `OB_DIS_RDY = 1`, thử lại 3 s — nằm trong thân máy trạng thái |
+| P11 | Quy tắc 10.1: `FC_CTR_VER` khác MAJOR đã biết → Pi từ chối vào OFFBOARD, chỉ đọc telemetry | chưa viết — `fc_link` đã đọc được `FC_CTR_VER`, chưa có chỗ chặn |
+| P12 | Đo còn lại phía Pi trên bàn: `STATUSTEXT` (6.3), thử dấu `ODOMETRY` bằng tay, `OB_ARM_BLK` từng bit, xuống chậm khi laser > 1,2 m, 12.A1 và 12.A4 còn trống | cần người thao tác; không chặn FC |
 
 ### 11.4 Chưa ai đo — cả hai bên nên biết
 
@@ -2264,6 +2303,7 @@ Lệnh đo nhanh: xem mục 12.A1.
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.3 *(Pi tổng hợp, không tăng số)* | 2026-09-14 | **Pi tổng hợp trạng thái (11.0).** [CHỐT]: `SET_POSITION_TARGET_LOCAL_NED` đầu-cuối, `OB_ARM_RDY`/`OB_ARM_BLK`/`OB_DIS_RDY`, `FC_CTR_VER`, `flight_custom_version`. Đóng 11.1 #2, #3, #5, #7, #8, #9, #12. **Đề xuất 11.1 #13 cho FC:** khai cờ `0x0080` (MINOR 1.4), nạp bản sạch trước 12.B, bỏ `LANDING_TARGET`. Ngoài #13 Pi không còn yêu cầu với FC. Thêm P11, P12. |
 | 1.3 *(Pi thử cổng DISARM, không tăng số)* | 2026-09-14 | Kê cao, laser 0,95 m, qua `fc_command_bridge_node`: `OB_DIS_RDY = 0`, DISARM thường → `TEMPORARILY_REJECTED`; `21196` → `ACCEPTED`, `OB_EXIT = 5`. Cùng lần nằm bàn trước đó (`OB_DIS_RDY = 1`, DISARM thường `ACCEPTED`): cổng 1.3 đạt cả hai phía. 12.A4. |
 | 1.3 *(Pi thử ARM/DISARM qua node, không tăng số)* | 2026-09-14 | Cánh tháo, drone cố định trên bàn, người lái gạt ch8/ch5 lên, ch6 POSHOLD: `OB_ARM_RDY = 1`. Qua `fc_command_bridge_node` + setpoint 20 Hz: ARM → `ACCEPTED`, `OB_STATE = 2`, `OB_DIS_RDY = 1`, `CMODE(1)` (mất flow sát bàn); DISARM thường → `ACCEPTED`, `OB_EXIT = 5`, `OB_ARM_RDY = 1`. 12.A4. |
 | 1.3 *(Pi viết lớp giao tiếp FC, không tăng số)* | 2026-09-14 | **Bẫy MAVROS (mục 7):** FC khai `GENERIC` nên MAVROS chỉ chờ ACK khi `confirmation != 0`; với `0` nó tự trả `result = 0`. Số đo 09-13 "512/520 qua MAVROS → 0" không phải ACK thật — đo lại với `confirmation = 1` (520 → 0, 22 → 3), sửa 5.1, 11.1 #6. Pi hiện thực `fc_command_bridge_node` (ARM/DISARM/`21196` qua `/mavros/cmd/command`, chặn theo `OB_*`), `position_controller_node` (20 Hz, frame 8, `0x07C7`, tự kẹp 9.6), tiêu chí chạm đất; sửa 8.2. P8, P9 xong; P2, P10 một phần. |
