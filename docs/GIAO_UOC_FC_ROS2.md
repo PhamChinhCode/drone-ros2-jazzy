@@ -1106,7 +1106,7 @@ So khớp **nguyên văn, phân biệt hoa thường**.
 | `OB_T_RGT` | FLOAT | FC | mục tiêu bay sang phải, m/s (3.4) | [CHỐT] — Pi đo 09-13, dấu đúng (3.4) |
 | `OB_T_UP` | FLOAT | FC | mục tiêu đi lên, m/s (3.4) | [CHỐT] — Pi đo 09-13, dấu đúng (3.4) |
 | `OB_T_YAWR` | FLOAT | FC | mục tiêu quay phải, °/s (3.4) | [CHỐT] — Pi đo 09-13, dấu đúng (3.4) |
-| `OB_DIS_RDY` | INT | FC | 1 = đã arm, Pi có quyền, và gần đất (≤ 20 cm) — DISARM thường lúc này sẽ `ACCEPTED` **và cắt động cơ**; 0 = mọi trường hợp khác, kể cả chưa arm (11.1 #12d) *(thêm ở 1.3)* | [THOẢ THUẬN — FC phát từ 1.3, nạp và thử trên target 09-14, chờ Pi đo] |
+| `OB_DIS_RDY` | INT | FC | 1 = đã arm, Pi có quyền, và gần đất (≤ 20 cm) — DISARM thường lúc này sẽ `ACCEPTED` **và cắt động cơ**; 0 = mọi trường hợp khác, kể cả chưa arm (11.1 #12d) *(thêm ở 1.3)* | [CHỐT định dạng — Pi đo 09-14, `0` khi chưa arm; `= 1` chờ 12.B] |
 | `FC_DIRTY` | INT | FC | 1 = firmware build từ cây có thay đổi chưa commit, 0 = sạch (9.5) | [CHỐT] — Pi đo 09-13: `1` (đúng, bản 1.2 build từ cây chưa commit) |
 
 **Bảng bit `OB_ARM_BLK`** [THOẢ THUẬN — Pi thấy `0x0480` 09-13, khớp; từng bit chờ phiên gạt công tắc]. Bit mới chỉ **thêm vào cuối**,
@@ -2173,7 +2173,7 @@ ros2 topic echo /mavros/state --once
       lúc khởi động (`OB_STATE = 0`, `OB_AUTH = 0`, ch8 lên từ lúc bật nguồn) — *Pi đo 09-13*
 - [ ] `OB_ARM_RDY` lên 1 khi người lái gạt ch8 xuống-lên rồi gạt ch5 một vòng; `OB_ARM_BLK` đổi
       đúng bit theo từng bước (6.3) — **cần người gạt công tắc, không cần điện động cơ**
-- [ ] *(1.3)* `FC_CTR_VER = 10300`, `OB_DIS_RDY` 2 Hz, bằng 0 khi chưa arm
+- [x] *(1.3)* `FC_CTR_VER = 10300`, `OB_DIS_RDY` 2 Hz, bằng 0 khi chưa arm — *Pi đo 09-14, 20 s: 11 tên, 22,0 Hz tổng, mỗi tên 2,0 Hz, `OB_DIS_RDY = 0`*
 - [ ] *(1.3, 12.B — tháo cánh)* Arm qua Pi, kê cao > 0,4 m: DISARM thường → `TEMPORARILY_REJECTED`,
       `OB_DIS_RDY = 0`; hạ xuống ≤ 0,37 m → `OB_DIS_RDY = 1`, DISARM thường → `ACCEPTED`; kê cao lại,
       DISARM + `21196` → `ACCEPTED`
