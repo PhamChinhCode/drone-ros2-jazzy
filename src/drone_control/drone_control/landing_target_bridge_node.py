@@ -9,7 +9,7 @@ FC bam vao mot vi tri cu da khong con dung con nguy hiem hon la khong co du lieu
 
 import rclpy
 from apriltag_msgs.msg import AprilTagDetectionArray
-from mavros_msgs.msg import LandingTarget
+from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
 from std_msgs.msg import Bool, Int32
 from tf2_ros import Buffer, TransformListener
@@ -40,8 +40,10 @@ class LandingTargetBridgeNode(Node):
         self.create_subscription(
             Int32, '/mission/expected_marker_id', self.on_expected_id, EVENT_QOS)
 
+        # Plugin landing_target cua MAVROS (ROS2 jazzy) nhan dau vao Pi->FC o
+        # /mavros/landing_target/pose kieu PoseStamped. KHONG co topic /raw (da xac minh).
         self.pub_target = self.create_publisher(
-            LandingTarget, '/mavros/landing_target/raw', SENSOR_QOS)
+            PoseStamped, '/mavros/landing_target/pose', SENSOR_QOS)
         self.pub_lost = self.create_publisher(Bool, '/landing_target/lost', EVENT_QOS)
 
         self.create_timer(1.0 / self.get_parameter('publish_rate_hz').value, self.check_timeout)
@@ -55,7 +57,7 @@ class LandingTargetBridgeNode(Node):
 
     def on_detections(self, msg):
         """TODO: tim detection co ID == expected_id (bo qua moi ID khac);
-        chuyen pose sang target_frame bang tf2, dien LandingTarget va publish;
+        chuyen pose sang target_frame bang tf2, dien PoseStamped va publish;
         cap nhat last_seen_time. Khong thay ID mong doi -> khong publish gi ca."""
         del msg
 

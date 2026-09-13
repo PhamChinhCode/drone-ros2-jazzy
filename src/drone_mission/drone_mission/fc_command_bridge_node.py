@@ -13,12 +13,12 @@ boc pymavlink tho cho rieng lenh do thay vi tin plugin MAVROS.
 """
 
 import rclpy
-from mavros_msgs.msg import PositionTarget, State
+from mavros_msgs.msg import State
 from mavros_msgs.srv import CommandBool, CommandTOL, SetMode
 from rclpy.node import Node
 
 from drone_interfaces.srv import Arm, FcSimpleCommand, GotoWaypoint, Takeoff
-from drone_mission.qos import EVENT_QOS, SENSOR_QOS
+from drone_mission.qos import EVENT_QOS
 
 
 class FcCommandBridgeNode(Node):
@@ -27,28 +27,21 @@ class FcCommandBridgeNode(Node):
         super().__init__('fc_command_bridge_node')
 
         self.declare_parameter('ack_timeout_s', 5.0)
-        self.declare_parameter('setpoint_rate_hz', 20.0)
 
         self.seq_counter = 0
         self.last_acked_seq = 0
         self.fc_state = None
-        self.active_setpoint = None
 
         self.create_subscription(State, '/mavros/state', self.on_fc_state, EVENT_QOS)
 
         self.cli_arming = self.create_client(CommandBool, '/mavros/cmd/arming')
         self.cli_takeoff = self.create_client(CommandTOL, '/mavros/cmd/takeoff')
         self.cli_set_mode = self.create_client(SetMode, '/mavros/set_mode')
-        self.pub_setpoint = self.create_publisher(
-            PositionTarget, '/mavros/setpoint_raw/local', SENSOR_QOS)
 
         self.create_service(Arm, '~/arm', self.on_arm)
         self.create_service(Takeoff, '~/takeoff', self.on_takeoff)
         self.create_service(GotoWaypoint, '~/goto_waypoint', self.on_goto_waypoint)
         self.create_service(FcSimpleCommand, '~/simple_command', self.on_simple_command)
-
-        # FC yeu cau dong setpoint lien tuc de giu che do offboard - giu nhip bang timer rieng.
-        self.create_timer(1.0 / self.get_parameter('setpoint_rate_hz').value, self.republish_setpoint)
 
     def next_seq(self):
         self.seq_counter += 1
@@ -74,8 +67,9 @@ class FcCommandBridgeNode(Node):
         return response
 
     def on_goto_waypoint(self, request, response):
-        """TODO: dat active_setpoint = PositionTarget(FRAME_LOCAL_NED) tu target_ned/yaw_deg,
-        de timer republish giu nhip; tra ve ngay (viec doi toi noi do mission_manager theo doi)."""
+        """TODO: chuyen target_ned/yaw_deg thanh setpoint cho position_controller_node
+        (vd publish /mission/setpoint), KHONG tu publish /mavros/setpoint_raw/local -
+        node do moi la chu setpoint duy nhat (mat 2 doc thiet ke). Tra ve ngay."""
         del request
         response.success = False
         response.message = 'chua duoc hien thuc'
@@ -90,9 +84,6 @@ class FcCommandBridgeNode(Node):
         response.message = 'chua duoc hien thuc'
         response.seq = self.next_seq()
         return response
-
-    def republish_setpoint(self):
-        """TODO: publish lai active_setpoint neu dang co, de FC khong roi che do offboard."""
 
 
 def main(args=None):

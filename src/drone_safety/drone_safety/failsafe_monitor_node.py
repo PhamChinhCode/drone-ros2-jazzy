@@ -55,7 +55,10 @@ class FailsafeMonitorNode(Node):
         self.create_timer(1.0 / self.get_parameter('check_rate_hz').value, self.periodic_check)
 
     def on_battery(self, msg):
-        self.battery_pct = msg.percentage * 100.0
+        # FC gui battery_remaining = -1 ("khong biet", co y) -> MAVROS cho percentage < 0.
+        # Coi la khong biet (None), KHONG phai 0% - neu khong periodic_check se hieu
+        # battery_pct = -1.0 < critical_battery_pct va kich ESCALATE_EMERGENCY_LAND oan.
+        self.battery_pct = msg.percentage * 100.0 if msg.percentage >= 0.0 else None
 
     def on_fc_state(self, msg):
         if msg.connected:

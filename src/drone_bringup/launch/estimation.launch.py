@@ -21,7 +21,9 @@ def generate_launch_description():
         IncludeLaunchDescription(PythonLaunchDescriptionSource(
             os.path.join(BRINGUP, 'launch', 'perception.launch.py'))),
 
-        Node(package='mavros', executable='mavros_node', name='mavros',
+        # KHONG dat name=: no remap ten MOI node con trong process (router, tung plugin) thanh
+        # 'mavros' -> plugin de topic cua nhau va crash. Chi dat namespace, giong mavros/node.launch.
+        Node(package='mavros', executable='mavros_node', namespace='mavros',
              parameters=[os.path.join(CONFIG, 'mavros.yaml')], output='screen'),
 
         # Vi tri lap camera tren khung drone - DO THAT roi sua sau day.

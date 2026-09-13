@@ -55,7 +55,9 @@ class TelemetryAggregatorNode(Node):
         self.battery = msg
 
     def on_global_pos(self, msg):
-        self.global_pos = msg
+        # status < 0 (NO_FIX): bo mach khong co GPS -> lat/lon = 0 va altitude la do cao
+        # ap suat rac. Bo qua de GCS khong hien toa do 0,0 o do cao ~37 m.
+        self.global_pos = msg if msg.status.status >= 0 else None
 
     def on_gripper(self, msg):
         self.gripper = msg

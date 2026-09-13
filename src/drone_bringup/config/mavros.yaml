@@ -2,17 +2,29 @@
 # plugin ngam gui lenh ma firmware tuy bien khong hieu.
 /**:
   ros__parameters:
-    fcu_url: "/dev/ttyUSB0:921600"      # khop baudrate MAVLink da cau hinh tren H743
+    fcu_url: "/dev/ttyAMA0:921600"      # khop baudrate MAVLink da cau hinh tren H743
     gcs_url: ""                          # de trong: GCS di duong rieng qua gcs_link_node
     target_system_id: 1
     target_component_id: 1
+    # Covariance IMU - KHONG de MAVROS dung mac dinh hardcode. Mac dinh cua no la
+    # orientation_stdev=1.0 rad (57 do) va linear_acceleration_stdev=0.0003 m/s^2,
+    # khien EKF bo qua goc nghieng cua FC va tin tuyet doi vao gia toc tho - nguoc hoan toan.
+    # orientation: phia FC chot 1 do cho roll/pitch (2026-09-12). KHONG dung so tu
+    # ekf_attitude_uncertainty_deg() hay nhieu ngan han do duoc - do la bo loc tu cham diem
+    # chinh no, khong mo hinh hoa lech lap dat / troi bias / rung dong co.
+    # accel + gyro: do that 896 mau/20s luc drone dung im tren ban.
+    # CANH BAO: hai so nay la SAN khi dung im. Co rung dong co phai do lai (muc C).
+    orientation_stdev: 0.01745          # 1 do
+    linear_acceleration_stdev: 0.0185   # m/s^2, do tren ban
+    angular_velocity_stdev: 0.00183     # rad/s, do tren ban
     plugin_allowlist:
       - 'sys_status'
       - 'setpoint_position'
       - 'setpoint_raw'
       - 'command'
       - 'imu'
-      - 'battery'
+      - 'vfr_hud'
       - 'landing_target'
       - 'local_position'
       - 'global_position'
+      - 'debug_value'   # NAMED_VALUE_INT OB_STATE/OB_AUTH/OB_EXIT tu FC (tra_loi_dot_2_pi4.md muc 2.1)
