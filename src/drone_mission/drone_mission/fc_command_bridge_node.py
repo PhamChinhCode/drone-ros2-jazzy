@@ -125,8 +125,7 @@ class FcCommandBridgeNode(Node):
         response.result = result
         response.success = result == fc_link.MAV_RESULT_ACCEPTED
         response.message = err or self.describe_result(verb, result)
-        log = self.get_logger().info if response.success else self.get_logger().warn
-        log(f'[seq {response.seq}] {response.message}')
+        self.log_result(response)
         return response
 
     def on_emergency_disarm(self, request, response):
@@ -137,9 +136,17 @@ class FcCommandBridgeNode(Node):
         response.result = result
         response.success = result == fc_link.MAV_RESULT_ACCEPTED
         response.message = err or self.describe_result('DISARM 21196', result)
-        log = self.get_logger().info if response.success else self.get_logger().error
-        log(f'[seq {response.seq}] {response.message}')
+        self.log_result(response)
         return response
+
+    def log_result(self, response):
+        # Moi muc log mot dong rieng: rclpy cam mot cho goi log doi muc giua cac lan goi
+        # (ValueError lam node chet - da xay ra 09-14 khi DISARM bi tu choi sau ARM thanh cong).
+        text = f'[seq {response.seq}] {response.message}'
+        if response.success:
+            self.get_logger().info(text)
+        else:
+            self.get_logger().warning(text)
 
     @staticmethod
     def describe_result(verb, result):

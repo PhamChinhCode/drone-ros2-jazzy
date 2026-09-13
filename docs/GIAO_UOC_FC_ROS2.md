@@ -2197,9 +2197,11 @@ ros2 topic echo /mavros/state --once
       `OB_STATE = 1`, `OB_EXIT = 5` (`DISARM`), `OB_ARM_RDY = 1` — Pi arm lại được, đúng 6.3. Tắt node
       sau khi disarm: HEARTBEAT `base_mode = 81`, trạng thái giữ nguyên
 - [x] *(1.3)* `FC_CTR_VER = 10300`, `OB_DIS_RDY` 2 Hz, bằng 0 khi chưa arm — *Pi đo 09-14, 20 s: 11 tên, 22,0 Hz tổng, mỗi tên 2,0 Hz, `OB_DIS_RDY = 0`*
-- [ ] *(1.3, 12.B — tháo cánh)* **Nửa nằm bàn đạt 09-14** (`OB_DIS_RDY = 1`, DISARM thường → `ACCEPTED`, xem trên). Còn: arm qua Pi, kê cao > 0,4 m: DISARM thường → `TEMPORARILY_REJECTED`,
-      `OB_DIS_RDY = 0`; hạ xuống ≤ 0,37 m → `OB_DIS_RDY = 1`, DISARM thường → `ACCEPTED`; kê cao lại,
-      DISARM + `21196` → `ACCEPTED`
+- [x] *(1.3 — tháo cánh)* **Cổng DISARM theo độ cao — Pi đo 09-14, qua `fc_command_bridge_node`.**
+      Nằm bàn (laser ~0,18 m): `OB_DIS_RDY = 1`, DISARM thường → `ACCEPTED` (mục trên). **Kê cao, laser
+      0,95–0,96 m:** ARM → `ACCEPTED`; `OB_DIS_RDY = 0`; DISARM thường → **`TEMPORARILY_REJECTED`** hai lần
+      (0,01–0,02 s), vẫn `armed`, `OB_STATE = 2`; `~/emergency_disarm` (`21196`) → **`ACCEPTED`** (0,10 s),
+      `armed = false`, `OB_EXIT = 5`, `OB_ARM_RDY = 1`. Khớp bảng D3, D9 của FC
 - [ ] Gạt ch8 xuống rồi lên → `STATUSTEXT` `OFFBOARD: TAT (...)` severity `NOTICE`
 - [ ] `OB_AUTH` hạ xuống 0 **trong vòng 0,5 s** sau khi người lái chạm cần
 - [x] Node restart giữa chừng vẫn biết đúng trạng thái trong 0,5 s — *Pi đo 09-13, 10 lần tạo node
@@ -2262,6 +2264,7 @@ Lệnh đo nhanh: xem mục 12.A1.
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.3 *(Pi thử cổng DISARM, không tăng số)* | 2026-09-14 | Kê cao, laser 0,95 m, qua `fc_command_bridge_node`: `OB_DIS_RDY = 0`, DISARM thường → `TEMPORARILY_REJECTED`; `21196` → `ACCEPTED`, `OB_EXIT = 5`. Cùng lần nằm bàn trước đó (`OB_DIS_RDY = 1`, DISARM thường `ACCEPTED`): cổng 1.3 đạt cả hai phía. 12.A4. |
 | 1.3 *(Pi thử ARM/DISARM qua node, không tăng số)* | 2026-09-14 | Cánh tháo, drone cố định trên bàn, người lái gạt ch8/ch5 lên, ch6 POSHOLD: `OB_ARM_RDY = 1`. Qua `fc_command_bridge_node` + setpoint 20 Hz: ARM → `ACCEPTED`, `OB_STATE = 2`, `OB_DIS_RDY = 1`, `CMODE(1)` (mất flow sát bàn); DISARM thường → `ACCEPTED`, `OB_EXIT = 5`, `OB_ARM_RDY = 1`. 12.A4. |
 | 1.3 *(Pi viết lớp giao tiếp FC, không tăng số)* | 2026-09-14 | **Bẫy MAVROS (mục 7):** FC khai `GENERIC` nên MAVROS chỉ chờ ACK khi `confirmation != 0`; với `0` nó tự trả `result = 0`. Số đo 09-13 "512/520 qua MAVROS → 0" không phải ACK thật — đo lại với `confirmation = 1` (520 → 0, 22 → 3), sửa 5.1, 11.1 #6. Pi hiện thực `fc_command_bridge_node` (ARM/DISARM/`21196` qua `/mavros/cmd/command`, chặn theo `OB_*`), `position_controller_node` (20 Hz, frame 8, `0x07C7`, tự kẹp 9.6), tiêu chí chạm đất; sửa 8.2. P8, P9 xong; P2, P10 một phần. |
 | **1.3** | 2026-09-14 | **MINOR — FC hiện thực 11.1 #12d–f**, firmware phát `FC_CTR_VER = 10300`. **Cổng DISARM theo độ cao:** DISARM thường từ Pi chỉ nhận khi độ cao ước lượng ≤ 0,17 + 0,20 m; cao hơn `TEMPORARILY_REJECTED`; `param2 = 21196` cắt ở mọi độ cao nhưng không vượt quyền. **`OB_DIS_RDY`** (nghĩa theo đề nghị Pi: 0 khi chưa arm/mất quyền). Mốc mặt đất đổi từ "lúc arm" sang **hằng số 0,17 m** (trả lời Pi: arm cầm tay). Trả lời Pi: nghiêng > 25° cổng không tự đóng (EKF chạy bằng baro, trôi). Không MAJOR (Pi xác nhận chưa node nào disarm trên không). Ghi cam kết phía Pi. Gộp bỏ sàn + xuống chậm sát đất (nạp 09-13). FC thử 11 ca trên target qua SWD. |
