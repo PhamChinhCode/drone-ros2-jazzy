@@ -1679,9 +1679,16 @@ mới vì `HA_CANH` không phải trạng thái OFFBOARD riêng.
 
 **g) Rủi ro chưa ai đo — ghi vào 11.4 khi chốt:**
 
-- **Optical flow sát đất:** trên bàn (0,17 m) `position_valid` = sai. Nếu flow mất hiệu lực ở vài chục
-  cm cuối, FC tụt về ANGLE (6.1): **`vx`/`vy` của Pi không còn được dùng**, máy bay trôi theo quán
-  tính — marker không kéo được nữa. Cần đo độ cao flow mất hiệu lực trước khi tin đoạn cuối.
+- **Optical flow sát đất** *(FC sửa câu chữ 09-13 — bản trước viết phóng đại)*: FC loại mẫu flow khi
+  laser đọc dưới `EST_FLOW_MIN_HEIGHT_M = 0,20 m`; nằm trên bàn laser đọc 0,17 m. Tức flow chỉ mất
+  hiệu lực ở **~3 cm cuối** trước khi chạm đất (thêm tối đa `EST_FLOW_TIMEOUT_MS = 300 ms`), không phải
+  vài chục cm. Khi mất flow, **chỉ kênh ngang** lùi về giữ thăng bằng (`custom_mode` báo `1`):
+  `vx`/`vy` không được dùng, máy bay trôi theo quán tính. **Giữ độ cao, `vz` và `yaw_rate` vẫn chạy**
+  (6.3). Ở 3 cm cuối và tốc độ xuống 0,3 m/s, đoạn trôi này ≤ 0,1 s — chấp nhận được, nhưng
+  **Pi phải căn marker xong trước khi xuống dưới ~0,3 m**, không trông vào sửa ngang ở đoạn cuối.
+  Chưa đo: chất lượng flow (`flow_quality_min`) có tụt sớm hơn ngưỡng độ cao khi sát nền không.
+- **Mất độ cao hợp lệ** (`altitude_valid` sai) mới là ca tệ: giữ độ cao nhả ga về **cần** — chế độ Pi
+  cần đang ở giữa ≈ 50 % ga. Hạ cánh dựa vào laser nên cần biết `min_distance` thật (dòng dưới).
 - **`min_distance` laser** vẫn chưa đo (11.4) — ngưỡng (d)2 dựa vào laser đọc được ở 0,17 m.
 - **Hiệu ứng mặt đất** làm vòng độ cao dao động dưới ~0,3 m — có thể làm tiêu chí (d)3 chập chờn;
   0,5 s liên tục là để lọc.
