@@ -304,11 +304,14 @@ Tần số 9 bản tin **không đổi**, 7,8 KB/s (8,5%), 0 khung hỏng. Khác
       dồn `uint16` (tràn vòng ở 65 535): 1 = IMU ICM20602, 2 = CRSF, 3 = baro BMP388,
       4 = MTF01P. Cảnh báo khi tăng quá N lần / 10 s, không theo giá trị. Có sẵn trong
       `mavros_msgs/SysStatus` trên `/mavros/sys_status` (`errors_count1..4`).
-- [ ] **B16 — Kiểm lại `AUTOPILOT_VERSION` khi FC nạp bản mới.** Kỳ vọng
+- [x] **B16 — Kiểm lại `AUTOPILOT_VERSION` khi FC nạp bản mới.** *(XONG 2026-09-13, giao ước
+      1.1: `flight_sw_version = 0x00010000`, hash có, lệnh 512 chạy. `capabilities` vẫn `0x2000`
+      — **cố ý** theo giao ước 9.5. Thứ tự byte hash: giao ước 11.1 #9.)* Kỳ vọng
       `capabilities = 0x2080`, `flight_sw_version = 0x00010000`, `flight_custom_version`
       = 8 byte git hash, lệnh 512 (`param1 = 148`) được trả lời.
-- [ ] **B17 — `DISTANCE_SENSOR`: chờ FC đo `min_distance`.** Khi có bản tin: bật plugin
-      `distance_sensor`, kiểm `signal_quality = 1` khi ngoài tầm, `orientation = PITCH_270`.
+- [ ] **B17 — `DISTANCE_SENSOR`: chờ FC đo `min_distance`.** *(2026-09-13: FC đã phát 20 Hz;
+      Pi đã bật plugin, topic `/mavros/mtf01p`, đo khớp. Còn: `min_distance` thật (đang tạm 1 cm),
+      và kiểm `signal_quality = 1` khi che laser / ngoài tầm.)*
 - [ ] **B18 — Cập nhật mục 6 [thiet_ke_mavlink_fc.md](thiet_ke_mavlink_fc.md).** Đã gắn
       ghi chú "lạc hậu" ở mục 5 và 6 (2026-09-13); viết lại toàn bộ khi FC chốt xong
       giao thức arm từ Pi.

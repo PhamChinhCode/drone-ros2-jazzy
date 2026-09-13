@@ -28,3 +28,17 @@
       - 'local_position'
       - 'global_position'
       - 'debug_value'   # NAMED_VALUE_INT OB_STATE/OB_AUTH/OB_EXIT tu FC (tra_loi_dot_2_pi4.md muc 2.1)
+      - 'distance_sensor'  # DISTANCE_SENSOR laser MTF01P - GIAO_UOC_FC_ROS2.md muc 8.3, 11.2
+
+# Laser MTF01P: FC phat id=0, PITCH_270, 20 Hz (GIAO_UOC muc 11.2). Plugin chi phat topic cho id da
+# khai o day. send_tf=false: chua do vi tri lap laser tren khung - khong bia TF.
+# min_distance=1 cm tu FC la SO TAM, khong dung lam nguong.
+/**/distance_sensor:
+  ros__parameters:
+    config: |
+      mtf01p:
+        id: 0
+        frame_id: "mtf01p_laser"
+        orientation: PITCH_270
+        field_of_view: 0.0
+        send_tf: false
