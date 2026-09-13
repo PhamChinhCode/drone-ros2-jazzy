@@ -1,0 +1,8 @@
+# Cat dong co NGAY o moi do cao (DISARM param2 = 21196, giao uoc 11.1 #12f).
+# CHI goi khi nguoi ra lenh khan cap qua GCS - khong node nao tu dong goi, ke ca failsafe_monitor.
+string reason
+---
+bool success
+string message
+uint32 seq
+int8 result                   # MAV_RESULT; -1 = Pi khong gui / khong co ACK

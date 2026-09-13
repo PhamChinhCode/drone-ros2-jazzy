@@ -20,5 +20,5 @@ gripper_controller_node:
 
 fc_command_bridge_node:
   ros__parameters:
-    ack_timeout_s: 5.0
+    ack_timeout_s: 6.0            # > command_ack_timeout 5 s cua MAVROS: de MAVROS bao timeout truoc
     setpoint_rate_hz: 20.0

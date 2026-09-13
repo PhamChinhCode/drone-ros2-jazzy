@@ -6,17 +6,22 @@ Toan bo logic chuyen trang thai nam trong mission_fsm.py de test duoc khong can 
 
 import rclpy
 from geometry_msgs.msg import PoseStamped
-from mavros_msgs.msg import State
+from mavros_msgs.msg import PositionTarget, State
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
-from sensor_msgs.msg import BatteryState
+from sensor_msgs.msg import BatteryState, Range
 from std_msgs.msg import Bool, Int32
 
 from drone_interfaces.msg import (FailsafeEvent, GripperCommand, GripperStatus,
                                   MarkerQuality, MissionPlan, MissionState)
 from drone_interfaces.srv import Arm, FcSimpleCommand, GotoWaypoint, Takeoff
 from drone_mission import mission_fsm
+from drone_mission.landing_detector import LandingDetector
 from drone_mission.qos import EVENT_QOS, SENSOR_QOS
+
+# ODOMETRY cua FC: covariance vz = 1e6 nghia la van toc dung khong hop le (giao uoc 11.2).
+COVARIANCE_INVALID = 1e5
+VZ_COVARIANCE_INDEX = 2 * 6 + 2
 
 
 class MissionManagerNode(Node):
@@ -42,6 +47,9 @@ class MissionManagerNode(Node):
         self.snapshot = mission_fsm.Snapshot()
         self.plan = None
         self.gripper_seq = 0
+        self.landing_detector = LandingDetector()
+        self.fc_vz_mps = None
+        self.cmd_vz_mps = None
 
         self.create_subscription(MissionPlan, '/mission/plan', self.on_plan, EVENT_QOS)
         self.create_subscription(State, '/mavros/state', self.on_fc_state, EVENT_QOS)
@@ -51,6 +59,11 @@ class MissionManagerNode(Node):
         self.create_subscription(MarkerQuality, '/marker/tracking_quality', self.on_marker, EVENT_QOS)
         self.create_subscription(GripperStatus, '/gripper/status', self.on_gripper, EVENT_QOS)
         self.create_subscription(FailsafeEvent, '/failsafe_event', self.on_failsafe, EVENT_QOS)
+        # Tieu chi cham dat 11.1 #12e: laser, vz cua FC, vz Pi dang ra lenh (chi doc, khong publish).
+        self.create_subscription(Range, '/mavros/mtf01p', self.on_range, SENSOR_QOS)
+        self.create_subscription(Odometry, '/mavros/odometry/in', self.on_fc_odom, SENSOR_QOS)
+        self.create_subscription(
+            PositionTarget, '/mavros/setpoint_raw/local', self.on_cmd_setpoint, SENSOR_QOS)
 
         self.pub_state = self.create_publisher(MissionState, '/mission/state', EVENT_QOS)
         self.pub_expected_id = self.create_publisher(Int32, '/mission/expected_marker_id', EVENT_QOS)
@@ -80,6 +93,21 @@ class MissionManagerNode(Node):
     def on_odom(self, msg):
         """TODO: tinh at_waypoint = khoang cach toi waypoint hien tai < acceptance_radius_m."""
         del msg
+
+    def on_fc_odom(self, msg):
+        valid = msg.twist.covariance[VZ_COVARIANCE_INDEX] < COVARIANCE_INVALID
+        self.fc_vz_mps = msg.twist.twist.linear.z if valid else None
+
+    def on_cmd_setpoint(self, msg):
+        self.cmd_vz_mps = msg.velocity.z
+
+    def on_range(self, msg):
+        range_m = msg.range if msg.min_range <= msg.range <= msg.max_range else None
+        now_s = self.get_clock().now().nanoseconds / 1e9
+        self.landing_detector.update_ground_ref(
+            self.snapshot.armed, range_m, self.fc_vz_mps, now_s)
+        self.snapshot.landed = self.landing_detector.step(
+            range_m, self.fc_vz_mps, self.cmd_vz_mps, now_s)
 
     def on_target_lost(self, msg):
         self.snapshot.landing_target_lost = msg.data

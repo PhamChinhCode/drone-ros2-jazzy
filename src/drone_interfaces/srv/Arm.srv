@@ -1,5 +1,7 @@
-bool arm                      # true = arm, false = disarm
+bool arm                      # true = arm, false = disarm thuong (FC chi nhan khi <= 20 cm tren mat dat)
 ---
 bool success
 string message
 uint32 seq                    # seq da gan cho lenh, doi chieu voi log FC
+int8 result                   # MAV_RESULT tu COMMAND_ACK: 0 ACCEPTED, 1 TEMPORARILY_REJECTED (thu lai sau),
+                              # 2 DENIED (dung thu lai, cho nguoi lai); -1 = Pi khong gui / khong co ACK
