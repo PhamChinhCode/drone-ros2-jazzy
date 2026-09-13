@@ -316,6 +316,10 @@ vì suy luận qua tầng biến đổi của MAVROS.
 > *Cập nhật sau trả lời FC (11.1 #11):* hai "lỗi" trên là **sàn độ cao 0,3 m** — lúc đó drone nằm
 > bàn 0,18 m. Không phải lỗi kẹp tốc độ.
 >
+> *Cập nhật 09-13, sau các bảng dưới:* **SÀN ĐÃ BỎ 2026-09-13 (nạp, FC thử trên target)** — xem 11.1 #12a. Các ca "dưới sàn" bên dưới là
+> **lịch sử**. Firmware hiện tại, nằm bàn: "xuống 0,3" → `OB_T_UP = −0,300`, Δ`CLP` = 0; "xuống 0,5" →
+> `−0,300`, Δ`CLP` tăng (xuống chậm sát đất, 9.6).
+>
 > **Pi chạy lại 09-13, FC đã nạp bản sửa, drone kê cao (laser 0,89–0,90 m).** Cùng đường đo, một
 > `mavros_node`, bộ đếm FC từ 0 sau reset:
 >
@@ -1185,7 +1189,9 @@ Hai trường còn lại, [CHỐT — Pi đo trên dây và qua MAVROS 09-13, b�
 | `offboard_max_vel_mps` | **2,0** m/s (tham số 0,1–3,0) | kẹp `OB_T_FWD`, `OB_T_RGT` đối xứng ± — mỗi trục riêng, **không** kẹp theo độ lớn vector. *Pi đo 09-13: khớp cả bốn chiều; 1,9 không kẹp* |
 | `offboard_max_climb_mps` | **1,0** m/s (0,1–2,0) | kẹp `OB_T_UP` đối xứng ± — *Pi đo 09-13 ở 0,9 m: +1,000 / −1,000* |
 | `offboard_max_yaw_dps` | **90** °/s (0–180) | kẹp `OB_T_YAWR` đối xứng ± — *Pi đo 09-13: −90,00 / +90,00* |
-| `offboard_min_alt_m` / `offboard_max_alt_m` | **0,3** / **5,0** m | **bao độ cao**, chỉ áp khi `altitude_valid`: dưới sàn chỉ được lên, trên trần chỉ được xuống; lệnh ngược chiều → `climb = 0`, đếm `OB_RX_CLP`. Pi **không** hạ cánh bằng setpoint (11.1 #11a) |
+| `offboard_max_alt_m` | **5,0** m | **trần độ cao**, chỉ áp khi `altitude_valid`: trên trần chỉ được xuống; lệnh lên → `climb = 0`, đếm `OB_RX_CLP`, không vào `KEP_DAI` |
+| `offboard_min_alt_m` | *(0,3)* | **KHÔNG CÒN TÁC DỤNG từ 2026-09-13** — sàn độ cao đã bỏ (11.1 #12a). Tham số giữ trong bảng chỉ để không mất cấu hình đã lưu; firmware không đọc |
+| Xuống chậm sát đất | **0,3 m/s** khi độ cao ước lượng ≤ **1,2 m** (laser; ≈ 1 m trên mặt đất) — hằng số firmware | lệnh xuống nhanh hơn bị kẹp về −0,3 m/s, đếm `OB_RX_CLP`, **không** vào `KEP_DAI`. Pi hạ cánh bằng setpoint thường (11.1 #12). Chỉ áp khi `altitude_valid` |
 | `offboard_clamp_limit` | **20** setpoint liên tiếp | kẹp tốc độ liên tiếp chừng đó khung → `KHOA`, `OB_EXIT = 6` (11.1 #11b). Pi nên tự kẹp ở ~95 % trần **trước** khi gửi |
 | Timeout heartbeat Pi | 3000 ms — **hằng số có trong code nhưng KHÔNG được dùng** | mất heartbeat không gây ra gì (11.1 #8). Pi vẫn nên phát ≥ 1 Hz (MAVROS tự phát) |
 | `FLOW_RANGE_MAX_MM` | 8000 (8,0 m) | `DISTANCE_SENSOR.max_distance` |
@@ -1342,7 +1348,7 @@ hợp đồng**, để không ai viết code dựa vào chỗ chưa xong.
 | **9** | Thứ tự byte `flight_custom_version` | **FC** | đọc đúng bản build từ log MAVROS | **ĐÃ TRẢ LỜI 09-13** — đổi sang `uint64` little-endian từ 1.2 |
 | **10** | Chuyển [CHỐT] có phải tăng MINOR không (10.3 bước 8) | **hai bên** | số `FC_CTR_VER` | **XONG 09-13** — FC: không tăng; MINOR tăng khi firmware phát thứ mới (10.3 bước 8). **Pi đồng ý** |
 | **11** | Kẹp dải sai: `OB_RX_CLP` tăng với mọi lệnh sang trái; lệnh xuống bị kẹp về 0 | **FC** | **mọi phép thử OFFBOARD** (kẹp dải liên tục → `KHOA`); hạ độ cao bằng setpoint | **FC TRẢ LỜI 09-13** — cả hai do **sàn độ cao 0,3 m** (bàn test ở 0,18 m); lệnh trái chạm sàn vì MAVROS sinh `vz` ≈ 6e-17. Có lỗi thật (Pi mất quyền khi bay trái sát sàn) — **đã sửa, đã nạp 09-13, FC thử trên target: đạt**. **XONG 09-13** — Pi: giải thích đúng (FC giả bắt được `vz` rò); bảng 3.4 đạt ở 0,9 m **và dưới sàn 0,17 m** — bản sửa đã chạy. Chuỗi `KEP_DAI` để 12.B |
-| **12** | **Hạ cánh chính xác do Pi đọc marker** — pha `HA_CANH` trong OFFBOARD, cổng DISARM theo độ cao (≤ 20 cm trên mặt đất) | **hai bên** | hạ cánh chính xác 12.B; nợ Pi P1 | **[ĐỀ XUẤT — FC 09-13, theo quyết định chủ dự án]** — chờ Pi phản hồi, FC **chưa viết code** (10.3 bước 3). Xem chi tiết |
+| **12** | **Hạ cánh chính xác do Pi đọc marker** — Pi hạ bằng setpoint thường; cổng DISARM theo độ cao (≤ 20 cm trên mặt đất) | **hai bên** | hạ cánh chính xác 12.B; nợ Pi P1 | **Phần (a) ĐÃ LÀM 09-13** theo lệnh chủ dự án: bỏ sàn + xuống chậm sát đất, nạp, FC thử trên target. **Phần (d)–(f) cổng DISARM + `OB_DIS_RDY`: [ĐỀ XUẤT]** — chờ Pi, FC **chưa viết code**. Xem chi tiết |
 
 **Chi tiết #3 — trả lời của FC:** phép đo của Pi **đúng**, câu trả lời đợt 1 của FC **sai**.
 `0x1BFF` (bit từ kế bật) là hành vi đúng thiết kế.
@@ -1584,6 +1590,7 @@ Trả lời ba câu:
   arm/disarm), nên lệnh đó cắt động cơ ngay. Nếu 12.B
   cần hạ bằng setpoint tới đất thì đó là đề xuất đổi bao — ghi vào 11.1, không tự đặt
   `offboard_min_alt_m = 0` (tham số cho phép 0–3 m).
+  *Cập nhật 09-13:* chủ dự án quyết định bỏ sàn — **SÀN ĐÃ BỎ 2026-09-13 (nạp, FC thử trên target)** — xem 11.1 #12a. Pi hạ cánh bằng setpoint.
 - **(b)** `OB_RX_CLP` và `KEP_DAI` **chung điều kiện kẹp giới hạn tốc độ**. "Liên tục" =
   **`offboard_clamp_limit = 20` setpoint hợp lệ liên tiếp đều bị kẹp** (20 Hz → 1 s); **một**
   setpoint không kẹp là đếm lại từ 0. Chỉ gây thoát khi `OB_STATE = 2`. Setpoint bị loại (`REJ`)
@@ -1596,45 +1603,52 @@ Trả lời ba câu:
 **Chi tiết #12 — đề xuất hạ cánh chính xác (FC 09-13) [ĐỀ XUẤT].**
 
 Chủ dự án chốt hướng 09-13: **Pi hạ cánh bằng cách đọc marker.** Các quyết định đã chốt phía chủ dự án:
-(1) Pi báo bắt đầu hạ bằng `MAV_CMD_NAV_LAND`; (2) **Pi** tự nhận ra chạm đất và gửi DISARM — FC
+(1) ~~Pi báo bắt đầu hạ bằng `MAV_CMD_NAV_LAND`~~ — **bỏ 09-13**: chủ dự án bỏ luôn sàn độ cao, nên
+không cần lệnh nào để "mở sàn"; (2) **Pi** tự nhận ra chạm đất và gửi DISARM — FC
 **không** tự disarm, **không** tự phát hiện chạm đất, **không** sửa ga lúc chạm đất; (3) FC **từ chối
 DISARM từ Pi khi máy bay cao hơn mặt đất 20 cm**, ở ≤ 20 cm thì Pi disarm lúc nào cũng được; mã ép
 `param2 = 21196` cắt ở mọi độ cao. *Sửa 09-13: bản trước đề xuất FC tự phát hiện chạm đất — chủ dự án
-chọn cổng theo độ cao cho đơn giản; khung chịu được rơi từ 20 cm.* Phần dưới là
-cách điền FC đề xuất — Pi sửa/đồng ý **trước** khi FC viết code.
+chọn cổng theo độ cao cho đơn giản; khung chịu được rơi từ 20 cm.* Phần (a) đã làm theo lệnh chủ dự
+án; phần (d)–(f) là cách điền FC đề xuất — Pi sửa/đồng ý **trước** khi FC viết code.
 
 **Kiến trúc — đóng luôn nợ P1:** Pi đóng vòng ngang (marker → `vx`/`vy`/`yaw_rate`) và chọn tốc độ
-xuống; FC giữ vòng độ cao, bỏ sàn khi được phép, và canh cửa DISARM. FC **không** xử lý
-`LANDING_TARGET` (149) — bỏ khỏi 9.1 khi chốt. Đây **không** phải chế độ LAND tự động (6.1 vẫn
-đúng: FC không tự đi đâu), mà là một **pha trong OFFBOARD**: không có `custom_mode` mới.
+xuống; FC giữ vòng độ cao, kẹp tốc độ xuống sát đất, và canh cửa DISARM. FC **không** xử lý
+`LANDING_TARGET` (149) — bỏ khỏi 9.1 khi chốt. **Không** có chế độ LAND, **không** có pha hạ cánh,
+**không** có lệnh mới: với FC, hạ cánh chỉ là OFFBOARD bình thường với `vz` hướng xuống.
 
-**a) Vào pha `HA_CANH` — `COMMAND_LONG` `MAV_CMD_NAV_LAND` (21).** Mọi `param` bị bỏ qua.
+**a) Bỏ sàn độ cao — ĐÃ LÀM, nạp 2026-09-13.**
 
-| Điều kiện | `COMMAND_ACK` |
-|---|---|
-| Pi có quyền (`OB_AUTH = 1`), `OB_STATE = 2`, đã arm, `altitude_valid` | `ACCEPTED` — vào `HA_CANH` |
-| đã ở `HA_CANH` | `ACCEPTED` (lặp lại vô hại) |
-| Pi không có quyền | `DENIED` |
-| có quyền nhưng `OB_STATE ≠ 2`, chưa arm, hoặc độ cao không hợp lệ | `TEMPORARILY_REJECTED` |
+Sàn `offboard_min_alt_m = 0,3 m` bỏ hẳn. Lý do: laser nằm đất đã đọc ~0,17 m nên sàn chỉ cao hơn mặt
+đất ~13 cm — bảo vệ rất ít; nó chặn đúng việc Pi cần làm (hạ cánh); và nó sinh ra lỗi 11.1 #11. Tham
+số giữ trong bảng nhưng không còn tác dụng (9.6).
 
-**b) Trong pha `HA_CANH`** — setpoint vẫn là `SET_POSITION_TARGET_LOCAL_NED` như 5.2, không đổi gì:
+Thay bằng **xuống chậm sát đất**: độ cao ước lượng ≤ **1,2 m** (≈ 1 m trên mặt đất) thì tốc độ xuống
+bị kẹp về **0,3 m/s** — mọi lần chạm đất trong OFFBOARD đều nhẹ, dù Pi hạ có chủ đích hay Pi lỗi. Kẹp
+này là kẹp bao: đếm `OB_RX_CLP`, **không** vào chuỗi `KEP_DAI` — Pi gửi cố định −0,5 m/s suốt lúc hạ
+cũng không mất quyền. Trần 5 m giữ nguyên (kèm dải chết 0,01 m/s của #11).
 
-| Mục | Bay thường | `HA_CANH` |
-|---|---|---|
-| Sàn `offboard_min_alt_m` | chặn lệnh xuống | **bỏ** |
-| Tốc độ xuống tối đa | 1,0 m/s | **0,5 m/s** trên 1,0 m; **0,3 m/s** từ 1,0 m trở xuống (hằng số firmware, không thêm tham số) |
-| `vx`, `vy`, `yaw_rate`, trần, thoát `KHOA` | như 6.3, 9.6 | **không đổi** — người lái chạm cần vẫn giành lái |
+**FC thử trên target 09-13** (GDB qua SWD như #11, cấu hình đã lưu còn nguyên sau khi nạp):
 
-Kẹp tốc độ xuống trong `HA_CANH` là **kẹp bao**: đếm `OB_RX_CLP`, **không** vào chuỗi `KEP_DAI` — để
-Pi gửi cố định −1,0 m/s cũng không mất quyền.
+| Độ cao giả lập | Lệnh | `OB_T_UP` | Δ`CLP` | chuỗi `KEP_DAI` |
+|---|---|---|---|---|
+| 0,18 (nằm đất) | xuống 0,3 | −0,300 | 0 | 0 |
+| 0,18 | xuống 0,5 | −0,300 | +1 | 0 |
+| 0,18 | xuống 10 | −0,300 | +1 | 1 (kẹp tốc độ −1,0 trước) |
+| 0,18 | trái 0,5, `vz` = +6e-17 | 0 | 0 | 0 |
+| 0,18 | lên 0,3 | +0,300 | 0 | 0 |
+| 1,19 | xuống 0,8 | −0,300 | +1 | 0 |
+| 1,21 | xuống 0,8 | −0,800 | 0 | 0 |
+| 5,0 (trần) | lên 0,3 | 0 | +1 | 0 |
+| 5,0 | phải 0,5, `vz` = −6e-17 | 0 | 0 | 0 |
+| 5,0 | xuống 0,5 | −0,500 | 0 | 0 |
 
-**c) Rời pha `HA_CANH`** (sàn có hiệu lực lại):
+**Hệ quả Pi cần biết:**
 
-| Sự kiện | Kết quả |
-|---|---|
-| **Huỷ / bay lại:** setpoint có `UP > +0,1 m/s` | rời `HA_CANH`, vẫn `DANG_CHAY`. Pi **không** gửi lệnh lên trong lúc hạ trừ khi huỷ |
-| disarm (bất kỳ đường nào) | rời |
-| OFFBOARD rời `DANG_CHAY` (chạm cần, hết hạn…) | rời — POSHOLD giữ độ cao sát đất, **người lái hạ tiếp** |
+- Pi **hạ cánh bằng `SET_POSITION_TARGET_LOCAL_NED` như 5.2**, không cần lệnh gì thêm. Nên tự kẹp
+  ≤ 0,3 m/s dưới ~1,2 m laser (P9) để không chạm `OB_RX_CLP`.
+- **Pi lỗi ra lệnh xuống giờ đưa máy bay chạm đất** (nhẹ, 0,3 m/s) và nằm đó với cánh quay ~27 % ga,
+  OFFBOARD vẫn chạy. Trước đây sàn giữ máy bay lơ lửng ~13 cm. Người lái cắt bằng ch5, hoặc Pi disarm.
+- **Đừng lơ lửng lâu dưới ~0,25 m laser:** flow bị loại dưới 0,20 m (h), kênh ngang không giữ chỗ.
 
 **d) Cổng DISARM theo độ cao — "gần đất".**
 
@@ -1673,15 +1687,13 @@ tiêu chí chạm đất.** Lúc Pi gửi DISARM, cánh vẫn quay ~27–55 % ga
 | gần đất theo (d) | `ACCEPTED` |
 | còn lại (cao hơn 20 cm, hoặc độ cao không hợp lệ) | `TEMPORARILY_REJECTED` |
 
-Người lái cắt bằng ch5 **không đổi** — cổng này chỉ áp cho lệnh từ Pi. Cổng áp cả khi **không** ở pha
-`HA_CANH` (ví dụ Pi disarm nhầm giữa lúc bay thường).
+Người lái cắt bằng ch5 **không đổi** — cổng này chỉ áp cho lệnh từ Pi, ở mọi lúc (hạ cánh hay bay
+thường).
 
 > **Hệ quả cần biết:** lệnh DISARM Pi dùng hiện nay (không `param2`) sẽ bị **từ chối khi đang bay**.
 > Nếu Pi đang coi DISARM là nút cắt khẩn cấp (ví dụ `failsafe_monitor`), phải thêm `param2 = 21196`.
 
-**g) Báo trạng thái pha:** thêm `NAMED_VALUE_INT` `OB_LAND` (0 = không, 1 = đang `HA_CANH`) vào nhóm 2 Hz;
-`STATUSTEXT` `OFFBOARD: HA_CANH` / `OFFBOARD: HUY_HA_CANH` (NOTICE). Mã rời pha không cần `OB_EXIT`
-mới vì `HA_CANH` không phải trạng thái OFFBOARD riêng.
+**g)** ~~`OB_LAND`, `STATUSTEXT` pha hạ cánh~~ — **bỏ 09-13** cùng pha `HA_CANH`.
 
 **h) Rủi ro chưa ai đo — ghi vào 11.4 khi chốt:**
 
@@ -1703,7 +1715,9 @@ mới vì `HA_CANH` không phải trạng thái OFFBOARD riêng.
 - **Mặt nền cao hơn sàn** (bục, hộp đặt marker): laser đo tới mặt ngay dưới, nên cổng 20 cm tính theo
   mặt đó — đúng với độ cao rơi thật.
 
-Phiên bản: thêm lệnh nhận `NAV_LAND`, tên `OB_LAND`, `OB_DIS_RDY` → MINOR (**1.3**). Cổng DISARM đổi
+Phiên bản: bỏ sàn + xuống chậm (a) là đổi giới hạn bao, không đổi tên/trường → **không tăng số**, firmware
+đang chạy vẫn `10200` (phân biệt bằng lịch sử phiên bản: nạp 09-13). Tên `OB_DIS_RDY` → MINOR (**1.3**) khi
+làm. Cổng DISARM đổi
 hành vi một lệnh đang dùng (DISARM trên không từ `ACCEPTED` thành `TEMPORARILY_REJECTED`) — theo 10.1 là
 **MAJOR**, trừ khi Pi xác nhận chưa node nào dựa vào disarm trên không. **Xin Pi trả lời.**
 
@@ -1928,7 +1942,7 @@ ch1–8 = 1500/1500/1503/1498/2000/2000/999/2000 — **khớp FC**. Qua `rc_io`:
 | P6 | Watchdog nội bộ: `position_controller_node` ngừng phát setpoint khi `mission_manager_node` treo (FC không dùng heartbeat Pi — 11.1 #8) | chưa viết |
 | P7 | Bật `rc_io` khi FC phát `RC_CHANNELS`; không bao giờ publish `/mavros/rc/override` | **XONG 09-13** — bật cùng `odometry` trong `mavros.yaml` |
 | P8 | Subscriber `/mavros/debug_value/named_value_int` phải có **depth ≥ 10** (10 tên tới một cụm, 4.1) — áp khi viết `mission_manager_node` (P2) | chưa có node nào subscribe |
-| P9 | `position_controller_node` tự kẹp setpoint ở ~95 % trần 9.6 (±1,9 / ±0,95 m/s, ±85 °/s) và không ra lệnh xuống khi dưới `offboard_min_alt_m` — tránh `KEP_DAI` (11.1 #11) | chưa viết |
+| P9 | `position_controller_node` tự kẹp setpoint ở ~95 % trần 9.6 (±1,9 / ±0,95 m/s, ±85 °/s) ~~và không ra lệnh xuống khi dưới `offboard_min_alt_m`~~ — tránh `KEP_DAI` (11.1 #11). *FC 09-13: sàn đã bỏ — thay bằng tự kẹp xuống ≤ 0,3 m/s khi laser ≤ 1,2 m (9.6)* | chưa viết |
 
 ### 11.4 Chưa ai đo — cả hai bên nên biết
 
@@ -1994,7 +2008,10 @@ ros2 topic echo /mavros/state --once
 - [x] **Quy trình kiểm dấu mục 3.4** — bốn trục đúng dấu, `OK`/`REJ` đúng *(Pi đo 09-13, firmware 1.2)*
 - [x] `OB_RX_CLP` và kẹp tốc độ đúng cả hai chiều mỗi trục — *Pi đo lại 09-13 ở 0,9 m, bản FC đã sửa #11*
 - [x] Bao độ cao dưới sàn: drone nằm bàn (0,17 m), "trái 0,5" → Δ`CLP` = 0; "xuống 0,3" → `OB_T_UP = 0`,
-      `CLP` tăng; "xuống 0,005" → Δ`CLP` = 0 — *Pi đo 09-13, đạt*
+      `CLP` tăng; "xuống 0,005" → Δ`CLP` = 0 — *Pi đo 09-13, đạt* — **lịch sử: sàn đã bỏ 09-13**
+- [ ] Xuống chậm sát đất (firmware sau 09-13): nằm bàn, "xuống 0,3" → `OB_T_UP = −0,300`, Δ`CLP` = 0;
+      "xuống 0,5" → `−0,300`, `CLP` tăng; kê cao > 1,2 m laser, "xuống 0,8" → `−0,800` — *FC đã thử
+      trên target qua SWD, chờ Pi đo qua MAVROS*
 
 #### A4. Trạng thái OFFBOARD (sau khi FC phát `NAMED_VALUE_INT`)
 
@@ -2069,6 +2086,7 @@ Lệnh đo nhanh: xem mục 12.A1.
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.2 *(FC bỏ sàn độ cao, không tăng số)* | 2026-09-13 | Theo lệnh chủ dự án: **bỏ sàn `offboard_min_alt_m`** (tham số giữ, không tác dụng) và **bỏ `MAV_CMD_NAV_LAND`/pha `HA_CANH`/`OB_LAND`** khỏi đề xuất #12 — Pi hạ cánh bằng setpoint thường. Thay sàn bằng **xuống chậm ≤ 0,3 m/s khi laser ≤ 1,2 m** (kẹp bao, không vào `KEP_DAI`). Đã nạp, FC thử 10 ca trên target qua SWD, cấu hình đã lưu còn nguyên. Cập nhật 9.6, 3.4, P9, 12.A3. Cổng DISARM 20 cm + `OB_DIS_RDY` vẫn là đề xuất. |
 | 1.2 *(FC sửa đề xuất #12, không tăng số)* | 2026-09-13 | Theo chủ dự án: bỏ phát hiện chạm đất phía FC và đổi nghĩa `landed_state`; thay bằng **cổng DISARM theo độ cao ≤ 20 cm trên mặt đất** + `OB_DIS_RDY`. FC **không** sửa ga lúc chạm đất — ghi rõ ga còn ~27 % nên Pi không dùng "ga thấp" làm tiêu chí; Pi tự nhận ra chạm đất (laser ≈ mốc, vz ≈ 0, ~1 s). Hỏi Pi: cổng DISARM có thành MAJOR không. |
 | 1.2 *(FC chốt `min_distance`, không tăng số)* | 2026-09-13 | Chủ dự án xác nhận laser đọc ~17 cm khi nằm đất → `DISTANCE_SENSOR.min_distance` 1 → **15** cm (đã nạp, đo trên target: `min=15`, `cur=18`). Bỏ mục `min_distance` khỏi 11.4. Sửa rủi ro 11.1 #12g: độ cao vẫn hợp lệ khi nằm đất. Đổi giá trị số tạm đã báo trước, không đổi nghĩa trường → không tăng số. |
 | 1.2 *(FC đề xuất hạ cánh, không tăng số)* | 2026-09-13 | **Đề xuất 11.1 #12** theo quyết định chủ dự án: Pi hạ cánh bằng marker. `MAV_CMD_NAV_LAND` vào pha `HA_CANH` trong OFFBOARD (bỏ sàn, xuống ≤ 0,5/0,3 m/s); FC phát hiện chạm đất → `landed_state`; DISARM từ Pi chỉ nhận khi `ON_GROUND`, trừ `param2 = 21196`; `OB_LAND`. Chốt kiến trúc P1: FC không xử lý `LANDING_TARGET`. Chờ Pi phản hồi trước khi viết code; hỏi Pi về đổi nghĩa `landed_state` (MAJOR?). |
