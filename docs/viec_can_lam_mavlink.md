@@ -220,7 +220,7 @@ Tần số 9 bản tin **không đổi**, 7,8 KB/s (8,5%), 0 khung hỏng. Khác
 ### Việc mới phát sinh từ đợt trả lời
 
 - [x] **B5 — Chạy quy trình kiểm dấu.** *(XONG phần dấu 2026-09-13 qua `OB_T_*`, firmware 1.2 —
-      giao ước 3.4. Còn lỗi kẹp dải phía FC: giao ước 11.1 #11.)* Phía FC cung cấp cách đóng B1/B2 **bằng phép
+      giao ước 3.4. 11.1 #11: "lỗi kẹp dải" là sàn độ cao 0,3 m, Pi chạy lại đạt ở 0,9 m; còn ca dưới sàn.)* Phía FC cung cấp cách đóng B1/B2 **bằng phép
       đo, không cần arm, không cần cánh quạt**: Pi phát setpoint lặp, gõ `offboard` trên
       console USART1, đối chiếu `vtoi_mms` / `vphai_mms` / `vlen_mms` / `yaw_mdps`.
       Kèm ba bộ đếm `nhan` / `loai` / `kep` để tách ba kiểu hỏng. **Việc đáng làm nhất

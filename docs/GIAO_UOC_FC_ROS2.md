@@ -214,7 +214,7 @@ Vì FC **không đọc trường `yaw`** (mục 5.2), toàn bộ khác biệt bi
 và frame 8 của MAVROS trở thành vô hại. `yaw_rate` là đại lượng thuần hệ thân, không phụ
 thuộc frame.
 
-### 3.4 Quy trình kiểm dấu — đóng mục này bằng phép đo, không cần cánh quạt [CHỐT dấu — Pi đo 09-13; kẹp dải còn lỗi, 11.1 #11]
+### 3.4 Quy trình kiểm dấu — đóng mục này bằng phép đo, không cần cánh quạt [CHỐT dấu và kẹp tốc độ — Pi đo 09-13; ca dưới sàn độ cao chờ, 11.1 #11]
 
 `ctrl_offboard_set_target()` nhận và lưu setpoint **bất kể máy bay ở trạng thái nào**, kể
 cả `KHOA` và chưa arm. Lệnh CLI `offboard` trên console USART1 in mục tiêu đã nhận bằng
@@ -259,7 +259,7 @@ vì suy luận qua tầng biến đổi của MAVROS.
 > **Ngay bây giờ — làm chung một phiên.** Pi phát setpoint, phía FC gõ `offboard` trên console
 > và đọc lại số. Phía FC đọc được cả qua SWD, không cần chạm vào máy bay.
 >
-> **[CHỐT `OB_T_*`, `OB_RX_OK`, `OB_RX_REJ` — Pi đo 09-13; `OB_RX_CLP` còn lỗi, 11.1 #11] Cho Pi tự làm được một mình — đi qua
+> **[CHỐT `OB_T_*`, `OB_RX_*` — Pi đo 09-13; `OB_RX_CLP` dưới sàn độ cao chờ, 11.1 #11] Cho Pi tự làm được một mình — đi qua
 > `NAMED_VALUE_FLOAT`, KHÔNG qua bản tin vị trí chuẩn.** *Pi đồng ý cả lập luận bỏ `POSITION_TARGET_LOCAL_NED`.
 > Pi đã kiểm bằng FC giả: topic `/mavros/debug_value/named_value_float` có sẵn, tên 9 ký tự
 > `OB_T_YAWR` và giá trị âm `-30.0` đi qua nguyên văn (`type = 3`). Không cần Pi sửa gì thêm.
@@ -312,6 +312,34 @@ vì suy luận qua tầng biến đổi của MAVROS.
 > Kết luận: **cột "kỳ vọng" của bảng 3.4 đúng cả bốn dòng** — MAVROS đổi dấu đúng như 3.2, kể cả
 > `yaw_rate` (trước đây chỉ là suy diễn). Mục 3.1–3.2 đóng bằng phép đo. Hai lỗi kẹp dải ghi ở
 > 11.1 #11 — **chặn mọi phép thử OFFBOARD** vì kẹp dải liên tục đưa về `KHOA` (`OB_EXIT = 6`).
+>
+> *Cập nhật sau trả lời FC (11.1 #11):* hai "lỗi" trên là **sàn độ cao 0,3 m** — lúc đó drone nằm
+> bàn 0,18 m. Không phải lỗi kẹp tốc độ.
+>
+> **Pi chạy lại 09-13, FC đã nạp bản sửa, drone kê cao (laser 0,89–0,90 m).** Cùng đường đo, một
+> `mavros_node`, bộ đếm FC từ 0 sau reset:
+>
+> | Pi ra lệnh (FLU) | `OB_T_*` nhận | Δ`CLP` | Kỳ vọng FC |
+> |---|---|---|---|
+> | tới / lùi 0,5 | `FWD` ±0,500 | 0 | đạt |
+> | trái 0,5 / 0,3 / 0,1, tới 0,5 kèm trái 0,001 | `RGT` −0,500 / −0,300 / −0,100 / −0,001 | **0** | đạt |
+> | phải 0,5 | `RGT` +0,500 | 0 | đạt |
+> | lên 0,3 / xuống 0,3 / xuống 0,005 | `UP` +0,300 / **−0,300** / −0,005 | 0 | đạt |
+> | quay trái / phải 30 °/s | `YAWR` −30,00 / +30,00 | 0 | đạt |
+> | lệnh `yaw` tuyệt đối (`0x03C7`) | không đổi | 0 (Δ`REJ` +37, Δ`OK` 0) | đạt |
+> | tới / lùi / trái / phải 10 | `FWD`/`RGT` ±2,000 | +37 | đạt |
+> | lên 10 / xuống 10 | `UP` +1,000 / **−1,000** | +37 | đạt |
+> | quay trái / phải 1000 °/s | `YAWR` −90,00 / **+90,00** | +37 | đạt — yaw đối xứng |
+> | tới 1,9 (95 % trần) | `FWD` +1,900 | 0 | đạt |
+>
+> **Kiểm riêng giải thích `vz` rò của MAVROS — không chạm FC thật:** `mavros_node` Jazzy nối FC giả
+> `pymavlink` qua UDP, bắt `SET_POSITION_TARGET_LOCAL_NED` trên dây. FLU trái 0,5 → `vy = -0,5`,
+> **`vz = +6,1232e-17`**; phải 0,5 → `vz = -6,1232e-17`; trái 0,1 → `+1,22e-17`; tới 0,5 kèm trái 0,001
+> → `+1,22e-19`; tới 0,5 → `vz = 0`. **Khớp đúng giải thích FC.**
+>
+> Giới hạn của lần chạy này: ở 0,9 m sàn không tác dụng, nên firmware **chưa sửa** cũng cho đúng
+> bảng trên. Lần chạy này xác nhận **giải thích** và **bao tốc độ**, chưa phân biệt được bản sửa.
+> Ca phân biệt: drone **dưới 0,3 m**, "trái 0,5" → bản sửa Δ`CLP` = 0, bản cũ Δ`CLP` tăng (12.A3).
 >
 > **Vì sao KHÔNG dùng `POSITION_TARGET_LOCAL_NED` (85) — bản 09-13 trước đã đề xuất nhầm.** Bản
 > tin đó đi qua MAVROS nên bị đổi hệ quy chiếu **cả hai chiều**: Pi publish FLU → MAVROS đổi sang
@@ -1048,7 +1076,7 @@ So khớp **nguyên văn, phân biệt hoa thường**.
 | `OB_ARM_BLK` | INT | FC | bitmask lý do chưa sẵn sàng arm (6.3) — bảng bit ngay dưới | [CHỐT định dạng] — Pi đo 09-13 (`0x0480`); các bit khác chờ phiên gạt công tắc |
 | `OB_RX_OK` | INT | FC | số setpoint hợp lệ đã nhận, cộng dồn (3.4) | [CHỐT] — Pi đo 09-13, kiểm dấu 3.4 |
 | `OB_RX_REJ` | INT | FC | số setpoint bị loại vì sai `type_mask`/frame/NaN (3.4) | [CHỐT] — Pi đo 09-13 (lệnh `yaw` tuyệt đối → tăng) |
-| `OB_RX_CLP` | INT | FC | số setpoint bị kẹp dải — **gồm cả kẹp theo bao độ cao** (3.4, 9.6) | **[THOẢ THUẬN — Pi đo 09-13: đếm sai khi `RGT < 0`, 11.1 #11]** |
+| `OB_RX_CLP` | INT | FC | số setpoint bị kẹp dải — **gồm cả kẹp theo bao độ cao** (3.4, 9.6) | [CHỐT kẹp tốc độ — Pi đo lại 09-13 ở 0,9 m]; ca dưới sàn độ cao chờ (11.1 #11) |
 | `OB_T_FWD` | FLOAT | FC | mục tiêu bay tới đã nhận, m/s (3.4) | [CHỐT] — Pi đo 09-13, dấu đúng (3.4) |
 | `OB_T_RGT` | FLOAT | FC | mục tiêu bay sang phải, m/s (3.4) | [CHỐT] — Pi đo 09-13, dấu đúng (3.4) |
 | `OB_T_UP` | FLOAT | FC | mục tiêu đi lên, m/s (3.4) | [CHỐT] — Pi đo 09-13, dấu đúng (3.4) |
@@ -1136,9 +1164,9 @@ Hai trường còn lại, [CHỐT — Pi đo trên dây và qua MAVROS 09-13, b�
 | `offboard_switch_channel` | mặc định **`7`** (= ch8, đếm từ 0) | `-1` thì OFFBOARD không bao giờ vào được |
 | `rc_mode_channel` | `5` (= ch6) | ch6 phải ở nấc POSHOLD (giá trị thô ≥ 1401) thì Pi mới arm và vào OFFBOARD được; `-1` thì không bao giờ được |
 | `offboard_timeout_ms` | 500 | quyết định tần số tối thiểu Pi phải phát setpoint |
-| `offboard_max_vel_mps` | **2,0** m/s (tham số 0,1–3,0) | kẹp `OB_T_FWD`, `OB_T_RGT` đối xứng ± — mỗi trục riêng, **không** kẹp theo độ lớn vector |
-| `offboard_max_climb_mps` | **1,0** m/s (0,1–2,0) | kẹp `OB_T_UP` đối xứng ± |
-| `offboard_max_yaw_dps` | **90** °/s (0–180) | kẹp `OB_T_YAWR` đối xứng ± |
+| `offboard_max_vel_mps` | **2,0** m/s (tham số 0,1–3,0) | kẹp `OB_T_FWD`, `OB_T_RGT` đối xứng ± — mỗi trục riêng, **không** kẹp theo độ lớn vector. *Pi đo 09-13: khớp cả bốn chiều; 1,9 không kẹp* |
+| `offboard_max_climb_mps` | **1,0** m/s (0,1–2,0) | kẹp `OB_T_UP` đối xứng ± — *Pi đo 09-13 ở 0,9 m: +1,000 / −1,000* |
+| `offboard_max_yaw_dps` | **90** °/s (0–180) | kẹp `OB_T_YAWR` đối xứng ± — *Pi đo 09-13: −90,00 / +90,00* |
 | `offboard_min_alt_m` / `offboard_max_alt_m` | **0,3** / **5,0** m | **bao độ cao**, chỉ áp khi `altitude_valid`: dưới sàn chỉ được lên, trên trần chỉ được xuống; lệnh ngược chiều → `climb = 0`, đếm `OB_RX_CLP`. Pi **không** hạ cánh bằng setpoint (11.1 #11a) |
 | `offboard_clamp_limit` | **20** setpoint liên tiếp | kẹp tốc độ liên tiếp chừng đó khung → `KHOA`, `OB_EXIT = 6` (11.1 #11b). Pi nên tự kẹp ở ~95 % trần **trước** khi gửi |
 | Timeout heartbeat Pi | 3000 ms — **hằng số có trong code nhưng KHÔNG được dùng** | mất heartbeat không gây ra gì (11.1 #8). Pi vẫn nên phát ≥ 1 Hz (MAVROS tự phát) |
@@ -1295,7 +1323,7 @@ hợp đồng**, để không ai viết code dựa vào chỗ chưa xong.
 | **8** | Timeout heartbeat Pi 3000 ms không được dùng | **FC** → hai bên chốt | hiểu đúng lưới an toàn | [ĐỀ XUẤT] — xem chi tiết |
 | **9** | Thứ tự byte `flight_custom_version` | **FC** | đọc đúng bản build từ log MAVROS | **ĐÃ TRẢ LỜI 09-13** — đổi sang `uint64` little-endian từ 1.2 |
 | **10** | Chuyển [CHỐT] có phải tăng MINOR không (10.3 bước 8) | **hai bên** | số `FC_CTR_VER` | **XONG 09-13** — FC: không tăng; MINOR tăng khi firmware phát thứ mới (10.3 bước 8). **Pi đồng ý** |
-| **11** | Kẹp dải sai: `OB_RX_CLP` tăng với mọi lệnh sang trái; lệnh xuống bị kẹp về 0 | **FC** | **mọi phép thử OFFBOARD** (kẹp dải liên tục → `KHOA`); hạ độ cao bằng setpoint | **FC TRẢ LỜI 09-13** — cả hai do **sàn độ cao 0,3 m** (bàn test ở 0,18 m); lệnh trái chạm sàn vì MAVROS sinh `vz` ≈ 6e-17. Có lỗi thật (Pi mất quyền khi bay trái sát sàn) — **đã sửa, đã nạp 09-13, FC thử trên target: đạt**. Chờ Pi chạy lại bảng 3.4 |
+| **11** | Kẹp dải sai: `OB_RX_CLP` tăng với mọi lệnh sang trái; lệnh xuống bị kẹp về 0 | **FC** | **mọi phép thử OFFBOARD** (kẹp dải liên tục → `KHOA`); hạ độ cao bằng setpoint | **FC TRẢ LỜI 09-13** — cả hai do **sàn độ cao 0,3 m** (bàn test ở 0,18 m); lệnh trái chạm sàn vì MAVROS sinh `vz` ≈ 6e-17. Có lỗi thật (Pi mất quyền khi bay trái sát sàn) — **đã sửa, đã nạp 09-13, FC thử trên target: đạt**. **Pi 09-13: giải thích đúng** (FC giả bắt được `vz` rò; bảng 3.4 ở 0,9 m đạt). Còn ca dưới sàn để phân biệt bản sửa — cần người hạ drone |
 
 **Chi tiết #3 — trả lời của FC:** phép đo của Pi **đúng**, câu trả lời đợt 1 của FC **sai**.
 `0x1BFF` (bit từ kế bật) là hành vi đúng thiết kế.
@@ -1541,6 +1569,24 @@ Trả lời ba câu:
   (ví dụ 95 %) vì phép so của FC là `≠` trên `float` — gửi đúng bằng trần là không kẹp, nhưng
   làm tròn phía Pi/MAVROS có thể đẩy vượt.
 
+**Chi tiết #11 — Pi kiểm lại 09-13.** Kết quả ở 3.4.
+
+- **Giải thích `vz` rò: đúng**, Pi bắt được trên dây bằng FC giả: trái 0,5 → `vz = +6,1232e-17`.
+- **Bảng 3.4 ở 0,9 m: đạt từng ca** FC kỳ vọng, gồm xuống 0,3 → `−0,300`, xuống 10 → `−1,000`, yaw phải
+  1000 → `+90,00`, tới 1,9 không kẹp.
+- **Chưa kiểm được bản sửa.** Ở 0,9 m, bản chưa sửa cho cùng kết quả. Cần một lần drone nằm bàn
+  (< 0,3 m) chạy "trái 0,5", "xuống 0,3", "xuống 0,005": kỳ vọng Δ`CLP` = 0 / tăng (`UP` = 0) / 0.
+  Việc cần người hạ drone, Pi chạy khi có người. Chuỗi `KEP_DAI` chỉ đo được khi `OB_STATE = 2` —
+  để 12.B.
+- **Trên dây không phân biệt được bản sửa với bản cũ** (cùng `10200`, cùng hash vì `FC_DIRTY = 1`).
+  Pi chỉ thấy FC đã khởi động lại (`time_boot_ms` ≈ 244 s lúc đo). Không đề nghị đổi gì — nhắc lại
+  lý do bản bay phải build từ commit sạch (9.5).
+- **(a) Sàn 0,3 m và hạ cánh:** Pi chấp nhận cho giai đoạn này. Ghi chú cho 12.B, chưa phải đề
+  xuất: DISARM ở 0,3–0,5 m là **thả rơi** máy bay; khi thiết kế hạ cánh chính xác Pi sẽ đưa đề
+  xuất riêng vào 11.1 (hạ bằng setpoint dưới sàn khi có marker, hoặc giao cho FC).
+- **(b), (c):** đồng ý. `position_controller_node` sẽ tự kẹp ở 95 % trần và **không** gửi lệnh đi
+  xuống khi độ cao dưới sàn — ghi thành P9.
+
 ### 11.2 Đã thoả thuận, chờ hiện thực — thứ tự đã chốt hai bên
 
 | # | Việc | Chủ | Mở khoá gì |
@@ -1740,6 +1786,7 @@ ch1–8 = 1500/1500/1503/1498/2000/2000/999/2000 — **khớp FC**. Qua `rc_io`:
 | P6 | Watchdog nội bộ: `position_controller_node` ngừng phát setpoint khi `mission_manager_node` treo (FC không dùng heartbeat Pi — 11.1 #8) | chưa viết |
 | P7 | Bật `rc_io` khi FC phát `RC_CHANNELS`; không bao giờ publish `/mavros/rc/override` | **XONG 09-13** — bật cùng `odometry` trong `mavros.yaml` |
 | P8 | Subscriber `/mavros/debug_value/named_value_int` phải có **depth ≥ 10** (10 tên tới một cụm, 4.1) — áp khi viết `mission_manager_node` (P2) | chưa có node nào subscribe |
+| P9 | `position_controller_node` tự kẹp setpoint ở ~95 % trần 9.6 (±1,9 / ±0,95 m/s, ±85 °/s) và không ra lệnh xuống khi dưới `offboard_min_alt_m` — tránh `KEP_DAI` (11.1 #11) | chưa viết |
 
 ### 11.4 Chưa ai đo — cả hai bên nên biết
 
@@ -1802,7 +1849,9 @@ ros2 topic echo /mavros/state --once
 - [x] `NAV_TAKEOFF (22)` → `UNSUPPORTED`, dưới 0,01 s
 - [x] `DISARM (400, p1=0)` → `ACCEPTED`, dưới 0,01 s, `armed` giữ `False`
 - [x] **Quy trình kiểm dấu mục 3.4** — bốn trục đúng dấu, `OK`/`REJ` đúng *(Pi đo 09-13, firmware 1.2)*
-- [ ] `OB_RX_CLP` và kẹp dải đúng cả hai chiều mỗi trục — **chờ FC sửa 11.1 #11**, chạy lại bảng 3.4
+- [x] `OB_RX_CLP` và kẹp tốc độ đúng cả hai chiều mỗi trục — *Pi đo lại 09-13 ở 0,9 m, bản FC đã sửa #11*
+- [ ] Bao độ cao dưới sàn: drone nằm bàn (< 0,3 m), "trái 0,5" → Δ`CLP` = 0; "xuống 0,3" → `OB_T_UP = 0`,
+      `CLP` tăng; "xuống 0,005" → Δ`CLP` = 0 — **cần người hạ drone**
 
 #### A4. Trạng thái OFFBOARD (sau khi FC phát `NAMED_VALUE_INT`)
 
@@ -1877,6 +1926,7 @@ Lệnh đo nhanh: xem mục 12.A1.
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.2 *(Pi kiểm trả lời #11, không tăng số)* | 2026-09-13 | **Pi kiểm trả lời FC 11.1 #11:** FC giả qua UDP bắt được MAVROS gửi `vz = +6,1232e-17` cho lệnh trái 0,5 — giải thích đúng. Chạy lại bảng 3.4 trên FC đã nạp bản sửa, drone kê 0,9 m: đạt mọi ca (xuống −0,300, xuống 10 → −1,000, yaw ±90, tới 1,9 không kẹp). Chưa phân biệt được bản sửa — cần ca dưới sàn 0,3 m (12.A3, cần người hạ drone). `OB_RX_CLP` → [CHỐT] kẹp tốc độ. Pi chấp nhận sàn 0,3 m giai đoạn này, ghi chú DISARM ở 0,3 m là thả rơi cho 12.B. Thêm P9 (tự kẹp 95 %). |
 | 1.2 *(FC trả lời #11, không tăng số)* | 2026-09-13 | **FC trả lời 11.1 #11:** cả hai hiện tượng do bao độ cao — drone trên bàn 0,18 m dưới sàn `offboard_min_alt_m = 0,3`; lệnh trái chạm sàn vì MAVROS rò `vz` ≈ 6e-17 từ phép quay quaternion. Kẹp tốc độ đối xứng, không có lỗi cận dưới. **Lỗi thật lộ ra:** bay trái hoặc giữ độ cao sát sàn làm Pi mất quyền (`KEP_DAI`) sau 1 s. **Sửa firmware, nạp 09-13, FC thử trên target qua SWD (12 ca, đạt):** dải chết 0,01 m/s khi xét sàn/trần; kẹp bao độ cao không còn dồn vào `KEP_DAI` (vẫn đếm `OB_RX_CLP`). Chờ Pi chạy lại bảng 3.4 (drone đang kê cao 0,9 m). Ghi giới hạn bao vào 9.6; timestamp bản tin 1.2 vào 4.4. |
 | 1.2 *(Pi nghiệm thu, không tăng số)* | 2026-09-13 | **Phía Pi đo firmware 1.2** trên dây (`pymavlink` 40 s + 60 s) và qua MAVROS. [CHỐT]: `FC_CTR_VER = 10200`, `FC_DIRTY`, thứ tự byte hash `uint64` LE (MAVROS in đúng chiều), `RC_CHANNELS` 5 Hz, `OB_T_*`, `OB_RX_OK`, `OB_RX_REJ`; `OB_ARM_RDY`/`OB_ARM_BLK` chốt định dạng (thấy `0`/`0x0480`, khớp FC). **Kiểm dấu 3.4 xong qua `OB_T_*`: bốn trục đúng dấu** — 11.1 #2 đóng phần dấu. **Lỗi mới 11.1 #11:** `OB_RX_CLP` tăng với mọi lệnh sang trái dù không kẹp; lệnh xuống bị kẹp về 0; giới hạn bao đo được ngang 2,0 / lên 1,0 m/s / yaw 90 °/s chưa có trong tài liệu. `ODOMETRY`: khớp trên dây và qua MAVROS, kiểm chéo phép xoay với `LOCAL_POSITION_NED`; Pi đồng ý ba chỗ điền khác bảng (sửa bảng); còn thử dấu bằng tay. Pi đồng ý 11.1 #10. Bật plugin `odometry`, `rc_io` (8.3, P7 xong). Băng thông 18,7 %. Bẫy QoS: 10 tên `NAMED_VALUE_INT` tới một cụm, depth 5 mất `OB_AUTH` → P8 depth ≥ 10. |
 | **1.2** | 2026-09-13 | **MINOR — FC hiện thực đợt A–E**, firmware phát `FC_CTR_VER = 10200`. **A:** `OB_ARM_RDY`, `OB_ARM_BLK`; bảng bit đăng ký ở 9.3, thêm bit `0x1000` chờ ch5; trả lời hai đề nghị Pi (6.3) — `OB_ARM_RDY = 1` ⇔ `ACCEPTED` trừ trễ ≤ 0,5 s, kèm bảng suy `result` từ bit. **B:** `OB_T_FWD/RGT/UP/YAWR` (`NAMED_VALUE_FLOAT`), `OB_RX_OK/REJ/CLP`, nhóm 2 Hz riêng (3.4). **C:** `FC_DIRTY`; `flight_custom_version` ghi `uint64` little-endian (9.5). **D:** `ODOMETRY` 30 Hz — ba chỗ điền khác bảng chờ Pi xác nhận: xoay vận tốc bằng cả thái độ, `reset_counter = 0`, chi tiết covariance (11.2). **E:** `RC_CHANNELS` 5 Hz. Tất cả đo trên target bằng giải mã bộ đệm TX qua SWD; chờ Pi đo để chuyển [CHỐT]. |
