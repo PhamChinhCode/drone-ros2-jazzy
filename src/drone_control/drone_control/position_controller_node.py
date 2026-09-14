@@ -22,7 +22,7 @@ Hop dong voi FC (docs/GIAO_UOC_FC_ROS2.md 3.2, 5.2, 5.3, 6.2, 9.6):
 import math
 
 import rclpy
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, TwistStamped
 from mavros_msgs.msg import PositionTarget
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
@@ -35,6 +35,7 @@ from drone_control.setpoint_limits import limit_velocity
 FRAME_BODY_NED = 8
 TYPE_MASK_VELOCITY_YAWRATE = 0x07C7
 RANGE_STALE_S = 0.5             # laser 20 Hz; qua han coi nhu mat laser -> xuong cham
+VELOCITY_STALE_S = 0.5          # mission_manager_node phat 5 Hz; qua han -> bo, ve duong vi tri/0
 
 SOURCE_MISSION = 'mission'
 SOURCE_LANDING = 'landing'
@@ -66,10 +67,15 @@ class PositionControllerNode(Node):
         self.ramp_started_at = None
         self.range_m = None
         self.range_stamp_s = None
+        self.velocity_setpoint = None
+        self.velocity_stamp_s = None
 
         self.create_subscription(Odometry, '/odometry/filtered', self.on_odom, SENSOR_QOS)
         self.create_subscription(Range, '/mavros/mtf01p', self.on_range, SENSOR_QOS)
         self.create_subscription(PoseStamped, '/mission/setpoint', self.on_mission_setpoint, EVENT_QOS)
+        # Lenh van toc FLU truc tiep (cat/ha canh) - uu tien hon duong vi tri khi con moi.
+        self.create_subscription(
+            TwistStamped, '/mission/velocity_setpoint', self.on_velocity_setpoint, SENSOR_QOS)
         # Pose marker da xac thuc ID tu landing_target_bridge_node (P1).
         self.create_subscription(
             PoseStamped, '/landing_target/pose', self.on_landing_target, SENSOR_QOS)
@@ -99,6 +105,10 @@ class PositionControllerNode(Node):
     def on_mission_setpoint(self, msg):
         self.mission_setpoint = msg
 
+    def on_velocity_setpoint(self, msg):
+        self.velocity_setpoint = msg
+        self.velocity_stamp_s = self.get_clock().now().nanoseconds / 1e9
+
     def on_landing_target(self, msg):
         self.landing_target = msg
 
@@ -112,8 +122,12 @@ class PositionControllerNode(Node):
 
         TODO: nguon SOURCE_LANDING (P1 - Pi dong vong van toc theo marker) va ramp khi doi nguon.
         """
-        vx = vy = vz = 0.0
-        if self.odom is not None and self.mission_setpoint is not None:
+        vx = vy = vz = yaw_rate = 0.0
+        now_s = self.get_clock().now().nanoseconds / 1e9
+        if self.velocity_stamp_s is not None and now_s - self.velocity_stamp_s <= VELOCITY_STALE_S:
+            t = self.velocity_setpoint.twist
+            vx, vy, vz, yaw_rate = t.linear.x, t.linear.y, t.linear.z, t.angular.z
+        elif self.odom is not None and self.mission_setpoint is not None:
             dt = 1.0 / self.get_parameter('control_rate_hz').value
             p = self.odom.pose.pose
             target = self.mission_setpoint.pose.position
@@ -128,7 +142,7 @@ class PositionControllerNode(Node):
             vy = pids['y'].update(ey_body, dt)
             vz = pids['z'].update(target.z - p.position.z, dt)
 
-        vx, vy, vz, yaw_rate = limit_velocity(vx, vy, vz, 0.0, self.current_range_m())
+        vx, vy, vz, yaw_rate = limit_velocity(vx, vy, vz, yaw_rate, self.current_range_m())
 
         msg = PositionTarget()
         msg.header.stamp = self.get_clock().now().to_msg()
