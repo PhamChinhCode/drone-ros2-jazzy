@@ -8,6 +8,12 @@ ekf_filter_node:
     base_link_frame: base_link
     world_frame: odom
     map_frame: map
+    # Pose marker va optical flow toi tre 250-430 ms so voi luc chup (Pi 4 day tai, do 09-14) trong
+    # khi IMU luon moi. Mac dinh (false) EKF BO moi do cu hon lan cap nhat gan nhat -> chi con tich
+    # phan IMU, troi 10 m roi pose0_rejection_threshold loai luon marker dung. true + 1 s lich su:
+    # hoi tu ve marker trong 5 s, dao dong < 2,5 cm.
+    smooth_lagged_data: true
+    history_length: 1.0
 
     imu0: /mavros/imu/data
     imu0_config: [false, false, false,   # x, y, z
