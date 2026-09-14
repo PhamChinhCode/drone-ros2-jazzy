@@ -23,4 +23,7 @@
     # intrinsics RONG (k = toan 0, d = []). Node chi log INFO, KHONG canh bao gi.
     # Hau qua: rectify thanh vo nghia va apriltag khong giai duoc PnP.
     # Doi image_size sang 1280x800 thi phai doi file nay sang unicam.yaml cho khop.
+    # Hieu chinh lai 640x400 ngay 09-14 (fx 299,9, RMS 0,73 px; kiem bang thuoc: 82 cm -> 0,822 m,
+    # 32,5 cm -> 0,327 m). Ban sao luu trong repo: config/camera_info/unicam_640x400.yaml - cai lai
+    # may thi chep file do ve duong dan duoi.
     camera_info_url: "file:///home/pc/.ros/camera_info/unicam_640x400.yaml"

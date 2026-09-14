@@ -2,9 +2,11 @@ marker_pose_republisher_node:
   ros__parameters:
     pos_covariance: 0.01         # m^2, thap vi marker la vi tri tuyet doi
     target_frame: odom
-    # Toa do bai dap trong khung map, dang phang: [id, x, y, z, ...]
+    # Toa do bai dap trong khung odom, dang phang: [id, x, y, z, ...]
     known_tags: [0.0, 0.0, 0.0, 0.0,
                  1.0, 10.0, 0.0, 0.0]
+    # Ten khung TF tung tag, cung thu tu known_tags - PHAI khop tag.frames trong apriltag.yaml
+    tag_frames: [pad_home, pad_a]
 
 ekf_health_node:
   ros__parameters:

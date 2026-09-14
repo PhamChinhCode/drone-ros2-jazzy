@@ -1,0 +1,20 @@
+image_width: 640
+image_height: 400
+camera_name: unicam
+camera_matrix:
+  rows: 3
+  cols: 3
+  data: [299.9389723, 0, 321.5753556, 0, 298.7523547, 180.2068925, 0, 0, 1]
+distortion_model: plumb_bob
+distortion_coefficients:
+  rows: 1
+  cols: 5
+  data: [-0.2906413906, 0.07801791499, 0.0002409545051, -0.0008441647275, -0.008976243418]
+rectification_matrix:
+  rows: 3
+  cols: 3
+  data: [1, 0, 0, 0, 1, 0, 0, 0, 1]
+projection_matrix:
+  rows: 3
+  cols: 4
+  data: [299.9389723, 0, 321.5753556, 0, 0, 298.7523547, 180.2068925, 0, 0, 0, 1, 0]

@@ -7,7 +7,8 @@
     # Sai bao nhieu % thi khoang cach uoc luong sai bay nhieu %.
     # 0.13 khop /home/pc/ros2_ws/assets/tags/apriltag36h11_id0_130mm_a4.svg (ban in vua kho A4)
     # va pad_apriltag_130_30.svg. Ban 150mm cung co san neu in kho lon hon.
-    size: 0.13
+    # DO 09-14: canh o vuong den ngoai cung cua tag ID 0 da in = 12,2 cm (khong phai 13).
+    size: 0.122
     max_hamming: 0
     qos_profile: sensor_data
     detector:
@@ -21,4 +22,4 @@
     tag:
       ids: [0, 1]
       frames: [pad_home, pad_a]
-      sizes: [0.13, 0.13]
+      sizes: [0.122, 0.122]   # pad_a chua do - gia dinh cung ban in voi pad_home

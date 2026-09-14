@@ -16,6 +16,8 @@ ekf_filter_node:
                   true,  true,  true,    # vroll, vpitch, vyaw
                   true,  true,  true]    # ax, ay, az
     imu0_differential: false
+    # /mavros/imu/data co ca trong luc (FC gui gia toc tho) - khong tru thi z bi keo len 9,8 m/s^2.
+    imu0_remove_gravitational_acceleration: true
     imu0_queue_size: 10
 
     twist0: /optical_flow/velocity
@@ -25,6 +27,25 @@ ekf_filter_node:
                     false, false, false,
                     false, false, false]
     twist0_queue_size: 5
+
+    # Van toc FC (ODOMETRY, flow MTF01P) qua fc_velocity_node - chi co mau khi hop le
+    # (covariance 1e6 bi bo truoc, GIAO_UOC 4.2a, 11.3 P3). Hai nguon ngang doc lap (camera Pi +
+    # cam bien flow FC) cung vao vx, vy; vz CHI tu FC (camera khong do duoc vz).
+    twist1: /fc/velocity_xy
+    twist1_config: [false, false, false,
+                    false, false, false,
+                    true,  true,  false,
+                    false, false, false,
+                    false, false, false]
+    twist1_queue_size: 5
+
+    twist2: /fc/velocity_z
+    twist2_config: [false, false, false,
+                    false, false, false,
+                    false, false, true,
+                    false, false, false,
+                    false, false, false]
+    twist2_queue_size: 5
 
     pose0: /marker/pose_odom
     pose0_config: [true, true, true,     # marker cho vi tri tuyet doi x, y, z khi co

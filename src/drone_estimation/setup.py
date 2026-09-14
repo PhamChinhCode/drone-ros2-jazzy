@@ -20,6 +20,7 @@ setup(
         'console_scripts': [
             'marker_pose_republisher_node = drone_estimation.marker_pose_republisher_node:main',
             'ekf_health_node = drone_estimation.ekf_health_node:main',
+            'fc_velocity_node = drone_estimation.fc_velocity_node:main',
         ],
     },
 )
