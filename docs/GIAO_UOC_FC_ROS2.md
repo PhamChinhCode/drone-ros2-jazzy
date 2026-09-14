@@ -1433,7 +1433,7 @@ hợp đồng**, để không ai viết code dựa vào chỗ chưa xong.
 | **11** | Kẹp dải sai: `OB_RX_CLP` tăng với mọi lệnh sang trái; lệnh xuống bị kẹp về 0 | **FC** | **mọi phép thử OFFBOARD** (kẹp dải liên tục → `KHOA`); hạ độ cao bằng setpoint | **FC TRẢ LỜI 09-13** — cả hai do **sàn độ cao 0,3 m** (bàn test ở 0,18 m); lệnh trái chạm sàn vì MAVROS sinh `vz` ≈ 6e-17. Có lỗi thật (Pi mất quyền khi bay trái sát sàn) — **đã sửa, đã nạp 09-13, FC thử trên target: đạt**. **XONG 09-13** — Pi: giải thích đúng (FC giả bắt được `vz` rò); bảng 3.4 đạt ở 0,9 m **và dưới sàn 0,17 m** — bản sửa đã chạy. Chuỗi `KEP_DAI` để 12.B |
 | **12** | **Hạ cánh chính xác do Pi đọc marker** — Pi hạ bằng setpoint thường; cổng DISARM theo độ cao (≤ 20 cm trên mặt đất) | **hai bên** | hạ cánh chính xác 12.B; nợ Pi P1 | **Phần (a) ĐÃ LÀM 09-13** theo lệnh chủ dự án: bỏ sàn + xuống chậm sát đất. **Phần (d)–(f) cổng DISARM + `OB_DIS_RDY`: Pi đồng ý 09-13, FC hiện thực 09-14 — hợp đồng 1.3**, nạp, FC thử 11 ca trên target. **Phần (a): Pi đo 09-14, đạt.** **XONG 09-14** — Pi đo 1.3 cả hai phía cổng (nằm bàn `ACCEPTED`, kê 0,95 m `TEMPORARILY_REJECTED`, `21196` `ACCEPTED`). Còn đo: xuống chậm khi > 1,2 m (P12), chuỗi `KEP_DAI` (12.B). Xem chi tiết |
 | **13** | **Đề xuất gom cho lần nạp FC tiếp theo** — (a) khai cờ capability, (b) nạp bản sạch trước 12.B, (c) bỏ `LANDING_TARGET` | **FC** | không chặn bàn test; (b) chặn 12.B | **XONG 09-14 — hợp đồng 1.4.** FC nạp commit sạch `6b75e72`. **Pi đo trên dây:** `capabilities = 0x2080`, hash `6b75e72b10756804`, `FC_CTR_VER = 10400`, `FC_DIRTY = 0`, lệnh 520 ACK `0` — khớp. Pi tắt plugin `landing_target`. Xem chi tiết |
-| **14** | **Giảm tải MAVROS trên Pi 4** — hạ tần số / ngừng các bản tin Pi không dùng (`ATTITUDE`, `HIGHRES_IMU`, `LOCAL_POSITION_NED`, `GLOBAL_POSITION_INT`, `VFR_HUD`) | **FC** | không chặn bàn test; nên làm **trước 12.B** — Pi 4 bão hoà CPU khi chạy đủ hệ thống | **FC LÀM XONG 09-14 — hợp đồng 1.5**, commit sạch `df169c5`, `FC_DIRTY = 0`. Chờ Pi đo tần số và CPU. Chi tiết #14 |
+| **14** | **Giảm tải MAVROS trên Pi 4** — hạ tần số / ngừng các bản tin Pi không dùng (`ATTITUDE`, `HIGHRES_IMU`, `LOCAL_POSITION_NED`, `GLOBAL_POSITION_INT`, `VFR_HUD`) | **FC** | không chặn bàn test; nên làm **trước 12.B** — Pi 4 bão hoà CPU khi chạy đủ hệ thống | **XONG 09-14 — hợp đồng 1.5**, commit sạch `df169c5`, `FC_DIRTY = 0`. **Pi nghiệm thu:** tần số trên dây khớp FC, MAVROS 52 → 41 % CPU. Chi tiết #14 |
 
 **Chi tiết #3 — trả lời của FC:** phép đo của Pi **đúng**, câu trả lời đợt 1 của FC **sai**.
 `0x1BFF` (bit từ kế bật) là hành vi đúng thiết kế.
@@ -2043,6 +2043,24 @@ thời gian bên trong khung — `time_boot_ms` / `time_usec` — không phụ t
 `flight_sw = 0x00010000`, `flight_custom` thô `c59ae10a5c9c16df` → uint64 **`df169c5c0ae19ac5`**. Bộ đếm rớt
 khung TX = 0. Tổng danh nghĩa FC → Pi: **~151 bản tin/s** (Pi ước 154).
 
+**Chi tiết #14 — Pi nghiệm thu 1.5 (09-14): khớp FC, đóng #14.**
+
+*Trên dây* (`pymavlink` 40 s, MAVROS tắt): `ATTITUDE` 30,27 Hz, `HIGHRES_IMU` 30,27 Hz, `ODOMETRY` 30,30 Hz,
+`DISTANCE_SENSOR` 19,98 Hz, `GLOBAL_POSITION_INT` **1,00 Hz**, `RC_CHANNELS` 5,00 Hz, `SYS_STATUS` 2,00 Hz,
+`HEARTBEAT` / `BATTERY_STATUS` / `EXTENDED_SYS_STATE` 1,00 Hz, `NAMED_VALUE_INT` 22,0/s (11 tên × 2 Hz),
+`NAMED_VALUE_FLOAT` 8,0/s. **`LOCAL_POSITION_NED` và `VFR_HUD`: 0 khung.** Tổng **151,9 bản tin/s**, 12,84 KB/s
+= **14,3 %** băng thông (bản 1.2: 18,7 %). `FC_CTR_VER = 10500`, `FC_DIRTY = 0`; 512 → `AUTOPILOT_VERSION`
+`capabilities = 0x2080`, `flight_sw = 0x00010000`, custom thô `c59ae10a5c9c16df` → uint64 `df169c5c0ae19ac5`.
+Seq liên tục 3796/3796 khung, không mất khung (vài `BAD_DATA` chỉ trong 0,1 s đầu — byte thừa trong bộ đệm
+lúc mở cổng, không phải lỗi đường truyền).
+
+*Qua MAVROS* (đủ hệ thống: điều khiển + camera 30 FPS + apriltag + optical flow + EKF, 30 s): log `VER`
+in hash `df169c5c0ae19ac5`, `0x2080`. `/mavros/imu/data` 29,2 Hz, `/mavros/odometry/in` 29,2 Hz,
+`/mavros/global_position/rel_alt` 1,0 Hz (Pi không còn dùng). **`mavros_node` 40,9 % CPU** (bản 1.4 sau khi Pi
+tắt plugin: 52 %; ban đầu 72 %), idle toàn máy ~29 %. Setpoint: FC đếm `OB_RX_OK` **20,0/s**. EKF Pi
+(IMU 30 Hz) bám marker: pose marker 28,1 Hz, `/odometry/filtered` 29,9 Hz, dao động < 2 cm, `/ekf/health`
+healthy. **1.5 là bản đề nghị cho 12.B — Pi đồng ý.**
+
 **Chi tiết #11 — Pi kiểm lại 09-13.** Kết quả ở 3.4.
 
 - **Giải thích `vz` rò: đúng**, Pi bắt được trên dây bằng FC giả: trái 0,5 → `vz = +6,1232e-17`.
@@ -2450,6 +2468,7 @@ Lệnh đo nhanh: xem mục 12.A1.
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.5 *(Pi nghiệm thu, không tăng số)* | 2026-09-14 | **Pi đo 1.5 trên dây:** tần số từng bản tin khớp FC, `LOCAL_POSITION_NED`/`VFR_HUD` 0 khung, tổng 151,9 bản tin/s, băng thông 14,3 %, không mất khung; `FC_CTR_VER = 10500`, `FC_DIRTY = 0`, hash `df169c5c0ae19ac5`, `0x2080`. Qua MAVROS với đủ hệ thống: `mavros_node` 41 % CPU (52 % trước 1.5), setpoint 20,0/s, EKF bám marker healthy. Đóng 11.1 #14. |
 | **1.5** | 2026-09-14 | **MINOR — FC làm 11.1 #14 (giảm tải MAVROS).** `ATTITUDE`, `HIGHRES_IMU` 50 → 30 Hz; `GLOBAL_POSITION_INT` 10 → 1 Hz; **ngừng** `LOCAL_POSITION_NED` và `VFR_HUD` (phế bỏ, ngoại lệ 10.4 theo Pi xác nhận không ai dùng). `FC_CTR_VER = 10500`. Bản sạch commit `df169c5`, hash `df169c5c0ae19ac5`, `FC_DIRTY = 0` — bản đề nghị cho 12.B. Ghi 11.4: vụ FC im lặng UART là do ngắt nguồn. |
 | 1.4 *(Pi đề xuất giảm tải MAVROS, không tăng số)* | 2026-09-14 | **Đề xuất 11.1 #14 cho FC:** `ATTITUDE`, `HIGHRES_IMU` 50 → 30 Hz; ngừng `LOCAL_POSITION_NED` (phế bỏ theo 10.4) và `VFR_HUD`; `GLOBAL_POSITION_INT` 10 → 1 Hz — tổng khoảng 240 → 154 bản tin/s. Lý do: Pi 4 bão hoà CPU khi chạy đủ hệ thống, MAVROS 72 %. Pi đã tự làm: tắt plugin `local_position`/`vfr_hud`/`setpoint_position` (MAVROS → 52 %), `optical_flow_node` lấy độ cao từ laser. Sửa bảng 8.1. Chờ FC trả lời. |
 | 1.4 *(Pi chốt P3, không tăng số)* | 2026-09-14 | **11.3 P3 chốt nội bộ Pi:** loại mẫu vận tốc `ODOMETRY` có covariance `1e6` trước EKF (giữ quy tắc 4.2a "bỏ hẳn mẫu") qua `fc_velocity_node`; vx/vy và vz tách topic vì hợp lệ độc lập. EKF Pi hợp nhất vận tốc ngang camera + FC, vz từ FC. Sửa dòng `ODOMETRY` mục 8.1. Không đổi gì phía FC. |
