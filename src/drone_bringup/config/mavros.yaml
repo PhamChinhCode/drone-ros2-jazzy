@@ -18,14 +18,13 @@
     linear_acceleration_stdev: 0.0185   # m/s^2, do tren ban
     angular_velocity_stdev: 0.00183     # rad/s, do tren ban
     plugin_allowlist:
+      # 09-14 bo 'setpoint_position', 'vfr_hud', 'local_position': khong node Pi nao dung (VFR_HUD chi
+      # hien thi; LOCAL_POSITION_NED trung ODOMETRY). Do: MAVROS 72 % -> 52 % CPU (GIAO_UOC 11.1 #14).
       - 'sys_status'
-      - 'setpoint_position'
       - 'setpoint_raw'
       - 'command'
       - 'imu'
-      - 'vfr_hud'
-      - 'local_position'
-      - 'global_position'
+      - 'global_position'   # /global_position/global cho telemetry_aggregator (GPS, hien NO_FIX)
       - 'debug_value'   # NAMED_VALUE_INT OB_STATE/OB_AUTH/OB_EXIT tu FC (tra_loi_dot_2_pi4.md muc 2.1)
       - 'distance_sensor'  # DISTANCE_SENSOR laser MTF01P - GIAO_UOC_FC_ROS2.md muc 8.3, 11.2
       - 'odometry'      # ODOMETRY 331 tu FC hop dong 1.2 -> /mavros/odometry/in (GIAO_UOC muc 11.2)

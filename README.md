@@ -34,11 +34,11 @@ Xem hệ thống trực tiếp: mở Foxglove → `ws://<ip-drone>:8765`.
 ## Hai điều dễ vấp
 
 **1. Camera phải cấu hình lại sau MỖI lần reboot.** Cài đặt V4L2 bị reset. Bỏ qua
-thì topic vẫn ra đúng 60 Hz nhưng **mọi khung hình toàn số 0** — `ros2 topic hz`
+thì topic vẫn ra đúng nhịp (30 Hz) nhưng **mọi khung hình toàn số 0** — `ros2 topic hz`
 không phát hiện được, phải kiểm thống kê pixel.
 
 ```bash
-scripts/camera_v4l2_setup.sh --width 640 --height 400 --vblank 1779 --exposure 400 --gain 60
+scripts/camera_v4l2_setup.sh --width 640 --height 400 --vblank 3957 --exposure 300 --gain 32
 ```
 
 `scripts/drone_startup.sh` đã làm sẵn việc này (MỤC 1) rồi mới source ROS (MỤC 2).

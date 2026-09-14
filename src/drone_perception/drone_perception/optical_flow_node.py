@@ -10,10 +10,10 @@ Ba nguyen tac bat buoc (muc 1.4 tai lieu huong dan):
 import rclpy
 from cv_bridge import CvBridge
 from geometry_msgs.msg import TwistWithCovarianceStamped
+from rclpy.experimental import EventsExecutor
 from rclpy.node import Node
 from rclpy.time import Time
-from sensor_msgs.msg import CameraInfo, Image
-from std_msgs.msg import Float64
+from sensor_msgs.msg import CameraInfo, Image, Range
 
 from drone_perception.optical_flow_estimator import OpticalFlowEstimator
 from drone_perception.qos import SENSOR_QOS
@@ -42,7 +42,9 @@ class OpticalFlowNode(Node):
 
         self.create_subscription(CameraInfo, '/camera/camera_info', self.on_camera_info, SENSOR_QOS)
         self.create_subscription(Image, '/camera/image_raw', self.on_image, SENSOR_QOS)
-        self.create_subscription(Float64, '/mavros/global_position/rel_alt', self.on_altitude, SENSOR_QOS)
+        # Do cao lay tu laser MTF01P (20 Hz, ngang tam camera) thay /mavros/global_position/rel_alt:
+        # relative_alt chua duoc giao uoc kiem (12.A1) va de FC giam GLOBAL_POSITION_INT (11.1 #14).
+        self.create_subscription(Range, '/mavros/mtf01p', self.on_altitude, SENSOR_QOS)
 
         self.pub_velocity = self.create_publisher(
             TwistWithCovarianceStamped, '/optical_flow/velocity', SENSOR_QOS)
@@ -60,7 +62,9 @@ class OpticalFlowNode(Node):
             self.get_logger().info(f'Nhan focal length tu camera_info: {msg.k[0]:.1f} px')
 
     def on_altitude(self, msg):
-        self.altitude_m = msg.data
+        # Ngoai [min_range, max_range] la khong do duoc -> khong quy doi, khong publish.
+        ok = msg.min_range <= msg.range <= msg.max_range
+        self.altitude_m = msg.range if ok else None
 
     def on_image(self, msg):
         # Chua co camera_info (thieu focal length) hoac chua co do cao thi khong quy doi
@@ -119,8 +123,12 @@ class OpticalFlowNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = OpticalFlowNode()
+    # EventsExecutor: tren Pi 4 executor mac dinh cua rclpy ton phan lon CPU de dung lai wait-set
+    # moi lan thuc day (do 09-14: mission_manager_node 45-50 % -> 13,5 %).
+    executor = EventsExecutor()
+    executor.add_node(node)
     try:
-        rclpy.spin(node)
+        executor.spin()
     except KeyboardInterrupt:
         pass
     finally:

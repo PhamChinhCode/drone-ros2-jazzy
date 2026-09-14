@@ -10,6 +10,7 @@ duoc "khong thay marker" voi "node da chet".
 
 import rclpy
 from apriltag_msgs.msg import AprilTagDetectionArray
+from rclpy.experimental import EventsExecutor
 from rclpy.node import Node
 from std_msgs.msg import Int32
 
@@ -58,8 +59,12 @@ class MarkerQualityNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = MarkerQualityNode()
+    # EventsExecutor: tren Pi 4 executor mac dinh cua rclpy ton phan lon CPU de dung lai wait-set
+    # moi lan thuc day (do 09-14: mission_manager_node 45-50 % -> 13,5 %).
+    executor = EventsExecutor()
+    executor.add_node(node)
     try:
-        rclpy.spin(node)
+        executor.spin()
     except KeyboardInterrupt:
         pass
     finally:

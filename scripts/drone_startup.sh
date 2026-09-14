@@ -18,9 +18,10 @@
 # ---------------------------------------------------------------------------
 CAM_WIDTH=640
 CAM_HEIGHT=400
-CAM_VBLANK=1779       # 60 FPS. KHÔNG dùng 110 (246 FPS): Pi 4 bão hoà, vỡ đồng bộ apriltag
-CAM_EXPOSURE=400      # không có auto-exposure — phòng tối thì tăng (trần 2154 ở vblank này)
-CAM_GAIN=60
+CAM_VBLANK=3957       # 30 FPS (đo 09-14). Toàn hệ thống trên Pi 4 bão hoà CPU: ở 60 FPS apriltag chỉ
+                      # 3,9 Hz, ở 30 FPS lên 15-16 Hz. KHÔNG dùng 110 (246 FPS).
+CAM_EXPOSURE=300      # không có auto-exposure. Đo 09-14 trong phòng: 800/120 cháy sáng, tag không bắt
+CAM_GAIN=32           # được; 300/32 bắt ổn định. Ngoài trời phải đo lại.
 
 # Tự định vị: suy ra vị trí workspace từ chỗ script đang nằm, để clone về đâu
 # cũng chạy được mà không phải sửa đường dẫn (giống scripts/run_camera_node.sh).

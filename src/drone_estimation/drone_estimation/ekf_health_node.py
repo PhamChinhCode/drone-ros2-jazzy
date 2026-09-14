@@ -9,6 +9,7 @@ import math
 import rclpy
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus
 from nav_msgs.msg import Odometry
+from rclpy.experimental import EventsExecutor
 from rclpy.node import Node
 
 from drone_estimation.estimation_math import HealthMonitor
@@ -86,8 +87,12 @@ class EkfHealthNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = EkfHealthNode()
+    # EventsExecutor: tren Pi 4 executor mac dinh cua rclpy ton phan lon CPU de dung lai wait-set
+    # moi lan thuc day (do 09-14: mission_manager_node 45-50 % -> 13,5 %).
+    executor = EventsExecutor()
+    executor.add_node(node)
     try:
-        rclpy.spin(node)
+        executor.spin()
     except KeyboardInterrupt:
         pass
     finally:

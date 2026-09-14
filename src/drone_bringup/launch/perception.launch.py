@@ -1,7 +1,7 @@
 """Giai doan 1a - chuoi cam nhan: camera -> rectify -> apriltag -> chat luong bam + optical flow.
 
 Kiem thu truoc khi di tiep:
-  1. `ros2 topic hz /camera/image_raw` ra ~60 Hz (khop --vblank 1779);
+  1. `ros2 topic hz /camera/image_raw` ra ~30 Hz (khop --vblank 3957);
   2. KIEM THONG KE PIXEL (topic hz KHONG bat duoc loi anh toan so 0):
      anh dung phai co std vai chuc, max gan 255. min=max=0 -> sai format,
      chay lai camera_v4l2_setup.sh; mean~16 std<2 -> thieu anh sang;
@@ -28,13 +28,16 @@ def generate_launch_description():
         # (docs/CAMERA.md muc 9: hai loi khong sua duoc tu ung dung tren Ubuntu 24.04).
         #
         # BAT BUOC chay TRUOC launch nay, va lai sau MOI LAN REBOOT:
-        #   /home/pc/ros2_ws/scripts/camera_v4l2_setup.sh --width 640 --height 400 --vblank 1779 --exposure 300 --gain 32
+        #   /home/pc/ros2_ws/scripts/camera_v4l2_setup.sh --width 640 --height 400 --vblank 3957 --exposure 300 --gain 32
         # Exposure/gain do 09-14 trong phong: 800/120 lam 80 % pixel bao hoa, vien trang tag chay va
         # apriltag KHONG bat duoc tag; 300/32 cho mean ~60, bat tag on dinh. Ngoai troi phai do lai.
         # Bo qua buoc do thi topic van ra dung nhip nhung MOI KHUNG HINH TOAN SO 0
         # (subdev con o Y10_1X10 trong khi node xin GREY 8-bit) - `ros2 topic hz` KHONG
         # phat hien duoc loi nay, phai kiem thong ke pixel.
         #
+        # --vblank 3957 = 30 FPS (09-14): chay CA he thong (MAVROS + dieu khien + cam nhan + EKF) Pi 4
+        # bao hoa CPU; o 60 FPS apriltag chi 3,9 Hz, pose marker ho toi 1,8 s; o 30 FPS apriltag
+        # 15-16 Hz, rectify giam ~40 %. Lich su 60 FPS ben duoi van dung khi chi chay lop cam nhan.
         # --vblank 1779 = 60 FPS. KHONG dung 110 (246 FPS) du sensor chay duoc:
         # do thuc tren may nay, 246 FPS lam Pi 4 bao hoa (load 9.4, idle 1%) va apriltag
         # chi ghep duoc 15 cap image/camera_info moi 10s -> WARN "do not appear to be

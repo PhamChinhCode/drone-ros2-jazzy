@@ -11,6 +11,7 @@ dung. Van toc giu trong khung than base_link (FLU) nhu MAVROS phat.
 import rclpy
 from geometry_msgs.msg import TwistWithCovarianceStamped
 from nav_msgs.msg import Odometry
+from rclpy.experimental import EventsExecutor
 from rclpy.node import Node
 
 from drone_estimation.estimation_math import fc_velocity_validity
@@ -61,8 +62,12 @@ class FcVelocityNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = FcVelocityNode()
+    # EventsExecutor: tren Pi 4 executor mac dinh cua rclpy ton phan lon CPU de dung lai wait-set
+    # moi lan thuc day (do 09-14: mission_manager_node 45-50 % -> 13,5 %).
+    executor = EventsExecutor()
+    executor.add_node(node)
     try:
-        rclpy.spin(node)
+        executor.spin()
     except KeyboardInterrupt:
         pass
     finally:
