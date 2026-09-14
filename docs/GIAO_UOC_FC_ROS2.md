@@ -2197,6 +2197,11 @@ ch1–8 = 1500/1500/1503/1498/2000/2000/999/2000 — **khớp FC**. Qua `rc_io`:
   xuống thấp hơn; FC điền 15 cm (09-13, 11.2).
 - **Rung khi có điện động cơ** ảnh hưởng covariance IMU thế nào.
 - `BATTERY_STATUS` với pin thật — chưa gắn pin nên chưa xác minh được cách điền `voltages[]`.
+- **FC im lặng trên UART — gặp 1 lần, chưa rõ nguyên nhân (Pi 09-14).** Sau khi Pi khởi động lại
+  (11:44), MAVROS `connected: false`; tắt hết node, đọc thẳng `/dev/ttyAMA0` @921600 trong 5 s: **0 byte**.
+  Cấu hình UART phía Pi không đổi. Rút điện FC rồi cấp lại → mọi bản tin về đúng tần số (`ATTITUDE`
+  50 Hz, `ODOMETRY` 30 Hz, `DISTANCE_SENSOR` 20 Hz, `HEARTBEAT` 1 Hz), `FC_CTR_VER = 10400`. Chưa biết
+  FC treo, mất nguồn hay dây lỏng. Nếu gặp lại: FC xem firmware còn chạy không (SWD) trước khi rút điện.
 
 ---
 
@@ -2264,6 +2269,7 @@ ros2 topic echo /mavros/state --once
       — Pi cần phân biệt "FC chưa phát" với "FC báo không có quyền" [THOẢ THUẬN — FC đã hiện
       thực; đã thấy trên target lúc khoá]. *Pi đo 09-13: 2,00 Hz mỗi tên khi chưa arm, ở trạng
       thái TAT (`OB_STATE=1, OB_AUTH=1, OB_EXIT=1`). Chưa đo lúc ch8 xuống và lúc `= -1`.*
+      *Pi 09-14: lúc ch8 xuống vẫn nhận `OB_AUTH = 0`, `OB_ARM_RDY`, `OB_ARM_BLK` — chưa đo tần số.*
 - [x] `FC_CTR_VER = 10100` — Pi đo 09-13, cả `pymavlink` lẫn MAVROS. Firmware 1.2: `10200`, đo lại 09-13
 - [x] 14 tên của 1.2 (`NAMED_VALUE_INT` 10, `NAMED_VALUE_FLOAT` 4) mỗi tên 2,00 Hz ở trạng thái `KHOA`
       lúc khởi động (`OB_STATE = 0`, `OB_AUTH = 0`, ch8 lên từ lúc bật nguồn) — *Pi đo 09-13*
@@ -2283,6 +2289,18 @@ ros2 topic echo /mavros/state --once
       0,95–0,96 m:** ARM → `ACCEPTED`; `OB_DIS_RDY = 0`; DISARM thường → **`TEMPORARILY_REJECTED`** hai lần
       (0,01–0,02 s), vẫn `armed`, `OB_STATE = 2`; `~/emergency_disarm` (`21196`) → **`ACCEPTED`** (0,10 s),
       `armed = false`, `OB_EXIT = 5`, `OB_ARM_RDY = 1`. Khớp bảng D3, D9 của FC
+- [x] *(1.4 — tháo cánh)* **Chạy lại đường ARM/DISARM trên firmware 1.4 — Pi đo 09-14, qua node.**
+      Trước: `FC_CTR_VER = 10400`, `FC_DIRTY = 0`, `OB_RX_OK` +20,0/s, `REJ`/`CLP` = 0. **Nằm bàn (laser
+      0,19–0,20 m):** ARM → `ACCEPTED`; `OB_DIS_RDY = 1` ở 1,5 s và 3,5 s sau arm; DISARM thường →
+      `ACCEPTED`, `OB_DIS_RDY` về 0. **Kê cao (laser 0,88–0,89 m):** ARM → `ACCEPTED`; `OB_DIS_RDY = 0`;
+      DISARM thường → `TEMPORARILY_REJECTED` hai lần, vẫn `armed`; `~/emergency_disarm` (`21196`) →
+      `ACCEPTED`, `armed = false`, `OB_EXIT = 5`. Bridge đổi mức log INFO → WARN → ERROR → INFO không
+      crash (bản sửa `0a2c366` chạy đúng trên FC thật)
+- [x] *(1.4)* **Pi tự chặn ARM khi mất quyền** — ch8 xuống: `OB_AUTH = 0`, `OB_ARM_RDY = 0`,
+      `OB_ARM_BLK = 0x0082` (khoá công tắc + ga chưa thấp — không có `0x0400`, giống lần thấy `0x0082`
+      trước); `~/arm` → `result = -1` "Pi mat quyen (OB_AUTH = 0)", **không có lệnh nào lên dây**.
+      Gạt ch8 lên lại: `OB_AUTH = 1` nhưng `OB_ARM_BLK = 0x0080` còn nguyên cho tới khi gạt ch5 xuống-lên
+      — đúng bit 7 bảng 9.3
 - [ ] Gạt ch8 xuống rồi lên → `STATUSTEXT` `OFFBOARD: TAT (...)` severity `NOTICE`
 - [ ] `OB_AUTH` hạ xuống 0 **trong vòng 0,5 s** sau khi người lái chạm cần
 - [x] Node restart giữa chừng vẫn biết đúng trạng thái trong 0,5 s — *Pi đo 09-13, 10 lần tạo node
@@ -2351,6 +2369,7 @@ Lệnh đo nhanh: xem mục 12.A1.
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.4 *(Pi chạy lại ARM/DISARM trên 1.4, không tăng số)* | 2026-09-14 | Cánh tháo, qua `fc_command_bridge_node` + setpoint 20 Hz (12.A4). Nằm bàn: ARM/DISARM thường `ACCEPTED`, `OB_DIS_RDY = 1` khi arm. Kê 0,88 m: `OB_DIS_RDY = 0`, DISARM thường `TEMPORARILY_REJECTED` ×2, `21196` `ACCEPTED`. ch8 xuống: Pi tự chặn ARM (`result = -1`), `OB_ARM_BLK = 0x0082`; ch8 lên lại vẫn khoá `0x0080` tới khi gạt ch5. Bản sửa crash bridge đạt trên FC thật. Ghi 11.4: FC im lặng trên UART một lần, rút điện mới hết. |
 | 1.4 *(Pi nghiệm thu, không tăng số)* | 2026-09-14 | **Pi đo 1.4 trên dây:** `capabilities = 0x2080`, hash `6b75e72b10756804`, `FC_CTR_VER = 10400`, `FC_DIRTY = 0`, 520 → ACK `0` — khớp, [CHỐT]; đóng 11.1 #13. **Pi theo 1.4:** tắt plugin `landing_target` (8.2, 8.3), pose marker đi `/landing_target/pose`; P11 xong (chặn ARM khi khác MAJOR / chưa biết phiên bản); P1 một phần. Không còn mục mở chặn giữa hai bên. |
 | **1.4** | 2026-09-14 | **MINOR — FC làm 11.1 #13.** (a) khai cờ `SET_POSITION_TARGET_LOCAL_NED` → `capabilities = 0x2080`; `FC_CTR_VER = 10400`. (b) **bản sạch đầu tiên:** commit firmware `6b75e72`, `FC_DIRTY = 0`, hash `6b75e72b10756804` — bản đề nghị cho 12.B. (c) `LANDING_TARGET` (149) phế bỏ, không tăng số (chưa từng hiện thực). Ghi ga lúc Pi arm ~50 % < ga treo đo 0,65 → nằm yên (6.2, 12.B). FC đo trên dây sau khi nạp. |
 | 1.3 *(Pi tổng hợp, không tăng số)* | 2026-09-14 | **Pi tổng hợp trạng thái (11.0).** [CHỐT]: `SET_POSITION_TARGET_LOCAL_NED` đầu-cuối, `OB_ARM_RDY`/`OB_ARM_BLK`/`OB_DIS_RDY`, `FC_CTR_VER`, `flight_custom_version`. Đóng 11.1 #2, #3, #5, #7, #8, #9, #12. **Đề xuất 11.1 #13 cho FC:** khai cờ `0x0080` (MINOR 1.4), nạp bản sạch trước 12.B, bỏ `LANDING_TARGET`. Ngoài #13 Pi không còn yêu cầu với FC. Thêm P11, P12. |
