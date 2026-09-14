@@ -549,3 +549,49 @@ Kiểm chứng:
 3. Nợ 4.5 #2 (`COLCON_IGNORE` cho `src/camera_ros`) — nay đã gitignore, nhưng colcon **vẫn
    đang build** package này. Vẫn nên đặt `COLCON_IGNORE` để khỏi tốn thời gian build.
 4. Ba nợ cũ của nhánh camera ở mục 3.7 vẫn nguyên.
+
+---
+
+## Phiên 6 — 14/09/2026
+
+Đặc tả FC ↔ Pi: `docs/GIAO_UOC_FC_ROS2.md` (hợp đồng 1.4). Chi tiết đo đạc nằm trong commit và giao ước;
+mục này chỉ tóm tắt và ghi việc còn nợ.
+
+### 6.1 Đã làm
+
+| Việc | Commit | Kết quả chính |
+|---|---|---|
+| Thử ARM/DISARM trên FC 1.4 (cánh tháo) | `3bebec5` | Nằm bàn nhận, kê 0,88 m từ chối, `21196` cắt; Pi tự chặn khi mất quyền |
+| Máy trạng thái lớp FC (P2/P10) | `8078acc` | `~/start` → ARM → TAKEOFF → `~/land` → tự DISARM → IDLE, thử trên bàn đạt |
+| Lớp ước lượng: vận tốc camera + FC, marker pose, cờ healthy EKF | `9462cce` | EKF hội tụ về marker; chốt P3 (bỏ mẫu `1e6`) |
+| Hiệu chỉnh lại camera 640×400, tag 0,122 m, TF camera nghiêng 20° | `9462cce` | Tag 82 cm → 0,822 m; 32,5 cm → 0,327 m; pháp tuyến tag lệch ≤ 2° |
+| Chịu tải cao: TF tag mới nhất, EKF `smooth_lagged_data` | `09b1bcf` | Pose marker 0,2 → 11,5 Hz; EKF hết phân kỳ |
+| Giảm tải Pi 4: `EventsExecutor`, camera 30 FPS, bớt plugin MAVROS, optical flow dùng laser | `52846e3` | Idle 0,8 % → 26 %; apriltag 3,9 → 26 Hz; MAVROS 72 → 52 % |
+| Đề xuất FC giảm tải MAVROS | `42f7e5f` | Giao ước 11.1 #14 — chờ FC |
+
+### 6.2 Việc còn nợ
+
+1. **Ưu tiên thời gian thực cho tuyến setpoint** (`mavros_node`, `position_controller_node`) — **chưa làm,
+   cần sudo.** Hiện user `pc` có `ulimit -r` = 0 nên `chrt` phải chạy bằng root. Làm một lần:
+   1. `echo 'pc - rtprio 60' | sudo tee /etc/security/limits.d/99-drone-rtprio.conf`, đăng nhập lại,
+      kiểm `ulimit -r` = 60.
+   2. Nếu node được khởi động bằng `drone-startup.service`: thêm `LimitRTPRIO=60` vào `[Service]`,
+      `sudo systemctl daemon-reload` (systemd không đọc `limits.d`).
+   3. Thêm `prefix='chrt -f 50'` vào `Node(...)` của `mavros_node` và `position_controller_node` trong file
+      launch; chạy tay thì `ros2 run --prefix 'chrt -f 50' ...`. Kiểm bằng `chrt -p <pid>` → `SCHED_FIFO` 50.
+   - **Chỉ** hai tiến trình này (52 % và 7 % một nhân). Không đặt cho apriltag / rectify / optical flow.
+   - Tạm thời chạy tay (mất khi node khởi động lại):
+     `sudo chrt -f -p 50 $(pgrep -f lib/mavros/mavros_node)` và
+     `sudo chrt -f -p 50 $(pgrep -f lib/drone_control/position_controller_node)`.
+2. **Chờ FC trả lời giao ước 11.1 #14** (giảm tần số `ATTITUDE`/`HIGHRES_IMU`, ngừng `LOCAL_POSITION_NED`,
+   `VFR_HUD`, `GLOBAL_POSITION_INT` 1 Hz). FC nạp xong thì Pi đo lại tần số trên dây, CPU MAVROS, EKF.
+3. **Dấu vận tốc optical flow chưa kiểm** — đẩy drone tới trước bằng tay trên nền có vân, phải thấy
+   `/optical_flow/velocity` `vx > 0` (đang đứng yên nên chỉ thấy 0).
+4. **Hiệu chỉnh camera thiếu mẫu ở góc ảnh** (trên-phải gần như trống, hai góc dưới ít) — chụp bổ sung
+   nếu tag gần rìa ảnh mà vị trí lệch. Bản sao lưu: `src/drone_bringup/config/camera_info/`.
+5. **`pad_a` (tag ID 1) chưa đo cạnh** — `apriltag.yaml` đang giả định 0,122 m như `pad_home`.
+6. **`estimation.launch.py` tự bật MAVROS** — chạy launch này khi MAVROS đã chạy sẽ có hai tiến trình
+   giữ `/dev/ttyAMA0`. Cần tách hoặc thêm cờ tắt.
+7. **Trục z của EKF chưa có mốc tuyệt đối khi không thấy marker** — cân nhắc đưa `z` của `ODOMETRY` FC vào.
+8. **Còn TODO trong code:** trạng thái nhiệm vụ (waypoint, marker, gripper, `on_plan`), `landing_target_bridge_node`
+   (P1), watchdog P6. `fc_command_bridge_node` vẫn dùng `MultiThreadedExecutor` (service chờ chặn ACK).
