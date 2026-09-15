@@ -7,7 +7,8 @@ uint8 ACTION_DROPOFF=2
 uint8 seq                     # thu tu diem trong ke hoach, bat dau tu 0
 float64 lat                   # do, WGS84 - dai dien chinh tu GCS
 float64 lon                   # do, WGS84
-float32 alt_m                 # do cao tuong doi so voi diem cat canh
+float32 alt_m                 # do cao so voi TAG DICH cua diem nay: z_odom = tag_z + alt_m
+                              # (KHONG phai so voi diem cat canh - chu thich cu ghi sai)
 float32[3] pos_ned            # toa do local NED, mission_manager quy doi tu lat/lon khi bay
 int32 expected_marker_id      # ID AprilTag phai xac thuc tai diem nay; -1 = khong can xac thuc
 uint8 action                  # ACTION_*

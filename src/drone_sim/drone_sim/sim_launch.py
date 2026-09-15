@@ -78,3 +78,15 @@ def gripper_node():
                 name='gripper_controller_node',
                 parameters=[os.path.join(CONFIG, 'mission.yaml'), {'simulate': True}, SIM_TIME],
                 output='screen')
+
+
+def marker_republisher():
+    """Node that, khong sua gi: /apriltag/detections + TF -> /marker/pose_odom.
+
+    Can cho ekf_health_node biet odom da NEO theo bang tag (EkfHealth.anchored) - dieu kien de
+    FSM chot "nha" cho RTH. Giao uoc GCS <-> Pi muc 5.2b.
+    """
+    return Node(package='drone_estimation', executable='marker_pose_republisher_node',
+                name='marker_pose_republisher_node',
+                parameters=[os.path.join(CONFIG, 'estimation.yaml'), TAGS_YAML, SIM_TIME],
+                output='screen')

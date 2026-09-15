@@ -39,6 +39,9 @@ class EkfHealthNode(Node):
         # Pose marker tre 250-430 ms luc day tai (do 09-14) + chu ky timer 0,2 s.
         self.declare_parameter('reset_marker_max_age_s', 1.0)
         self.declare_parameter('reset_cooldown_s', 2.0)
+        # Coi la da neo khi EKF cach pose marker khong qua nguong nay. Mac dinh bang
+        # pose0_rejection_threshold cua ekf.yaml: trong nguong do la EKF DA fuse marker.
+        self.declare_parameter('anchor_tol_m', 2.0)
 
         self.last_odom = None
         self.last_odom_time = None
@@ -48,6 +51,7 @@ class EkfHealthNode(Node):
                                      self.get_parameter('odom_timeout_s').value)
         self.last_healthy = None
         self.last_marker = None
+        self.anchored = False
         self.reset_policy = MarkerResetPolicy(self.get_parameter('reset_max_error_m').value,
                                               self.get_parameter('reset_after_s').value,
                                               self.get_parameter('reset_marker_max_age_s').value,
@@ -97,6 +101,7 @@ class EkfHealthNode(Node):
         stamp_s = None if self.last_odom_time is None else self.last_odom_time.nanoseconds / 1e9
         msg.healthy, msg.reason = self.monitor.evaluate(
             now.nanoseconds / 1e9, stamp_s, variance, finite)
+        msg.anchored = self.update_anchored()
         if self.diag_problem:
             msg.reason = f'{msg.reason} | {self.diag_problem}' if msg.reason else self.diag_problem
         # Chi log khi co doi trang thai - reason chua so thay doi moi chu ky.
@@ -108,6 +113,24 @@ class EkfHealthNode(Node):
             self.last_healthy = msg.healthy
         self.pub_health.publish(msg)
         self.check_marker_reset(now, stamp_s, msg.healthy)
+
+    def update_anchored(self):
+        """Latching: odom da neo theo bang tag chua.
+
+        Neo = EKF da fuse it nhat mot pose marker. Khong quan sat truc tiep duoc tu ngoai
+        robot_localization, nen suy ra: co pose marker VA vi tri EKF cach no khong qua
+        anchor_tol_m (= pose0_rejection_threshold) => pose do da duoc nhan chu khong bi loai.
+        Ep /set_pose ve marker cung la neo, dat co ngay tai cho do.
+        """
+        if self.anchored or self.last_marker is None or self.last_odom is None:
+            return self.anchored
+        a = self.last_odom.pose.pose.position
+        b = self.last_marker.pose.pose.position
+        if math.dist((a.x, a.y, a.z), (b.x, b.y, b.z)) <= \
+                self.get_parameter('anchor_tol_m').value:
+            self.anchored = True
+            self.get_logger().info('odom DA NEO theo bang tag - vi tri tuyet doi dung duoc')
+        return self.anchored
 
     def check_marker_reset(self, now, odom_stamp_s, healthy):
         """Pose marker moi ma EKF lech/khong healthy -> gui pose marker len /set_pose."""
@@ -135,6 +158,8 @@ class EkfHealthNode(Node):
             cov[i * 7] = SET_POSE_ANGLE_VARIANCE
         out.pose.covariance = cov
         self.pub_set_pose.publish(out)
+        # Ep EKF ve marker la dinh nghia cua "neo theo bang tag".
+        self.anchored = True
         self.get_logger().warning(
             f'Ep EKF ve marker ({reason}): EKF ({p.x:.2f}, {p.y:.2f}, {p.z:.2f}) -> '
             f'marker ({m.x:.2f}, {m.y:.2f}, {m.z:.2f})')

@@ -18,8 +18,7 @@ from sensor_msgs.msg import BatteryState, Range
 from std_msgs.msg import Bool, Float32, Int32
 from std_srvs.srv import Trigger
 
-from drone_interfaces.msg import (FailsafeEvent, GripperCommand, GripperStatus, MissionPlan,
-                                  MissionState)
+from drone_interfaces.msg import (EkfHealth, FailsafeEvent, GripperCommand, GripperStatus, MissionPlan, MissionState)
 from drone_interfaces.srv import Arm, FcSimpleCommand, GotoWaypoint, Takeoff
 from drone_mission import fc_link, mission_fsm
 from drone_mission.fc_command_bridge_node import NAMED_VALUE_QOS
@@ -88,6 +87,8 @@ class MissionManagerNode(Node):
         self.create_subscription(
             PoseStamped, '/landing_target/pose', self.on_landing_target_pose, SENSOR_QOS)
         self.create_subscription(GripperStatus, '/gripper/status', self.on_gripper, EVENT_QOS)
+        # Chi de biet odom da neo theo bang tag chua - FSM can truoc khi chot "nha" cho RTH.
+        self.create_subscription(EkfHealth, '/ekf/health', self.on_ekf_health, EVENT_QOS)
         self.create_subscription(FailsafeEvent, '/failsafe_event', self.on_failsafe, EVENT_QOS)
         # Tieu chi cham dat 11.1 #12e: laser, vz cua FC, vz Pi dang ra lenh (chi doc, khong publish).
         self.create_subscription(Range, '/mavros/mtf01p', self.on_range, SENSOR_QOS)
@@ -197,6 +198,9 @@ class MissionManagerNode(Node):
 
     def on_target_lost(self, msg):
         self.snapshot.landing_target_lost = msg.data
+
+    def on_ekf_health(self, msg):
+        self.snapshot.pos_anchored = msg.anchored
 
     def on_gripper(self, msg):
         self.snapshot.gripper_sensor_confirmed = msg.sensor_confirmed

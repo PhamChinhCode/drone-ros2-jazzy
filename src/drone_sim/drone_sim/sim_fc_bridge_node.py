@@ -6,7 +6,7 @@ node nao. Logic FC nam trong sim_fc.py.
 
   /mavros/setpoint_raw/local  -> SimFc -> /X3/gazebo/command/twist, /X3/enable
   /model/X3/odometry          -> /odometry/filtered (thay EKF: tre + nhieu tuy chon),
-                                 /mavros/odometry/in, /mavros/mtf01p
+                                 /mavros/odometry/in, /mavros/mtf01p, TF odom -> base_link
   SimFc                       -> /mavros/state, /mavros/debug_value/named_value_int,
                                  service /mavros/cmd/command
 """
@@ -21,8 +21,10 @@ from mavros_msgs.srv import CommandLong
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
+from geometry_msgs.msg import TransformStamped
 from sensor_msgs.msg import Range
 from std_msgs.msg import Bool
+from tf2_ros import TransformBroadcaster
 
 from drone_interfaces.msg import MissionState
 from drone_sim import sim_fc
@@ -62,6 +64,9 @@ class SimFcBridgeNode(Node):
         self.pub_twist = self.create_publisher(Twist, g('cmd_topic'), RELIABLE_QOS)
         self.pub_enable = self.create_publisher(Bool, g('enable_topic'), RELIABLE_QOS)
         self.pub_odom = self.create_publisher(Odometry, '/odometry/filtered', SENSOR_QOS)
+        # TF odom -> base_link: that thi robot_localization phat. Thieu no thi
+        # marker_pose_republisher_node khong lookup duoc va /marker/pose_odom im.
+        self.tf_bc = TransformBroadcaster(self)
         self.pub_fc_odom = self.create_publisher(Odometry, '/mavros/odometry/in', SENSOR_QOS)
         self.pub_range = self.create_publisher(Range, '/mavros/mtf01p', SENSOR_QOS)
         self.pub_state = self.create_publisher(State, '/mavros/state', RELIABLE_QOS)
@@ -138,7 +143,19 @@ class SimFcBridgeNode(Node):
         out.twist = msg.twist
         self.odom_queue.append((now + self.get_parameter('odom_delay_s').value, out))
         while self.odom_queue and self.odom_queue[0][0] <= now:
-            self.pub_odom.publish(self.odom_queue.popleft()[1])
+            phat = self.odom_queue.popleft()[1]
+            self.pub_odom.publish(phat)
+            self.publish_tf(phat)
+
+    def publish_tf(self, odom):
+        """TF odom -> base_link tu chinh ban tin vua phat, de TF va topic khong lech nhau."""
+        tf = TransformStamped()
+        tf.header = odom.header
+        tf.child_frame_id = odom.child_frame_id
+        p = odom.pose.pose.position
+        tf.transform.translation.x, tf.transform.translation.y, tf.transform.translation.z = p.x, p.y, p.z
+        tf.transform.rotation = odom.pose.pose.orientation
+        self.tf_bc.sendTransform(tf)
 
     def control_step(self):
         enable, (vx, vy, vz, yaw_rate) = self.fc.step(self.now_s())

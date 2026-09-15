@@ -472,10 +472,14 @@ def test_hang_so_escalate_khop_failsafe_event():
 # ---------------------------------------------------------------- RTH (ve nha)
 
 def fsm_dang_bay_toi_diem():
-    """TAKEOFF -> ENROUTE, da chot nha o (0, 0), dang o giua duong toi tag (5, 5)."""
+    """TAKEOFF -> ENROUTE, da chot nha o (0, 0), dang o giua duong toi tag.
+
+    pos_anchored=True la TIEN DE bat buoc: chua neo thi FSM co y khong chot nha (xem
+    test_chua_neo_thi_khong_chot_nha).
+    """
     fsm = fsm_dang_treo([wp(0, marker=1)])
-    fsm.step(snap(0.5, armed=True, range_m=0.2, position=(0.0, 0.0, 0.2)))
-    fsm.step(snap(0.6, armed=True, range_m=1.0, position=(0.0, 0.0, 1.0)))
+    fsm.step(snap(0.5, armed=True, range_m=0.2, position=(0.0, 0.0, 0.2), pos_anchored=True))
+    fsm.step(snap(0.6, armed=True, range_m=1.0, position=(0.0, 0.0, 1.0), pos_anchored=True))
     assert fsm.state == m.ENROUTE
     assert fsm.home == (0.0, 0.0, 0.2)
     return fsm
@@ -648,3 +652,30 @@ def test_diem_khong_co_hanh_dong_khong_dinh_gripper():
     assert act.gripper_command == ''
     assert 'tha' not in act.detail and 'gap' not in act.detail    # khong noi doi nua
     assert fsm.state == m.TAKEOFF and fsm.current_wp_index == 1
+
+
+def test_chua_neo_thi_khong_chot_nha_va_rth_ha_tai_cho():
+    """Truoc khi odom neo theo bang tag, toa do thuoc khung khac va se NHAY khi neo.
+
+    Chot nha luc do thi sau khi neo con so ay tro sang mot cho vat ly khac: da tai hien duoc
+    canh cat canh lech pad_home 3 m thi RTH ve pad_home chu khong ve diem cat canh.
+    Nay khong chot -> HOME_VALID = 0 -> RTH tu roi ve ha canh tai cho. Giao uoc GCS<->Pi 5.2b y 4.
+    """
+    fsm = fsm_dang_treo([wp(0, marker=1)])
+    fsm.step(snap(0.5, armed=True, range_m=0.2, position=(0.0, 0.0, 0.2)))   # pos_anchored=False
+    fsm.step(snap(0.6, armed=True, range_m=1.0, position=(0.0, 0.0, 1.0)))
+    assert fsm.state == m.ENROUTE
+    assert fsm.home is None, 'khong duoc chot nha khi odom chua neo'
+    fsm.step(snap(1.0, armed=True, range_m=2.0, position=(3.0, 0.0, 2.0),
+                  failsafe_escalate_to=m.ESCALATE_RTH))
+    assert fsm.state == m.EMERGENCY_LAND          # ha tai cho, KHONG bay ve mot diem sai
+
+
+def test_neo_muon_trong_luc_leo_van_chot_duoc_nha():
+    """Drone khong thay pad cua chinh no luc nam dat; neo xay ra ~0,6 s sau khi roi dat, luc
+    x, y van la cua diem cat canh (leo thang dung)."""
+    fsm = fsm_dang_treo([wp(0, marker=1)])
+    fsm.step(snap(0.5, armed=True, range_m=0.1, position=(2.0, 1.0, 0.1)))   # chua neo
+    assert fsm.home is None
+    fsm.step(snap(0.9, armed=True, range_m=0.4, position=(2.0, 1.0, 0.4), pos_anchored=True))
+    assert fsm.home == (2.0, 1.0, 0.4), 'neo trong luc leo thi van phai chot duoc nha'

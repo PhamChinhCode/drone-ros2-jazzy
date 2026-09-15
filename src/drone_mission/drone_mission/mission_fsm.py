@@ -150,6 +150,9 @@ class Snapshot:
     battery_pct: float = 100.0
     # Vi tri EKF (x, y, z) trong odom; None = chua co / qua han.
     position: tuple = None
+    # odom da NEO theo tags.yaml chua (EkfHealth.anchored). Truoc khi neo, position thuoc mot
+    # khung khac va se NHAY khi neo - nen khong duoc chot "nha" bang no.
+    pos_anchored: bool = False
     landing_target_lost: bool = True
     landed: bool = False
     gripper_sensor_confirmed: bool = False
@@ -426,7 +429,14 @@ class MissionFsm:
         # Chot "nha" trong luc dang leo: drone leo THANG DUNG nen x, y van la cua nha, va RTH
         # chi dung x, y (do cao ve nha lay theo luc vao RTH). Ghi o day thay vi ngay luc chuyen
         # trang thai vi luc do co the chua co vi tri EKF.
-        if self.home is None and snap.position is not None:
+        #
+        # BAT BUOC doi pos_anchored: truoc khi odom neo theo bang tag, goc odom la cho EKF khoi
+        # dong. Chot home luc do thi sau khi neo con so ay tro sang MOT CHO VAT LY KHAC va RTH bay
+        # sai cho - da tai hien: cat canh lech pad_home 3 m thi RTH ve pad_home chu khong ve diem
+        # cat canh. Giao uoc GCS<->Pi 5.2b y 4. Drone khong thay duoc pad cua chinh no luc dau
+        # (camera chech 20 do, tag duoi min_range) nen neo xay ra ~0,6 s sau khi roi dat, luc x, y
+        # van la cua diem cat canh.
+        if self.home is None and snap.position is not None and snap.pos_anchored:
             self.home = snap.position
         if snap.ob_auth is not True:
             return Action(velocity_up_mps=0.0, detail='khong biet quyen - giu vz = 0')
