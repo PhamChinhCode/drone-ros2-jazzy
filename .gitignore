@@ -33,5 +33,14 @@ venv/
 # Backup config.txt do install.sh tạo ra
 *.bak-*
 
+# ---------------------------------------------------------------------------
+# Cấu hình IDE của từng máy — KHÔNG commit.
+# .vscode/settings.json do extension CMake của VS Code tự sinh, chứa đường dẫn
+# TUYỆT ĐỐI tới máy đang dùng (cmake.sourceDirectory = /home/<user>/.../src/...)
+# nên vô nghĩa hoặc gây lỗi trên máy khác — cùng lý do với build/ install/ ở trên.
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+
 # OS
 .DS_Store
