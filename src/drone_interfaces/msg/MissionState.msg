@@ -19,3 +19,9 @@ int32 expected_marker_id              # -1 khi khong o pha can marker
 uint8 retry_count
 builtin_interfaces/Time state_entered_stamp
 string detail                         # ly do/ghi chu ngan, dung cho log va hien thi GCS
+uint8 wp_total                        # tong so diem cua ke hoach; 0 = chua nap
+# "Nha" cua RTH trong khung odom (ENU, m). CHI hop le khi home_valid: truoc khi odom neo theo
+# bang tag, toa do thuoc mot khung khac va se NHAY khi neo, nen chot nha luc do la sai cho.
+# Giao uoc GCS <-> Pi muc 5.2b y 4.
+bool home_valid
+float32[3] home_odom

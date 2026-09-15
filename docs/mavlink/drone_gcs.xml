@@ -1,0 +1,195 @@
+<?xml version="1.0"?>
+<!--
+  Dialect MAVLink cho kenh GCS <-> Pi 4 (4G/LTE, UDP, MAVLink 2).
+
+  DAY LA NGUON DUY NHAT. Ca hai ben SINH MA tu file nay, khong ben nao cheo tay bo ma hoa:
+      python3 tools/sinh_dialect.py            (phia Pi)
+  Hop dong ngu nghia: docs/GIAO_UOC_GCS_PI.md (so dang ky o muc 8).
+
+  HAI QUY TAC BAT DI BAT DICH khi sua file nay (muc 6.3 R2):
+    1. Truong moi CHI duoc them SAU the <extensions/>, luon o cuoi danh sach extension.
+    2. KHONG them/xoa/doi kieu/doi ten bat ky truong nam TRUOC <extensions/>.
+  Ly do: CRC_EXTRA tinh tren moi truong khong phai extension. Them mot truong thuong lam
+  CRC_EXTRA doi, va ben dang dung dinh nghia cu se LOAI CA GOI vi sai CRC - khong canh bao,
+  khong goi nao toi duoc, trieu chung giong het mat song. Phep kiem A13/A14 bao ve quy tac nay.
+
+  Thu tu khai bao truong khong phai extension KHONG quan trong: mavgen tu sap theo kich thuoc
+  kieu khi xep len day. Thu tu cua truong EXTENSION thi LA phan cua hop dong.
+-->
+<mavlink>
+  <include>common.xml</include>
+
+  <enums>
+    <!-- Mo rong MAV_CMD chuan. Dai rieng cua kenh nay: 42100-42149 (muc 8.2). -->
+    <enum name="MAV_CMD">
+      <entry value="42100" name="MAV_CMD_DRONE_ABORT_MISSION">
+        <description>Huy ke hoach dang nap hoac dang chay, ha canh, ve IDLE. Lenh KHAN: GCS phat lai moi 0,5 s khong gioi han toi khi co COMMAND_ACK (muc 4.2).</description>
+        <param index="1">Khong dung, dat 0.</param>
+        <param index="2">Khong dung, dat 0.</param>
+        <param index="3">Khong dung, dat 0.</param>
+        <param index="4">Khong dung, dat 0.</param>
+        <param index="5">Khong dung, dat 0.</param>
+        <param index="6">Khong dung, dat 0.</param>
+        <param index="7">Khong dung, dat 0.</param>
+      </entry>
+    </enum>
+
+    <!-- Muc 3.3. Ma so de may xu ly; chuoi reason de nguoi doc. Hai thu khong duoc mau thuan;
+         khi mau thuan thi CHUOI la thu dung, vi no den tu mission_manager_node - ben phan quyet. -->
+    <enum name="DRONE_MISSION_RESULT">
+      <description>Ket qua nap ke hoach, tra trong DRONE_MISSION_ACK.</description>
+      <entry value="0" name="DRONE_MISSION_ACCEPTED"><description>mission_manager_node da nap.</description></entry>
+      <entry value="1" name="DRONE_MISSION_ERR_TIMEOUT"><description>Thieu DRONE_MISSION_ITEM sau 5 lan hoi.</description></entry>
+      <entry value="2" name="DRONE_MISSION_ERR_COUNT"><description>count = 0 hoac > 16.</description></entry>
+      <entry value="3" name="DRONE_MISSION_ERR_UNKNOWN_TAG"><description>expected_marker_id khong co trong tags.yaml.</description></entry>
+      <entry value="4" name="DRONE_MISSION_ERR_PARAM"><description>Tham so ngoai dai (max_vel_mps, alt_m...).</description></entry>
+      <entry value="5" name="DRONE_MISSION_ERR_BUSY"><description>Pi khong o IDLE, hoac dang cho cat canh theo ke hoach cu.</description></entry>
+      <entry value="6" name="DRONE_MISSION_ERR_CONTRACT"><description>MAJOR cua hai ben khac nhau (muc 6.2).</description></entry>
+    </enum>
+
+    <!-- Muc 5.2. BIT = 0 NGHIA LA KHONG BIET, KHONG PHAI LA 0. Quy tac R3: "0 la mot loi noi doi khac". -->
+    <enum name="DRONE_VALID_FLAGS" bitmask="true">
+      <description>Co hieu luc du lieu trong DRONE_TELEMETRY. Bit = 0 -> BO QUA truong tuong ung, dung doc gia tri.</description>
+      <entry value="1" name="DRONE_POS_VALID"><description>odom DA NEO theo tags.yaml it nhat mot lan, VA EKF khoe, VA /odometry/filtered con tuoi (muc 5.2b).</description></entry>
+      <entry value="2" name="DRONE_GLOBAL_POS_VALID"><description>lat/lon dung duoc. HIEN LUON = 0: FC chua co GPS.</description></entry>
+      <entry value="4" name="DRONE_BATTERY_VALID"><description>battery_pct/battery_v dung duoc. HIEN LUON = 0: FC chua gui BATTERY_STATUS.</description></entry>
+      <entry value="8" name="DRONE_FC_LINK_VALID"><description>/mavros/state con tuoi VA connected = true.</description></entry>
+      <entry value="16" name="DRONE_MARKER_VALID"><description>marker_id_tracking dung duoc.</description></entry>
+      <entry value="32" name="DRONE_GRIPPER_VALID"><description>gripper_state dung duoc (/gripper/status con tuoi).</description></entry>
+      <entry value="64" name="DRONE_EKF_HEALTHY"><description>/ekf/health.healthy = true.</description></entry>
+      <entry value="128" name="DRONE_RSSI_VALID"><description>gcs_rssi_dbm doc duoc tu modem.</description></entry>
+      <entry value="256" name="DRONE_HOME_VALID"><description>home_n_mm/home_e_mm da chot TRONG KHUNG DA NEO (muc 5.2b y 4).</description></entry>
+    </enum>
+
+    <!-- Muc 5.2. Day la TRANG THAI, khong phai hieu luc du lieu. -->
+    <enum name="DRONE_STATUS_FLAGS" bitmask="true">
+      <description>Trang thai trong DRONE_TELEMETRY. Hieu luc theo co o DRONE_VALID_FLAGS.</description>
+      <entry value="1" name="DRONE_ARMED"><description>/mavros/state.armed. Hieu luc theo FC_LINK_VALID. Khong co bit nay thi GCS khong kiem chung duoc lenh DISARM.</description></entry>
+      <entry value="2" name="DRONE_PI_HAS_AUTHORITY"><description>OB_AUTH: nguoi lai da trao quyen cho Pi qua ch5/ch8 (giao uoc FC 6.3). Khong co bit nay thi nguoi van hanh khong hieu vi sao MISSION_START bi tu choi.</description></entry>
+      <entry value="4" name="DRONE_CARRYING"><description>gripper_state = CLOSED, tuc dang giu hang. Hieu luc theo GRIPPER_VALID.</description></entry>
+    </enum>
+
+    <!-- Muc 8.5. Pi da doi chieu tung gia tri voi hang so ROS ngay 2026-09-16: khop chinh xac. -->
+    <enum name="DRONE_MISSION_STATE">
+      <description>Trung hang so drone_interfaces/msg/MissionState.</description>
+      <entry value="0" name="DRONE_STATE_IDLE"/>
+      <entry value="1" name="DRONE_STATE_TAKEOFF"/>
+      <entry value="2" name="DRONE_STATE_ENROUTE"/>
+      <entry value="3" name="DRONE_STATE_MARKER_SEARCH"/>
+      <entry value="4" name="DRONE_STATE_PRECISION_LAND"/>
+      <entry value="5" name="DRONE_STATE_ACTUATE_GRIPPER"/>
+      <entry value="6" name="DRONE_STATE_RETRY_LOITER"/>
+      <entry value="7" name="DRONE_STATE_RTH"/>
+      <entry value="8" name="DRONE_STATE_EMERGENCY_LAND">
+        <description>Trang thai HA CANH CHUNG, khong chi ha canh khan cap: dich cua ca NAV_LAND binh thuong, "xong ke hoach" va ha canh do failsafe. GCS KHONG nen hien chu "KHAN CAP" khi thay gia tri 8 - phan biet bang failsafe_type (= 0 la ha canh binh thuong).</description>
+      </entry>
+      <entry value="9" name="DRONE_STATE_MISSION_COMPLETE"/>
+      <entry value="10" name="DRONE_STATE_FAILSAFE"/>
+    </enum>
+
+    <enum name="DRONE_FAILSAFE_TYPE">
+      <description>Trung hang so drone_interfaces/msg/FailsafeEvent.</description>
+      <entry value="0" name="DRONE_FS_NONE"/>
+      <entry value="1" name="DRONE_FS_MARKER_TIMEOUT"/>
+      <entry value="2" name="DRONE_FS_GRIP_CONFIRM_FAIL"/>
+      <entry value="3" name="DRONE_FS_LINK_LOST"/>
+      <entry value="4" name="DRONE_FS_LOW_BATTERY"/>
+      <entry value="5" name="DRONE_FS_EKF_UNHEALTHY"/>
+      <entry value="6" name="DRONE_FS_FC_COMM_LOST"/>
+    </enum>
+
+    <enum name="DRONE_GRIPPER_STATE">
+      <description>Trung hang so drone_interfaces/msg/GripperStatus.</description>
+      <entry value="0" name="DRONE_GRIP_OPEN"/>
+      <entry value="1" name="DRONE_GRIP_CLOSED"/>
+      <entry value="2" name="DRONE_GRIP_MOVING"/>
+      <entry value="3" name="DRONE_GRIP_ERROR"/>
+    </enum>
+
+    <enum name="DRONE_WP_ACTION">
+      <description>Trung hang so drone_interfaces/msg/MissionWaypoint.</description>
+      <entry value="0" name="DRONE_ACTION_NONE"><description>Chi ghe: ha canh, giu on dinh roi di tiep. KHONG dinh gripper.</description></entry>
+      <entry value="1" name="DRONE_ACTION_PICKUP"><description>Gap. Xong = sensor_confirmed True.</description></entry>
+      <entry value="2" name="DRONE_ACTION_DROPOFF"><description>Tha. Xong = sensor_confirmed False - dieu kien NGUOC voi PICKUP.</description></entry>
+    </enum>
+  </enums>
+
+  <messages>
+    <!-- ================= GCS -> Pi: nap ke hoach (muc 3) ================= -->
+    <message id="42001" name="DRONE_MISSION_COUNT">
+      <description>GCS mo mot luot nap ke hoach. Pi tra loi bang DRONE_MISSION_REQUEST(0). COUNT moi khi dang nap thi huy luot cu.</description>
+      <field type="uint32_t" name="mission_id">ID ke hoach do GCS cap. Pi khong sinh.</field>
+      <field type="uint64_t" name="issued_stamp_us" units="us">Thoi diem GCS phat lenh, micro giay UNIX UTC. Pi chi ghi log, khong dung de quyet dinh.</field>
+      <field type="float" name="search_timeout_s" units="s">Thoi gian tim marker toi da moi diem. 0 = dung mission.yaml.</field>
+      <field type="uint8_t" name="count">So diem, 1-16. Ngoai dai -> ERR_COUNT.</field>
+      <field type="uint8_t" name="max_retries">So lan thu lai toi da moi diem. 0 = dung mission.yaml.</field>
+      <field type="char[20]" name="plan_name">Ten ke hoach, chi de nguoi doc. CAT CON 20 BYTE, khong bao loi.</field>
+    </message>
+
+    <message id="42002" name="DRONE_MISSION_REQUEST">
+      <description>Pi hoi mot diem. Het item_timeout_s = 1,0 s khong nhan duoc ITEM thi phat lai CUNG seq, toi da 5 lan roi ACK ERR_TIMEOUT.</description>
+      <field type="uint32_t" name="mission_id">Phai trung mission_id cua luot dang nap.</field>
+      <field type="uint8_t" name="seq">Thu tu diem dang hoi, tu 0.</field>
+    </message>
+
+    <message id="42003" name="DRONE_MISSION_ITEM">
+      <description>Mot diem ke hoach. KHONG cho lat/lon/pos_ned: drone khong co GPS, vi tri suy tu expected_marker_id qua tags.yaml (muc 3.1, 8.3).</description>
+      <field type="uint32_t" name="mission_id">Phai trung mission_id cua luot dang nap.</field>
+      <field type="int32_t" name="expected_marker_id">ID AprilTag - NGUON VI TRI DUY NHAT. Phai co trong tags.yaml, khong thi ACK ERR_UNKNOWN_TAG.</field>
+      <field type="float" name="alt_m" units="m">Do cao so voi TAG DICH cua diem nay: z_odom = tag_z + alt_m. KHONG phai so voi diem cat canh.</field>
+      <field type="float" name="acceptance_radius_m" units="m">Ban kinh ngang coi la "da toi noi".</field>
+      <field type="float" name="max_vel_mps" units="m/s">Tran toc do ngang tren chang bay toi diem nay, trong khoang (0; 1,9].</field>
+      <field type="float" name="loiter_s" units="s">Thoi gian giu on dinh tai diem truoc khi lam action.</field>
+      <field type="uint8_t" name="seq">Thu tu diem, tu 0, lien tuc.</field>
+      <field type="uint8_t" name="action" enum="DRONE_WP_ACTION">Hanh dong tai diem.</field>
+    </message>
+
+    <message id="42004" name="DRONE_MISSION_ACK">
+      <description>Ket qua nap. Pi CHI gui sau khi mission_manager_node da phan quyet, khong gui som khi moi nhan du byte.</description>
+      <field type="uint32_t" name="mission_id">ID ke hoach vua nap.</field>
+      <field type="uint8_t" name="result" enum="DRONE_MISSION_RESULT">Ma ket qua.</field>
+      <field type="char[50]" name="reason">Chuoi ly do do mission_manager_node sinh ra, chuyen thang khong sua. CAT CON 50 BYTE.</field>
+    </message>
+
+    <!-- ================= Pi -> GCS: telemetry (muc 5) ================= -->
+    <message id="42010" name="DRONE_TELEMETRY">
+      <description>Trang thai tong hop, 2 Hz CO DINH ke ca khi khong nguon nao cap nhat - nguon thieu thi ha co hieu luc tuong ung (quy tac R5).</description>
+      <field type="uint64_t" name="stamp_us" units="us">Dong ho he thong Pi, co the lech neu chua dong bo NTP. Chi de log va sap thu tu; xet do tuoi thi dung thoi diem GCS NHAN.</field>
+      <field type="uint32_t" name="mission_id">Ke hoach dang chay. 0 = chua nap.</field>
+      <field type="uint32_t" name="contract_ver">MAJOR*10000 + MINOR*100. Ban 0.3 = 300. Lech MAJOR -> muc 6.2.</field>
+      <field type="int32_t" name="lat" units="degE7">Vi do. Hieu luc theo GLOBAL_POS_VALID (hien luon 0).</field>
+      <field type="int32_t" name="lon" units="degE7">Kinh do. Hieu luc theo GLOBAL_POS_VALID (hien luon 0).</field>
+      <field type="int32_t" name="marker_id_tracking">Tag dang BAM. MARKER_VALID = 0 thi BO QUA truong, dung doc -1.</field>
+      <field type="float" name="alt_m" units="m">Do cao so voi GOC BAN DO TAG, = -z cua LOCAL_POSITION_NED. Khac goc voi alt_m cua DRONE_MISSION_ITEM.</field>
+      <field type="float[3]" name="vel_ned" units="m/s">Van toc he NED (N, E, D). NED, KHONG phai FLU - dien sai dau thi GCS hien drone di len khi no dang xuong.</field>
+      <field type="float" name="battery_pct">Phan tram pin. Hieu luc theo BATTERY_VALID (hien luon 0).</field>
+      <field type="float" name="battery_v" units="V">Dien ap pin. Hieu luc theo BATTERY_VALID.</field>
+      <field type="uint16_t" name="valid_flags" enum="DRONE_VALID_FLAGS" display="bitmask">Co hieu luc du lieu.</field>
+      <field type="uint16_t" name="status_flags" enum="DRONE_STATUS_FLAGS" display="bitmask">Co trang thai.</field>
+      <field type="int16_t" name="gcs_rssi_dbm" units="dBm">RSSI modem 4G. Hieu luc theo RSSI_VALID.</field>
+      <field type="uint8_t" name="mission_state" enum="DRONE_MISSION_STATE">Trang thai FSM nhiem vu.</field>
+      <field type="uint8_t" name="current_wp_index">Chi so diem dang lam, tu 0.</field>
+      <field type="uint8_t" name="wp_total">Tong so diem cua ke hoach. 0 = chua nap.</field>
+      <field type="uint8_t" name="retry_count">So lan da thu lai o diem hien tai.</field>
+      <field type="uint8_t" name="gripper_state" enum="DRONE_GRIPPER_STATE">Trang thai co cau gap.</field>
+      <field type="uint8_t" name="failsafe_type" enum="DRONE_FAILSAFE_TYPE">Su co dang bat. 0 = binh thuong.</field>
+      <extensions/>
+      <field type="int32_t" name="expected_marker_id">Tag dang TIM (khac tag dang bam). -1 = khong tim. Hai so nay khac nhau suot pha MARKER_SEARCH va do la luc nguoi van hanh can nhin nhat.</field>
+      <field type="uint32_t" name="tagmap_crc">CRC-32 IEEE cua ban do tag, cong thuc o muc 8.6. Lech -> GCS khoa nap ke hoach.</field>
+      <field type="int32_t" name="home_n_mm" units="mm">Toa do N cua "nha" RTH trong khung da neo. Hieu luc theo HOME_VALID.</field>
+      <field type="int32_t" name="home_e_mm" units="mm">Toa do E cua "nha" RTH. Hieu luc theo HOME_VALID.</field>
+    </message>
+
+    <message id="42011" name="DRONE_LINK_STATS">
+      <description>Suc khoe duong truyen, 0,2 Hz, HAI CHIEU. Bien "duong truyen te" thanh con so: phan biet mat goi / nghen hang doi / sai chu ky. Truong ben phat KHONG DO DUOC thi dien UINT32_MAX (uint16 -> 0xFFFF), khong dien 0 (R3).</description>
+      <field type="uint32_t" name="rx_ok">Goi MAVLink hop le da nhan.</field>
+      <field type="uint32_t" name="rx_drop">Goi mat, suy tu khoang trong cua seq MAVLink (seq tang dan theo tung sysid/compid).</field>
+      <field type="uint32_t" name="rx_bad_crc">Goi sai CRC.</field>
+      <field type="uint32_t" name="rx_bad_sig">Goi sai chu ky (khi bat muc 7.6).</field>
+      <field type="uint32_t" name="tx_sent">Goi da gui.</field>
+      <field type="uint32_t" name="tx_dropped">Goi telemetry bi bo do nghen (muc 5.3).</field>
+      <field type="uint16_t" name="queue_depth">Do sau hang doi gui hien tai.</field>
+      <field type="uint16_t" name="rtt_ms" units="ms">Vong khu hoi, do bang TIMESYNC (111).</field>
+    </message>
+  </messages>
+</mavlink>

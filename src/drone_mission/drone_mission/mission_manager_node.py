@@ -298,6 +298,12 @@ class MissionManagerNode(Node):
         msg.current_wp_index = self.fsm.current_wp_index
         msg.expected_marker_id = expected_marker_id
         msg.retry_count = self.fsm.retry_count
+        msg.wp_total = len(self.fsm.waypoints)
+        # home = None khi chua cat canh, hoac khi cat canh luc odom chua neo theo bang tag -
+        # luc do KHONG duoc dien 0, vi 0 la toa do that cua pad_home (giao uoc GCS 5.2b, P21).
+        msg.home_valid = self.fsm.home is not None
+        if msg.home_valid:
+            msg.home_odom = [float(v) for v in self.fsm.home]
         msg.state_entered_stamp.sec = int(self.fsm.state_entered_s)
         msg.state_entered_stamp.nanosec = int((self.fsm.state_entered_s % 1.0) * 1e9)
         msg.detail = detail

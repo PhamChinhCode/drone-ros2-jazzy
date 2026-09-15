@@ -42,5 +42,12 @@ venv/
 .vscode/
 .idea/
 
+# ---------------------------------------------------------------------------
+# Dialect MAVLink kenh GCS: ma DAN XUAT tu docs/mavlink/drone_gcs.xml (~23k dong,
+# gom ca common.xml). Nguon duy nhat la file XML - dung nguyen tac "mot nguon su that"
+# cua giao uoc (GIAO_UOC_GCS_PI.md muc 7.1). Sinh lai: python3 tools/sinh_dialect.py
+# ---------------------------------------------------------------------------
+src/drone_comms/drone_comms/dialect_gcs.py
+
 # OS
 .DS_Store
