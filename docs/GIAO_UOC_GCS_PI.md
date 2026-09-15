@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| Phiên bản hợp đồng | **0.1** |
-| Ngày | 2026-09-15 |
+| Phiên bản hợp đồng | **0.2** |
+| Ngày | 2026-09-16 |
 | Trạng thái | **Bản thảo — GCS đã phản hồi (2026-09-16), chờ Pi trả lời mục 11.** Chưa mục nào [CHỐT] |
 | Phạm vi | Mọi thứ đi qua đường 4G/LTE giữa Pi và GCS. Kiến trúc nội bộ mỗi bên nằm ngoài phạm vi |
 | Tài liệu song sinh | `GIAO_UOC_FC_ROS2.md` (đường FC ↔ Pi) — **hai hợp đồng độc lập, xem mục 1.2** |
@@ -51,13 +51,12 @@ Giống hợp đồng FC, để hai tài liệu đọc lẫn được:
 | **[ĐANG LÀM]** | Đã giao việc cho một bên, đang chờ | Không |
 | **[ĐỀ XUẤT]** | Một bên đề nghị, bên kia chưa trả lời | Không |
 
-**Ở bản 0.1 này gần như mọi mục đều là [ĐỀ XUẤT]** — phía GCS chưa phản hồi. Nhãn được ghi ở
-từng mục; chỗ nào không ghi thì hiểu là [ĐỀ XUẤT].
+Nhãn được ghi ở từng mục; chỗ nào không ghi thì hiểu là nhãn của mục cha.
 
-> **GCS (2026-09-16):** mục nào GCS đồng ý nguyên văn đã đổi nhãn sang **[THOẢ THUẬN]** (Pi đề
-> xuất + GCS đồng ý = hai bên thống nhất, chưa chạy trên dây). Mục nào GCS đề nghị sửa **giữ
-> nguyên [ĐỀ XUẤT]** và có ghi chú `GCS → 11.Pn` ngay tại chỗ; chi tiết ở **mục 11**. GCS **không
-> sửa nội dung gốc** của Pi — Pi quyết định nhập hay bác từng đề xuất.
+**Ở bản 0.2, hầu hết mục là [THOẢ THUẬN]** — Pi đề xuất, GCS đã phản hồi, hai bên thống nhất.
+**Chưa mục nào [CHỐT]**, vì chưa có byte nào chạy trên dây; đó là điều kiện duy nhất để lên [CHỐT]
+và cũng là điều kiện để hợp đồng lên **1.0** (mục 11.1). Còn **đúng một mục mở**: P18 do Pi nêu,
+chờ GCS trả lời (mục 11.2).
 
 ### 0.4 Quy ước đặt tên
 
@@ -119,12 +118,13 @@ Hệ quả cụ thể, dễ làm sai:
 | GCS lắng nghe | `gcs_host:gcs_port` = **:14550** | |
 | MTU | ≤ 1400 byte một datagram | tránh phân mảnh IP trên đường 4G |
 
-**Pi gọi ra trước, GCS trả lời về địa chỉ nguồn nó thấy.** [ĐỀ XUẤT]
+**Pi gọi ra trước, GCS trả lời về địa chỉ nguồn nó thấy.** [THOẢ THUẬN]
 
 Đây là điểm bắt buộc phải làm đúng, không phải chi tiết hiện thực: modem 4G hầu như luôn nằm sau
 NAT của nhà mạng (thường là CGNAT), nên **GCS không thể chủ động mở kết nối tới Pi**. Pi phải phát
 `HEARTBEAT` 1 Hz tới `gcs_host:gcs_port` ngay khi khởi động, kể cả khi chưa nhận được gì; GCS ghi
-lại địa chỉ nguồn của gói đầu tiên và gửi mọi thứ về đúng địa chỉ đó.
+**GCS gửi về địa chỉ nguồn của gói HỢP LỆ GẦN NHẤT từ `(sysid 1, compid 191)`** — khi đã bật chữ ký
+gói thì "hợp lệ" nghĩa là **chữ ký đúng**. Pi nhận và gửi trên **cùng một socket** bind ở 14551.
 
 Kéo theo hai ràng buộc:
 
@@ -133,9 +133,12 @@ Kéo theo hai ràng buộc:
 2. Ánh xạ NAT hết hạn nếu im lặng (thường 30–120 s). `HEARTBEAT` 1 Hz giữ cho nó sống. **Không
    được tắt heartbeat để tiết kiệm băng thông** — mất ánh xạ NAT là mất đường về.
 
-> **GCS → 11.P12:** đồng ý Pi gọi ra trước. Riêng "địa chỉ nguồn của gói **đầu tiên**" sẽ mất
-> đường về khi IP 4G đổi. Đề nghị: theo gói **hợp lệ gần nhất** (chữ ký đúng) từ `(1, 191)`; Pi
-> nhận/gửi trên **cùng một socket** bind 14551.
+**Pi nhận đề xuất này của GCS và đây là lý do đầy đủ** [THOẢ THUẬN]: bản 0.1 ghi "gói **đầu tiên**"
+— sai theo cách chỉ lộ ra ngoài hiện trường, vì modem nối lại hoặc CGNAT đổi ánh xạ thì GCS vẫn gửi
+về địa chỉ cũ và **mất đường lên cho tới khi khởi động lại GCS**. Nhưng "gói mới nhất bất kỳ" cũng
+sai theo chiều ngược lại: một gói giả mạo cướp được đường về, và dù nó không ra lệnh được (nhờ chữ
+ký) thì nó vẫn **cắt được lệnh khẩn của người vận hành**. Điều kiện "hợp lệ gần nhất" là chỗ duy nhất
+cân được cả hai. Phép kiểm **C5**.
 
 ### 2.2 `sysid` / `compid` [THOẢ THUẬN]
 
@@ -174,7 +177,7 @@ vì cơ chế đó đã được kiểm nghiệm nhiều năm: có số thứ t�
 **Không mất gì về tương thích QGroundControl:** QGC vốn không diễn đạt được `expected_marker_id`
 hay `action`, nên kế hoạch của dự án này không bao giờ soạn được bằng QGC.
 
-### 3.2 Chuỗi bắt tay [ĐỀ XUẤT]
+### 3.2 Chuỗi bắt tay [THOẢ THUẬN]
 
 ```
 GCS                                    Pi
@@ -199,8 +202,32 @@ GCS                                    Pi
 byte. Lý do: bên duy nhất được phán quyết tính hợp lệ là Pi (mục 1.1), và lý do từ chối của nó là
 thông tin GCS cần nhất.
 
-> **GCS → 11.P14:** đồng ý chuỗi bắt tay và các ngưỡng; cần Pi trả lời 4 câu về **một mục kế hoạch
-> nghĩa là gì** (có tự về home không, `action = NONE` có hạ không…) thì giới hạn 16 điểm mới có nghĩa.
+### 3.2b Một mục kế hoạch nghĩa là gì — trả lời 11.P14 [THOẢ THUẬN]
+
+Bốn câu GCS hỏi, trả lời từ hành vi thật của `mission_fsm.py`:
+
+**1. Kế hoạch KHÔNG tự về home ở cuối.** Xong hành động ở waypoint cuối, FSM hạ cánh **tại chỗ đó**
+rồi DISARM. Muốn drone về nhà thì **GCS phải thêm một mục cuối là marker home với `action = NONE`**.
+Hợp đồng không thêm hành vi ngầm — về nhà hay không là quyết định của người lập kế hoạch.
+
+**2. KHÔNG cần mục đầu là home.** Drone cất cánh từ chỗ nó đang đứng.
+
+**3. Một mục = bay tới → tìm marker → hạ chính xác → làm `action` → cất cánh lại.** Đúng như GCS đoán.
+
+> **`action = NONE` ở mục KHÔNG phải mục cuối: Pi thừa nhận đây là lỗi của mình.** Pi chạy thử
+> 2026-09-16 và thấy FSM vẫn **hạ cánh** rồi vào `ACTUATE_GRIPPER`, và vì hàm chỉ phân hai nhánh
+> (PICKUP / còn lại) nên nó **xử lý như DROPOFF**: log ghi *"giữ ổn định trước khi **thả**"* và
+> *"xong **thả** tại tag 1"* cho một điểm không có hành động nào. Không lệnh gripper nào thực sự được
+> phát nên không gây hại, nhưng **log nói dối** và ngữ nghĩa là tình cờ chứ không phải thiết kế.
+>
+> **Đã sửa ở commit `fa6bb17`** (riêng, không trộn vào việc kênh GCS): `ACTION_NONE` có nhánh riêng
+> — hạ cánh, giữ ổn định, **không dính gripper**, log *"ghé tại tag N"*, rồi đi mục tiếp. Hành vi bay
+> giữ nguyên, chỉ tên gọi thành thật. Thêm một test khẳng định log không còn chứa "thả"/"gắp".
+
+**4. `alt_m` là độ cao TẠI mục đó**, tính từ điểm cất cánh (`target = toạ_độ_tag_z + alt_m`). Vì
+`position_controller_node` bay thẳng tới điểm 3D đó nên nó **cũng là độ cao hành trình của chặng** —
+không có tham số độ cao hành trình riêng. Đặt `alt_m` khác nhau giữa hai mục thì drone lên/xuống dần
+trong lúc bay ngang, không phải bay bằng rồi mới đổi cao độ.
 
 ### 3.3 Mã kết quả trong `DRONE_MISSION_ACK` [THOẢ THUẬN]
 
@@ -222,7 +249,7 @@ chuỗi là thứ đúng, vì nó đến từ bên phán quyết.
 
 ## 4. GCS → Pi: lệnh
 
-### 4.1 Dùng `COMMAND_LONG` chuẩn [ĐỀ XUẤT]
+### 4.1 Dùng `COMMAND_LONG` chuẩn [THOẢ THUẬN]
 
 Ở đây **có** bản tin chuẩn phù hợp nên dùng chuẩn: `COMMAND_LONG` (76) + `COMMAND_ACK` (77). Được
 luôn quy tắc **R4 của hợp đồng FC — mọi lệnh đều phải có đường trả lời** — mà không phải tự chế.
@@ -234,59 +261,85 @@ luôn quy tắc **R4 của hợp đồng FC — mọi lệnh đều phải có �
 | 21 | `NAV_LAND` | hạ cánh tại chỗ (= `~/land`) |
 | 400 | `COMPONENT_ARM_DISARM` | chỉ chấp nhận **disarm**: `param1 = 0`. `param2 = 21196` = cắt ở mọi độ cao |
 | **42100** | `DRONE_ABORT_MISSION` | huỷ kế hoạch đang nạp/đang chạy, hạ cánh, về `IDLE` |
+| 193 | `DO_PAUSE_CONTINUE` | `param1` 0 = dừng giữ vị trí, 1 = đi tiếp. Không đổi `current_wp_index`. **Đã cấp số, FSM chưa hiện thực → `UNSUPPORTED`** (11.P7) |
 
 `COMMAND_ACK.result` dùng giá trị chuẩn: `ACCEPTED` (0), `TEMPORARILY_REJECTED` (1), `DENIED` (2),
 `UNSUPPORTED` (3), `FAILED` (4). **Lệnh lạ → `UNSUPPORTED`, không bao giờ im lặng.**
 
-> **GCS → 11.P7:** thiếu tạm dừng/tiếp tục — đề nghị cấp số `MAV_CMD_DO_PAUSE_CONTINUE` (193).
-> **GCS → 11.P16:** ghi rõ `ACCEPTED` = FSM đã nhận và bắt đầu chuyển (không phải đã xong);
-> `ARM` (`param1 = 1`) trả `DENIED`.
+Hai quy ước dễ lẫn, chốt rõ: [THOẢ THUẬN]
 
-### 4.2 Phát lại và tính bất biến [ĐỀ XUẤT]
+- **`ACCEPTED` cho lệnh chạy dài** (300, 20, 21, 42100) nghĩa là *FSM đã nhận và bắt đầu chuyển
+  trạng thái*, **không** phải "đã xong". GCS theo dõi kết quả qua `mission_state`, **không** dùng
+  `IN_PROGRESS`.
+- **`ARM` (`param1 = 1`) trả `DENIED`, không trả `UNSUPPORTED`.** Lệnh 400 *có* được hỗ trợ; chỉ
+  hành động arm bị từ chối vĩnh viễn (mục 9.3). `UNSUPPORTED` sẽ khiến GCS tưởng là lỗi phiên bản.
 
-GCS phát lại `COMMAND_LONG` cho tới khi có `COMMAND_ACK`, mỗi lần **tăng trường `confirmation`**
-(cơ chế chuẩn). Pi phải **bất biến với lệnh trùng**: cùng một lệnh nhận hai lần thì trạng thái chỉ
-đổi một lần, và lần thứ hai vẫn trả `ACK`.
+### 4.2 Phát lại và tính bất biến [THOẢ THUẬN]
 
-| Quy tắc | Giá trị |
-|---|---|
-| GCS chờ `ACK` | 1,0 s rồi phát lại |
-| Số lần phát lại | 3, rồi báo cho người vận hành |
-| Pi nhớ lệnh đã xử lý | theo `(command, confirmation)` trong 5 s |
+**Bất biến đến từ TRẠNG THÁI, không từ bộ nhớ lệnh.** Mỗi lệnh ở mục 4.1 đưa FSM tới một trạng
+thái đích. Nếu FSM **đã ở** hoặc **đang chuyển tới** trạng thái đó thì Pi trả `ACCEPTED` và không
+làm gì thêm — ví dụ `NAV_RETURN_TO_LAUNCH` khi đang `RTH`, `MISSION_START` khi đang chạy đúng
+`mission_id` đó.
+
+Bản 0.1 định nhớ lệnh đã xử lý theo `(command, confirmation)`. Cách đó **tự triệt tiêu**: cơ chế
+phát lại chuẩn của MAVLink **tăng `confirmation`** mỗi lần, nên bản phát lại luôn có khoá khác và
+không bao giờ bị coi là trùng. Phép kiểm A7 của bản 0.1 lại gửi ba lần cùng một `confirmation` nên
+không bao giờ lộ ra lỗi này — đã sửa A7 thành `confirmation` = 0, 1, 2.
+
+Nếu về sau vẫn cần bộ nhớ lệnh (cho lệnh không ánh xạ được sang trạng thái), khoá là
+`(command, param1…param7)` trong 5 s và **bỏ qua `confirmation`**.
+
+| Nhóm | Lệnh | GCS phát lại | Vì sao |
+|---|---|---|---|
+| Thường | 300, 193 | 1,0 s × 3 rồi báo người vận hành | thao tác lại được bằng tay |
+| **Khẩn** | 20, 21, 400, 42100 | mỗi **0,5 s, KHÔNG giới hạn** tới khi có `ACK` hoặc người vận hành huỷ | |
+
+Lệnh khẩn không được bỏ cuộc: trên 4G chập chờn, một lệnh `LAND`/`DISARM` dừng thử sau 3 giây là
+bỏ drone lại giữa không trung, mà người vận hành cũng không làm gì hơn máy được. Báo động cho người
+vận hành sau lần thứ 3 nhưng **vẫn tiếp tục phát**. An toàn được nhờ tính bất biến ở trên — phát lại
+vô hạn một lệnh bất biến thì vô hại.
+
+Chu kỳ 0,5 s / 1,0 s là **giá trị khởi điểm**, chỉnh lại theo số đo `rtt_ms` ở phép kiểm C3.
 
 **Lệnh không bao giờ được xếp sau telemetry** — xem hàng đợi ưu tiên mục 5.3.
-
-> **GCS → 11.P4 (cao):** bản phát lại luôn có `confirmation` khác, nên nhớ theo
-> `(command, confirmation)` **không bao giờ bắt được lệnh trùng**; A7 dùng cùng `confirmation` nên
-> không lộ lỗi. Đề nghị bất biến **theo trạng thái FSM**.
-> **GCS → 11.P5 (cao):** lệnh khẩn (20, 21, 400, 42100) phát lại mỗi 0,5 s **không giới hạn** tới
-> khi có `ACK`, thay vì bỏ cuộc sau 3 lần.
 
 ---
 
 ## 5. Pi → GCS: telemetry và log
 
-### 5.1 Bảng phát [ĐỀ XUẤT]
+### 5.1 Bảng phát [THOẢ THUẬN]
 
 | ID | Bản tin | Nhịp | Vai trò |
 |---|---|---|---|
 | 0 | `HEARTBEAT` | **1 Hz** | sống/chết, giữ ánh xạ NAT. **Không bao giờ tắt** |
+| **32** | **`LOCAL_POSITION_NED`** | **5 Hz**, chỉ khi `POS_VALID` | vị trí + vận tốc để GCS vẽ 3D và xét vùng cấm |
+| **30** | **`ATTITUDE`** | **5 Hz**, chỉ khi `POS_VALID` | tư thế; GCS dùng `yaw` |
 | 42010 | `DRONE_TELEMETRY` | **2 Hz cố định** | trạng thái tổng hợp |
+| **111** | **`TIMESYNC`** | **0,2 Hz** | đo `rtt_ms` (mục 7.4) |
 | 42011 | `DRONE_LINK_STATS` | **0,2 Hz** | sức khoẻ đường truyền, để gỡ lỗi (mục 7.4) |
 | 253 | `STATUSTEXT` | theo sự kiện, **≤ 2 gói/s** | log người đọc được |
 | 77 | `COMMAND_ACK` | theo sự kiện | trả lời mục 4 |
+| **22** | `PARAM_VALUE` | khi được hỏi | ngưỡng chỉ đọc (mục 9.4) |
 | 42002/42004 | `DRONE_MISSION_REQUEST` / `_ACK` | theo sự kiện | bắt tay mục 3 |
+
+**Vị trí ngang dùng bản tin chuẩn, theo đúng 6.4 bước 1.** Bốn điểm chốt kèm theo: [THOẢ THUẬN]
+
+1. **Hệ NED, gốc = gốc khung `odom`**, mà `tags.yaml` khai toạ độ tag trong chính khung đó — nên
+   đây cũng là gốc bản đồ tag của GCS. Không lấy điểm cất cánh làm gốc. **Xem mục 11.P18: gốc khung
+   và "nhà" của RTH không nhất thiết trùng nhau.**
+2. `LOCAL_POSITION_NED` và `ATTITUDE` **không có chỗ cho cờ hiệu lực**, nên quy tắc là **chỉ phát
+   khi `POS_VALID` = 1**. Không phát = không biết. Đây là cách duy nhất giữ được R3 với bản tin chuẩn.
+3. **`alt_m` của `DRONE_TELEMETRY` định nghĩa bằng `−z` của `LOCAL_POSITION_NED`**, để hai con số
+   không bao giờ lệch nhau được.
+4. `vel_ned` của `DRONE_TELEMETRY` **trùng** `vx/vy/vz` của bản tin 32. Giữ cả hai: gói 42010 phải
+   tự đủ nghĩa khi bản tin 32 không được phát (lúc `POS_VALID` = 0).
 
 **`DRONE_TELEMETRY` phát đúng nhịp kể cả khi không có nguồn nào cập nhật** — nguồn thiếu thì để
 giá trị mặc định và **hạ cờ hiệu lực tương ứng**. Đây là quy tắc R5 của hợp đồng FC: trạng thái
 phải hỏi lại được, vì GCS có thể khởi động lại bất cứ lúc nào và sẽ lỡ mọi sự kiện trước đó.
 
-> **GCS → 11.P1 (cao):** bảng phát **không có vị trí ngang và yaw** — GCS không vẽ được 3D, không
-> giám sát được vùng cấm. Đề nghị thêm `LOCAL_POSITION_NED` (32) + `ATTITUDE` (30) ở **5 Hz**, gốc =
-> gốc `tags.yaml`, chỉ phát khi `POS_VALID`.
-> **GCS → 11.P6:** `rtt_ms` không đo được bằng `HEARTBEAT` — đề nghị `TIMESYNC` (111).
 
-### 5.2 Cờ hiệu lực — phần dễ sai nhất của gói này [ĐỀ XUẤT]
+### 5.2 Cờ hiệu lực — phần dễ sai nhất của gói này [THOẢ THUẬN]
 
 `DRONE_TELEMETRY` mang bitmask `valid_flags`. **Bit = 0 nghĩa là KHÔNG BIẾT, không phải là 0.**
 
@@ -299,6 +352,19 @@ phải hỏi lại được, vì GCS có thể khởi động lại bất cứ l
 | 4 | `MARKER_VALID` | không bám marker nào |
 | 5 | `GRIPPER_VALID` | `/gripper/status` quá hạn (node chưa chạy hoặc đã chết) |
 | 6 | `EKF_HEALTHY` | `/ekf/health.healthy` = false |
+| **7** | **`RSSI_VALID`** | chưa đọc được RSSI modem (P10) |
+
+`status_flags` (`uint16`, trường riêng) mang trạng thái **không phải hiệu lực dữ liệu**: [THOẢ THUẬN]
+
+| Bit | Tên | Nguồn | Hiệu lực theo |
+|---|---|---|---|
+| 0 | `ARMED` | `/mavros/state.armed` | `FC_LINK_VALID` |
+| 1 | `PI_HAS_AUTHORITY` | `OB_AUTH` (ch5/ch8, giao ước FC 6.3) | `FC_LINK_VALID` |
+| 2 | `CARRYING` | `gripper_state == CLOSED` | `GRIPPER_VALID` |
+
+Không có `ARMED` thì GCS **không kiểm chứng được** lệnh `DISARM` đã có tác dụng chưa. Không có
+`PI_HAS_AUTHORITY` thì người vận hành không hiểu vì sao `MISSION_START` bị từ chối — nguyên nhân
+thường gặp nhất là người lái chưa gạt ch5/ch8 để trao quyền cho Pi, việc GCS không nhìn thấy được.
 
 Đây là quy tắc **R3 của hợp đồng FC** áp nguyên văn: *"Dữ liệu không tin cậy thì GẮN CỜ, đừng thay
 bằng giá trị an toàn — `0` là một lời nói dối khác."*
@@ -308,8 +374,6 @@ pin. Ghi thẳng vào hợp đồng để phía GCS **không vẽ đồng hồ p
 nhầm rằng failsafe pin đang bảo vệ mình (mục 9.2).
 
 > **GCS:** đồng ý nguyên tắc — GCS sẽ không vẽ đồng hồ pin/GPS khi bit = 0.
-> **GCS → 11.P10:** `gcs_rssi_dbm` "0 = chưa đọc được" tự vi phạm R3 (đề nghị thêm bit 7
-> `RSSI_VALID`); `fc_connected` trùng nghĩa bit 3.
 
 ### 5.3 Hàng đợi ưu tiên [THOẢ THUẬN]
 
@@ -324,21 +388,28 @@ nhầm rằng failsafe pin đang bảo vệ mình (mục 9.2).
 Telemetry **bị bỏ chứ không xếp hàng**: một gói trạng thái cũ 5 giây thì vô giá trị, mà lại chiếm
 băng thông của gói hiện tại. Chỉ giữ tối đa **1** gói telemetry chờ trong hàng đợi.
 
-### 5.4 Ngân sách băng thông [ĐỀ XUẤT]
+### 5.4 Ngân sách băng thông [THOẢ THUẬN]
 
 | Luồng | Cỡ gói (MAVLink 2, có chữ ký) | Nhịp | Băng thông |
 |---|---|---|---|
 | `HEARTBEAT` | ~34 B | 1 Hz | 34 B/s |
-| `DRONE_TELEMETRY` | ~90 B | 2 Hz | 180 B/s |
-| `DRONE_LINK_STATS` | ~45 B | 0,2 Hz | 9 B/s |
-| **Tổng ở trạng thái nghỉ** | | | **≈ 0,23 kB/s ≈ 1,8 kbit/s** |
+| `DRONE_TELEMETRY` | ~110 B | 2 Hz | 220 B/s |
+| `LOCAL_POSITION_NED` | ~53 B | 5 Hz **khi đang bay** | 265 B/s |
+| `ATTITUDE` | ~53 B | 5 Hz **khi đang bay** | 265 B/s |
+| `TIMESYNC` | ~41 B | 0,2 Hz × 2 chiều | 16 B/s |
+| `DRONE_LINK_STATS` | ~53 B | 0,2 Hz | 11 B/s |
+| **Nghỉ trên đất** (`POS_VALID` = 0) | | | **≈ 0,28 kB/s ≈ 2,3 kbit/s** |
+| **Đang bay** | | | **≈ 0,81 kB/s ≈ 6,5 kbit/s** |
 
-Rất nhẹ so với 4G. Ngân sách này tồn tại **không phải để tiết kiệm tiền** mà để giữ dư địa cho
-lệnh khẩn đi ngay khi đường truyền xấu. **Không thêm luồng định kỳ nào vượt 2 Hz** mà không sửa
-mục này trước.
+Vẫn rất nhẹ so với 4G. Ngân sách này tồn tại **không phải để tiết kiệm tiền** mà để giữ dư địa cho
+lệnh khẩn đi ngay khi đường truyền xấu.
 
-> **GCS → 11.P1:** đúng tinh thần câu trên — đề nghị sửa mục này để cho phép hai luồng
-> vị trí/tư thế 5 Hz (≈ 530 B/s có chữ ký); tổng mọi luồng vẫn < 6 kbit/s.
+**Ngoại lệ 5 Hz là có điều kiện** [THOẢ THUẬN]: `LOCAL_POSITION_NED` và `ATTITUDE` chỉ phát khi
+`POS_VALID` = 1, tức chỉ khi đang bay có vị trí tin được. Nằm trên đất hoặc mất vị trí thì hai luồng
+này **tắt hẳn**, đưa băng thông về mức nghỉ. Đây là lý do ngoại lệ này chấp nhận được: nó tự tắt đúng
+lúc đường truyền cần dư địa nhất — khi drone chưa bay thì chưa cần vẽ 3D.
+
+**Không thêm luồng định kỳ nào** mà không sửa bảng này trước.
 
 ---
 
@@ -356,7 +427,7 @@ mục này trước.
 
 ### 6.2 Hai bên biết nhau ở phiên bản nào [THOẢ THUẬN]
 
-`DRONE_TELEMETRY.contract_ver` = `MAJOR × 10000 + MINOR × 100`. Bản 0.1 → **`100`**.
+`DRONE_TELEMETRY.contract_ver` = `MAJOR × 10000 + MINOR × 100`. Bản 0.1 → `100`, bản **0.2 → `200`**.
 
 Nằm trong bản tin **định kỳ** chứ không phải bản tin bắt tay — đúng quy tắc R5: GCS restart thì
 vẫn biết ngay, không phải hỏi lại.
@@ -378,14 +449,24 @@ Kế thừa nguyên văn từ hợp đồng FC mục 10.2, vì chúng không ph�
 **R1. Bản tin lạ, trường lạ, mã enum lạ → BỎ QUA im lặng, không crash.** Điều kiện để một bên nạp
 bản mới trước bên kia.
 
-**R2. Trường mới chỉ được THÊM vào cuối, không bao giờ đổi nghĩa trường cũ.** MAVLink 2 cắt bỏ
-byte 0 ở cuối gói (*trailing-zero trimming*), nên thêm trường vào cuối là tương thích hai chiều:
-bên cũ đọc gói mới thì bỏ qua phần thừa, bên mới đọc gói cũ thì thấy 0 ở trường mới. **Chèn trường
-vào giữa sẽ phá vỡ mọi thứ một cách âm thầm.**
+**R2. Trường mới chỉ được thêm SAU thẻ `<extensions/>`, luôn ở cuối danh sách extension.**
+Không thêm, xoá, đổi kiểu hay đổi tên bất kỳ trường nằm **trước** `<extensions/>`. [THOẢ THUẬN]
 
-> **GCS → 11.P3 (cao):** quy tắc này **chỉ đúng khi trường mới nằm sau thẻ `<extensions/>`**.
-> Viết thêm vào cuối danh sách trường thường thì `mavgen` sắp lại theo kích thước kiểu và
-> **`CRC_EXTRA` đổi** → bên cũ loại **cả gói** vì sai CRC, không phải "bỏ qua phần thừa".
+Lý do, và đây là chỗ bản 0.1 viết sai:
+
+`CRC_EXTRA` của mỗi bản tin được tính từ tên bản tin cộng tên và kiểu của **mọi trường không phải
+extension**. Thêm một trường thường — dù viết ở cuối file XML — làm `CRC_EXTRA` **đổi**, và bên
+đang dùng định nghĩa cũ sẽ **loại cả gói** vì sai CRC. Không có cảnh báo, không có gói nào tới
+được, và triệu chứng giống hệt mất sóng. Trường sau `<extensions/>` **không** tham gia
+`CRC_EXTRA`, nên bên cũ đọc được phần nó biết và bỏ qua phần còn lại.
+
+Bản 0.1 lẫn cơ chế này với *trailing-zero trimming*. Cắt byte 0 ở cuối gói chỉ là **tối ưu kích
+thước**; nó cho phép đọc payload **ngắn hơn** (bên nhận tự bù 0), chứ không cấp tương thích cho
+trường mới. Hai cơ chế độc lập nhau.
+
+Kèm theo: `mavgen` **tự sắp trường không phải extension theo kích thước kiểu** khi xếp lên dây, và
+MAVLink không có byte đệm. Nên thứ tự khai báo trong XML **chỉ quan trọng với trường extension** —
+ở đó thứ tự là phần của hợp đồng vì không có gì sắp lại giúp.
 
 **R3. Dữ liệu không tin cậy thì GẮN CỜ, đừng thay bằng giá trị "an toàn".** Đã áp ở mục 5.2.
 
@@ -454,7 +535,7 @@ hành vi của nó. Nó cũng là đặc tả chạy được — khi tài liệ
 Đọc chung định dạng YAML với `send_mission_plan` đã có, nên một file kế hoạch chạy được cả hai
 đường (nội bộ ROS và qua dây).
 
-### 7.4 `DRONE_LINK_STATS` — biến "đường truyền tệ" thành con số [ĐỀ XUẤT]
+### 7.4 `DRONE_LINK_STATS` — biến "đường truyền tệ" thành con số [THOẢ THUẬN]
 
 | Trường | Nghĩa |
 |---|---|
@@ -465,16 +546,20 @@ hành vi của nó. Nó cũng là đặc tả chạy được — khi tài liệ
 | `tx_sent` | gói đã gửi |
 | `tx_dropped` | gói telemetry bị bỏ do nghẽn (mục 5.3) |
 | `queue_depth` | độ sâu hàng đợi hiện tại |
-| `rtt_ms` | vòng khứ hồi, đo bằng `HEARTBEAT` |
+| `rtt_ms` | vòng khứ hồi, đo bằng `TIMESYNC` (111) — xem ghi chú dưới bảng |
 
 Không có bảng này thì mọi báo cáo sự cố đường truyền đều là *"thấy lag"*. Có nó thì phân biệt được
 **mất gói** với **nghẽn hàng đợi** với **sai chữ ký** — ba nguyên nhân cần ba cách sửa khác nhau.
 
-> **GCS → 11.P6:** `rtt_ms` đổi sang đo bằng `TIMESYNC`. **11.P17:** trường bên phát không đo
-> được (vd. `rx_bad_crc` phía GCS) thì = `UINT32_MAX`.
-
 `rx_drop` đếm được vì MAVLink có `seq` 1 byte tăng dần **theo từng `(sysid, compid)`**; đếm khoảng
 trống là ra số gói mất. Đây là công cụ chẩn đoán có sẵn, không dùng thì lãng phí.
+
+`rtt_ms` **không đo được bằng `HEARTBEAT`** như bản 0.1 viết — bản tin đó không có trường thời gian
+nào. Dùng `TIMESYNC` (111), vốn tồn tại đúng cho việc này: mỗi bên phát 0,2 Hz, bên kia trả lời ngay
+với `tc1` điền theo quy ước chuẩn. [THOẢ THUẬN]
+
+Trường bên phát **không đo được** thì điền `UINT32_MAX` (`uint16` → `0xFFFF`), không điền 0 — theo
+đúng R3. Ví dụ `pymavlink` không tách được `rx_bad_crc`. [THOẢ THUẬN]
 
 ### 7.5 `STATUSTEXT` — log người đọc được, có phanh
 
@@ -492,8 +577,11 @@ lỗi sẽ tự làm nghẽn chính đường mà người vận hành cần đ�
 
 `CRITICAL` đi ở hàng đợi ưu tiên 0, ngang lệnh khẩn.
 
-> **GCS → 11.P15:** chuỗi dài hơn 50 byte — đề nghị **chia đoạn** bằng `id`/`chunk_seq` (extension
-> MAVLink 2) thay vì cắt; GCS ghép đoạn được.
+**Chia đoạn thay vì cắt** [THOẢ THUẬN]: `STATUSTEXT.text` chỉ 50 byte, mà chuỗi lý do của
+`mission_manager_node` thường dài hơn — ví dụ *"tu choi ke hoach 903: dang cho cat canh theo ke hoach
+cu - khong doi ke hoach luc nay"* là 88 byte. Dùng hai trường extension chuẩn của MAVLink 2 là `id`
+(số hiệu chuỗi) và `chunk_seq` (thứ tự đoạn) để GCS ghép lại. Cắt ngắn sẽ mất đúng phần cuối câu —
+phần thường chứa lý do.
 
 ### 7.6 Chữ ký gói — bắt buộc trước khi bay thật [THOẢ THUẬN]
 
@@ -505,7 +593,7 @@ trước, kèm timestamp chống phát lại). Hợp đồng đề xuất:
 
 | Hạng mục | Giá trị |
 |---|---|
-| Trạng thái | **[ĐỀ XUẤT]** — chưa hiện thực |
+| Trạng thái | **[THOẢ THUẬN]** — hai bên đồng ý cơ chế, chưa hiện thực ở bên nào |
 | Khi nào bắt buộc | trước **mọi** chuyến bay ngoài mạng kín |
 | Gói không có chữ ký / sai chữ ký | **bỏ ngay**, tăng `rx_bad_sig`, **không xử lý lệnh** |
 | Khoá | không bao giờ commit vào repo; nằm ở file ngoài, quyền `600` |
@@ -535,18 +623,28 @@ kênh nào, không phải tra tài liệu. Dải này chỉ MAVLink 2 mới ch�
 
 | ID | Bản tin | Chiều | Trạng thái |
 |---|---|---|---|
-| 0 | `HEARTBEAT` | ↔ | [ĐỀ XUẤT] |
-| 76 | `COMMAND_LONG` | GCS→Pi | [ĐỀ XUẤT] |
-| 77 | `COMMAND_ACK` | Pi→GCS | [ĐỀ XUẤT] |
-| 253 | `STATUSTEXT` | Pi→GCS | [ĐỀ XUẤT] |
-| 42001 | `DRONE_MISSION_COUNT` | GCS→Pi | [ĐỀ XUẤT] |
-| 42002 | `DRONE_MISSION_REQUEST` | Pi→GCS | [ĐỀ XUẤT] |
-| 42003 | `DRONE_MISSION_ITEM` | GCS→Pi | [ĐỀ XUẤT] |
-| 42004 | `DRONE_MISSION_ACK` | Pi→GCS | [ĐỀ XUẤT] |
-| 42010 | `DRONE_TELEMETRY` | Pi→GCS | [ĐỀ XUẤT] |
-| 42011 | `DRONE_LINK_STATS` | ↔ | [ĐỀ XUẤT] |
+| 0 | `HEARTBEAT` | ↔ | [THOẢ THUẬN] |
+| **21** | `PARAM_REQUEST_LIST` | GCS→Pi | [THOẢ THUẬN] — chỉ đọc, mục 9.4 |
+| **22** | `PARAM_VALUE` | Pi→GCS | [THOẢ THUẬN] — mục 9.4 |
+| **23** | ~~`PARAM_SET`~~ | GCS→Pi | **Pi BỎ QUA + `STATUSTEXT` WARN.** Ngưỡng chỉ sửa ở `safety.yaml` (mục 1.1) |
+| **30** | `ATTITUDE` | Pi→GCS | [THOẢ THUẬN] — 5 Hz, chỉ khi `POS_VALID` |
+| **32** | `LOCAL_POSITION_NED` | Pi→GCS | [THOẢ THUẬN] — 5 Hz, chỉ khi `POS_VALID` |
+| 76 | `COMMAND_LONG` | GCS→Pi | [THOẢ THUẬN] |
+| 77 | `COMMAND_ACK` | Pi→GCS | [THOẢ THUẬN] |
+| **111** | `TIMESYNC` | ↔ | [THOẢ THUẬN] — 0,2 Hz, đo `rtt_ms` |
+| 253 | `STATUSTEXT` | Pi→GCS | [THOẢ THUẬN] — chia đoạn, mục 7.5 |
+| 42001 | `DRONE_MISSION_COUNT` | GCS→Pi | [THOẢ THUẬN] |
+| 42002 | `DRONE_MISSION_REQUEST` | Pi→GCS | [THOẢ THUẬN] |
+| 42003 | `DRONE_MISSION_ITEM` | GCS→Pi | [THOẢ THUẬN] |
+| 42004 | `DRONE_MISSION_ACK` | Pi→GCS | [THOẢ THUẬN] |
+| 42010 | `DRONE_TELEMETRY` | Pi→GCS | [THOẢ THUẬN] |
+| 42011 | `DRONE_LINK_STATS` | ↔ | [THOẢ THUẬN] |
 
 **Còn trống:** `42005–42009`, `42012–42099`. Chưa cấp cho ai.
+
+**Bản tin 32 và 30 là bản tin CHUẨN được dùng đúng nghĩa chuẩn** — khác hẳn `MISSION_ITEM_INT` ở mục
+3.1 mà ta từ chối vì phải bóp méo ngữ nghĩa. Đây là ranh giới của quy tắc "ưu tiên bản tin chuẩn":
+dùng khi nó vừa, từ chối khi phải mượn trường sai nghĩa.
 
 ### 8.2 `MAV_CMD`
 
@@ -557,9 +655,12 @@ kênh nào, không phải tra tài liệu. Dải này chỉ MAVLink 2 mới ch�
 
 | Mã | Tên | Trạng thái |
 |---|---|---|
-| 42100 | `MAV_CMD_DRONE_ABORT_MISSION` | [ĐỀ XUẤT] |
+| 42100 | `MAV_CMD_DRONE_ABORT_MISSION` | [THOẢ THUẬN] |
 
 **Còn trống:** `42101–42149`.
+
+`MAV_CMD_DO_PAUSE_CONTINUE` (**193**) đã **cấp số** ở mục 4.1 nhưng FSM chưa hiện thực — Pi trả
+`UNSUPPORTED` và GCS ẩn nút. Cấp số trước để khi làm không phải đổi giao thức (mục 11.P7).
 
 ### 8.3 Trường của `DRONE_MISSION_ITEM` — ánh xạ sang `MissionWaypoint`
 
@@ -579,11 +680,6 @@ suy từ `expected_marker_id`. Chở chúng lên dây chỉ tạo ra ảo giác 
 
 Đây là chỗ **hợp đồng cố tình hẹp hơn message ROS**. Khi nào có GPS thì thêm trường mới vào cuối
 (MINOR, theo R2), đừng hồi sinh ba trường này.
-
-> **GCS → 11.P8 (cao):** giá trị `action` và mọi hằng số `mission_state` / `gripper_state` /
-> `failsafe_type` phải liệt kê ở đây và trong XML (`<enum>`), không chỉ tham chiếu hằng số ROS.
-> **GCS → 11.P2 (cao):** vị trí suy từ `tags.yaml` nhưng GCS có trang thiết kế khu vực riêng — cần
-> `tagmap_crc` để phát hiện hai bản đồ lệch nhau.
 
 ### 8.4 Trường của ba bản tin còn lại
 
@@ -609,15 +705,9 @@ nhiên khi thấy tên bị cắt trong log.
 **`DRONE_MISSION_ACK`** (42004, Pi→GCS): `mission_id` (`uint32`), `result` (`uint8`, mục 3.3),
 `reason` (`char[50]`, cắt ngắn không báo lỗi).
 
-**`DRONE_TELEMETRY`** (42010, Pi→GCS, 2 Hz) — thứ tự trường xếp giảm dần theo kích thước để không
-sinh byte đệm:
-
-> **GCS → 11.P3:** `mavgen` **tự** sắp trường theo kích thước khi xếp lên dây và MAVLink không có
-> byte đệm — thứ tự trong XML không quyết định vị trí trên dây. Thứ tự chỉ còn quan trọng với
-> trường sau `<extensions/>`.
-> **GCS → 11.P9:** đề nghị thêm `status_flags` (ARMED, PI_HAS_AUTHORITY, CARRYING), `wp_total`,
-> `expected_marker_id`, `retry_count`, và `tagmap_crc` (11.P2). **11.P11:** ghi rõ `stamp_us` theo
-> đồng hồ nào.
+**`DRONE_TELEMETRY`** (42010, Pi→GCS, 2 Hz). Thứ tự dưới đây chỉ để **người đọc** dễ tra —
+`mavgen` tự sắp trường không phải extension theo kích thước kiểu khi xếp lên dây (R2). Các trường
+đánh **`ext`** nằm **sau `<extensions/>`**, ở đó thứ tự **là phần của hợp đồng**:
 
 | Trường | Kiểu | Nguồn | Cờ hiệu lực |
 |---|---|---|---|
@@ -626,18 +716,35 @@ sinh byte đệm:
 | `contract_ver` | `uint32` | hằng số của Pi | — (mục 6.2) |
 | `lat` | `int32` | `lat` × 10⁷ | `GLOBAL_POS_VALID` |
 | `lon` | `int32` | `lon` × 10⁷ | `GLOBAL_POS_VALID` |
-| `gcs_rssi_dbm` | `int32` | `gcs_rssi_dbm` | 0 = chưa đọc được |
-| `marker_id_tracking` | `int32` | `marker_id_tracking` | `MARKER_VALID`; −1 = không bám |
+| `marker_id_tracking` | `int32` | `marker_id_tracking` | tag đang **BÁM**. `MARKER_VALID` = 0 thì **bỏ qua trường**, không đọc −1 |
 | `alt_m` | `float` | `alt_m` | `POS_VALID` |
 | `vel_ned` | `float[3]` | `vel_ned` | `POS_VALID`. **NED**, không phải FLU |
 | `battery_pct` | `float` | `battery_pct` | `BATTERY_VALID` |
 | `battery_v` | `float` | `battery_v` | `BATTERY_VALID` |
 | `valid_flags` | `uint16` | (mới) | mục 5.2 |
-| `mission_state` | `uint8` | `mission_state` | hằng số `MissionState` |
+| `status_flags` | `uint16` | (mới) | mục 5.2 |
+| `gcs_rssi_dbm` | `int16` | `gcs_rssi_dbm` | `RSSI_VALID` |
+| `mission_state` | `uint8` | `mission_state` | bảng 8.5 |
 | `current_wp_index` | `uint8` | `current_wp_index` | — |
-| `gripper_state` | `uint8` | `gripper_state` | `GRIPPER_VALID` |
-| `failsafe_type` | `uint8` | `failsafe_type` | hằng số `FailsafeEvent`; 0 = bình thường |
-| `fc_connected` | `uint8` | `fc_connected` | `FC_LINK_VALID` |
+| `wp_total` | `uint8` | `len(waypoints)` | 0 = chưa nạp kế hoạch |
+| `retry_count` | `uint8` | `retry_count` | — |
+| `gripper_state` | `uint8` | `gripper_state` | `GRIPPER_VALID`, bảng 8.5 |
+| `failsafe_type` | `uint8` | `failsafe_type` | bảng 8.5; 0 = bình thường |
+| `expected_marker_id` | `int32` **`ext`** | `/mission/expected_marker_id` | tag đang **TÌM**; −1 = không tìm |
+| `tagmap_crc` | `uint32` **`ext`** | tính từ `tags.yaml` | mục 8.6 |
+| `home_n_mm` | `int32` **`ext`** | `MissionFsm.home[0]` × 1000 | mục 11.P18 |
+| `home_e_mm` | `int32` **`ext`** | `MissionFsm.home[1]` × 1000 | mục 11.P18 |
+
+**Bỏ trường `fc_connected` khỏi gói** [THOẢ THUẬN]: nó trùng nghĩa với bit `FC_LINK_VALID`. Giữ cả
+hai thì phải nhớ hai quy ước cho cùng một thông tin, và chúng sẽ lệch nhau vào đúng lúc quan trọng.
+Định nghĩa chốt: **`FC_LINK_VALID` = `/mavros/state` còn tươi VÀ `connected` = true.**
+
+Phân biệt hai trường dễ lẫn: `marker_id_tracking` là tag **đang bám thấy**, `expected_marker_id` là
+tag **đang đi tìm**. Hai số này khác nhau suốt pha MARKER_SEARCH và đó là lúc người vận hành cần
+nhìn nhất.
+
+`stamp_us` là **đồng hồ hệ thống của Pi**, có thể lệch nếu chưa đồng bộ NTP. Chỉ dùng để ghi log và
+sắp thứ tự sự kiện; **xét độ tươi thì dùng thời điểm GCS nhận**, không dùng trường này. [THOẢ THUẬN]
 
 `vel_ned` dùng **NED** vì đó là hệ của `ODOMETRY` từ FC (hợp đồng FC mục 3.1), không phải FLU của
 `position_controller_node`. Đây đúng loại chỗ hợp đồng FC gọi là *"phần dễ rơi máy bay nhất"* — hai
@@ -646,6 +753,72 @@ hệ quy chiếu cùng tồn tại trong một hệ thống, đổi dấu z. **�
 
 **`DRONE_LINK_STATS`** (42011, ↔, 0,2 Hz): tám trường ở mục 7.4, `uint32` cho các bộ đếm,
 `uint16` cho `queue_depth` và `rtt_ms`.
+
+---
+
+### 8.5 Bảng giá trị enum trên dây [THOẢ THUẬN]
+
+Bắt buộc phải có ở đây theo 6.4 bước 3 — bản 0.1 chỉ ghi "theo hằng số `MissionState`", buộc phía
+GCS phải đọc mã nguồn ROS. Hợp đồng phải tự đủ.
+
+**Pi đã đối chiếu từng giá trị với hằng số ROS thật ngày 2026-09-16: bảng GCS gửi khớp chính xác cả
+bốn, không sửa gì.**
+
+| `mission_state` | | `failsafe_type` | |
+|---|---|---|---|
+| 0 | `IDLE` | 0 | `FS_NONE` |
+| 1 | `TAKEOFF` | 1 | `FS_MARKER_TIMEOUT` |
+| 2 | `ENROUTE` | 2 | `FS_GRIP_CONFIRM_FAIL` |
+| 3 | `MARKER_SEARCH` | 3 | `FS_LINK_LOST` |
+| 4 | `PRECISION_LAND` | 4 | `FS_LOW_BATTERY` |
+| 5 | `ACTUATE_GRIPPER` | 5 | `FS_EKF_UNHEALTHY` |
+| 6 | `RETRY_LOITER` | 6 | `FS_FC_COMM_LOST` |
+| 7 | `RTH` | | |
+| 8 | `EMERGENCY_LAND` | **`gripper_state`** | |
+| 9 | `MISSION_COMPLETE` | 0 `OPEN` · 1 `CLOSED` · 2 `MOVING` · 3 `ERROR` | |
+| 10 | `FAILSAFE` | **`action`** 0 `NONE` · 1 `PICKUP` · 2 `DROPOFF` | |
+
+**Cảnh báo về tên `EMERGENCY_LAND`:** đây là trạng thái **hạ cánh chung**, không chỉ hạ cánh khẩn
+cấp. Nó là trạng thái đích của cả `NAV_LAND` bình thường, cả "xong kế hoạch, hạ cánh", cả hạ cánh do
+failsafe. **GCS không nên hiện chữ "KHẨN CẤP" khi thấy giá trị 8** — hãy phân biệt bằng
+`failsafe_type`: bằng 0 thì đây là hạ cánh bình thường. (Trả lời câu hỏi trong 11.P8.)
+
+### 8.6 `tagmap_crc` — công thức [THOẢ THUẬN, công thức đã sửa so với đề xuất GCS]
+
+Mục đích theo 11.P2: phát hiện bản đồ tag của hai bên lệch nhau. `ERR_UNKNOWN_TAG` chỉ bắt **thiếu**
+tag, không bắt **sai vị trí** — mà sai vị trí thì drone bay chỗ khác chỗ GCS vẽ, và phép kiểm vùng
+cấm của GCS sai mà không ai biết.
+
+**GCS đề xuất bản ghi gồm `yaw_cdeg`, `size_mm`, `kind`. Pi không tính được ba trường đó**, nên công
+thức phải sửa. Trả lời câu hỏi của GCS về `tags.yaml`:
+
+| Trường GCS đề nghị | Pi có không | Ghi chú |
+|---|---|---|
+| `tag_id`, vị trí | **có** | `known_tags: [id, x, y, z, ...]` — chỉ 4 số mỗi tag |
+| `yaw` | **không có** | `tags.yaml` không khai yaw. Giao ước FC 10.6a ghi yaw tuyệt đối hiện **vô nghĩa** (chưa hiệu chuẩn từ kế), nên đưa vào CRC là đưa vào một số không ai tin |
+| `size` | **có nhưng ở file khác** | `apriltag.yaml`, và `pad_a` đang **giả định** 0,122 m *chưa đo bằng thước*. Đưa một giá trị giả định vào CRC là khoá cứng một phỏng đoán |
+| `kind` (home/pickup/dropoff) | **không có** | đây là khái niệm **lập kế hoạch của GCS**, không phải dữ liệu Pi. Pi chỉ biết `action` của từng waypoint, không phân loại bãi đáp |
+
+**Công thức chốt cho 0.2** — CRC-32 IEEE (đa thức `0xEDB88320`, khởi tạo `0xFFFFFFFF`, đảo cuối)
+trên chuỗi bản ghi **little-endian**, sắp theo `tag_id` **tăng dần**:
+
+```
+(uint16 tag_id, int32 n_mm, int32 e_mm, int32 d_mm)     # 14 byte mỗi tag
+```
+
+`n/e/d` = **NED milimét**, đổi từ `known_tags` (khai theo **ENU mét**): `n = y·1000`, `e = x·1000`,
+`d = −z·1000`. Đổi sang NED để khớp hệ của `LOCAL_POSITION_NED` ở mục 5.1 — **một hệ quy chiếu duy
+nhất trên cả kênh**, không để hai hệ cùng tồn tại.
+
+Chỉ gồm tag đang bật. Với `tags.yaml` hiện tại (tag 0 tại gốc, tag 1 tại x = 10 m) thì chuỗi là hai
+bản ghi 14 byte.
+
+**Thêm `size_mm` vào CRC là việc MINOR**, làm sau khi đo `pad_a` bằng thước (nợ nhật ký 6.2 #5) và
+sau khi `tags.yaml` gánh luôn `size` thay vì để ở `apriltag.yaml`. Không làm bây giờ để CRC không
+khoá cứng một con số giả định.
+
+Quy trình vận hành [THOẢ THUẬN]: **GCS xuất `tags.yaml`** từ trang thiết kế khu vực rồi triển khai
+lên Pi; GCS **khoá chức năng nạp kế hoạch** khi CRC lệch. Nạp bản đồ qua dây để MINOR sau nếu cần.
 
 ---
 
@@ -662,14 +835,21 @@ hệ quy chiếu cùng tồn tại trong một hệ thống, đổi dấu z. **�
 `telemetry_aggregator_node` đã nối dây đủ 6 nguồn và lưu lại, nhưng `publish_packet` cũng là thân
 rỗng nên `/telemetry/outgoing` **chưa bao giờ phát**.
 
-Việc phải làm, theo thứ tự:
+Việc phải làm, theo thứ tự — **đây là danh sách triển khai của bản 0.2**:
 
-1. Viết `docs/mavlink/drone_gcs.xml` theo mục 8.
-2. `telemetry_aggregator_node.publish_packet` — **kèm `valid_flags`**, nên `TelemetryPacket` cần
-   thêm hai trường `valid_flags` và `contract_ver`. Đây là sửa message ROS, phải làm trước khi
-   hai bên viết code sinh từ XML.
-3. `gcs_link_node`: socket, vòng nhận, bắt tay mục 3, lệnh mục 4, watchdog mục 9.2.
-4. `tools/gcs_sim.py` (mục 7.3) — làm **song song**, không làm sau: không có nó thì không test được.
+| # | Việc | Ghi chú |
+|---|---|---|
+| 1 | `docs/mavlink/drone_gcs.xml` theo mục 8 | **Chặn mọi việc khác.** Trường mới phải nằm sau `<extensions/>` ngay từ đầu (R2) |
+| 2 | Sửa `TelemetryPacket` (message ROS) | Thêm `valid_flags`, `status_flags`, `contract_ver`, `wp_total`, `retry_count`, `expected_marker_id`, `tagmap_crc`, `home_n_mm`, `home_e_mm`; **bỏ `fc_connected`**; `gcs_rssi_dbm` → `int16`. Phải xong **trước** khi hai bên sinh mã |
+| 3 | `telemetry_aggregator_node.publish_packet` | Kèm điền `valid_flags`/`status_flags` — phần dễ sai nhất (5.2) |
+| 4 | Hàm tính `tagmap_crc` từ `tags.yaml` | Mục 8.6. Viết thành hàm thuần để pytest được, giống `mission_fsm` |
+| 5 | `gcs_link_node` | Socket, vòng nhận, bắt tay mục 3, lệnh mục 4, watchdog 9.2, hàng đợi 5.3 |
+| 6 | Phát `LOCAL_POSITION_NED` + `ATTITUDE` 5 Hz có điều kiện `POS_VALID` | Mục 5.1 |
+| 7 | `tools/gcs_sim.py` (7.3) | Làm **song song**, không làm sau: không có nó thì không test được |
+| 8 | `PARAM_REQUEST_LIST`/`PARAM_VALUE` chỉ đọc | Mục 9.4 |
+
+Việc ngoài hợp đồng nhưng lộ ra khi phân giải P14: sửa `_step_actuate_gripper` cho `ACTION_NONE`
+(mục 3.2b) — **đã xong ở commit `fa6bb17`**, riêng, không trộn vào việc kênh GCS.
 
 ### 9.2 Failsafe mất GCS hiện là cấu hình chết
 
@@ -693,6 +873,31 @@ là R5: `failsafe_monitor_node` có thể restart và sẽ lỡ mọi sự kiệ
 Ghi chú liên quan: failsafe **pin** cũng đang là cấu hình chết vì FC chưa gửi `BATTERY_STATUS` — xem
 `nhat_ky_lam_viec.md` mục 10.1. Hai failsafe cùng nằm trong `safety.yaml`, cùng trông như đã bật,
 cùng bất động.
+
+### 9.4 Đối chiếu ngưỡng — chỉ đọc [THOẢ THUẬN]
+
+Tài liệu kiến trúc (`thiet_ke_kien_truc_node_ros2.md` mục 4.6) vốn yêu cầu ngưỡng failsafe của Pi
+phải **khớp bảng `system_config` phía GCS để hai bên không lệch ngưỡng**. Bản 0.1 bỏ sót việc này.
+
+Dùng bản tin chuẩn, **một chiều đọc**: `PARAM_REQUEST_LIST` (21) → Pi trả `PARAM_VALUE` (22).
+**`PARAM_SET` (23) thì Pi BỎ QUA và phát `STATUSTEXT` mức WARN** — không vi phạm mục 1.1 vì ngưỡng
+chỉ được sửa ở `safety.yaml`, nơi có người chịu trách nhiệm và có lịch sử git.
+
+Tên tham số ≤ 16 ký tự (giới hạn MAVLink), ánh xạ sang YAML:
+
+| Tên trên dây | Nguồn |
+|---|---|
+| `LOW_BATT_PCT` | `safety.yaml: low_battery_pct` |
+| `CRIT_BATT_PCT` | `safety.yaml: critical_battery_pct` |
+| `LINK_LOST_S` | `safety.yaml: link_lost_timeout_s` |
+| `MARKER_SRCH_S` | `safety.yaml: marker_search_timeout_s` |
+| `GRIP_CONF_S` | `safety.yaml: grip_confirm_timeout_s` |
+| `MAX_RETRIES` | `mission.yaml: max_retries` |
+| `TAKEOFF_ALT_M` | `mission.yaml: takeoff_alt_m` |
+| `ACCEPT_RAD_M` | `mission.yaml: acceptance_radius_m` |
+
+**GCS nên hiển thị cảnh báo khi `LOW_BATT_PCT` đọc về mà `BATTERY_VALID` luôn = 0** — đó chính là
+tình trạng hiện nay (mục 9.2): ngưỡng có cấu hình nhưng không bao giờ kích hoạt được.
 
 ### 9.3 Cái gì KHÔNG thuộc hợp đồng này
 
@@ -727,12 +932,17 @@ Không cần drone, không cần 4G. Đủ để chốt phần lớn hợp đồ
 | A4 | Bỏ một `DRONE_MISSION_ITEM` giữa chuỗi | Pi phát lại `REQUEST` cùng `seq`; nạp xong bình thường |
 | A5 | Bỏ hẳn một `seq` | sau 5 lần hỏi → `ERR_TIMEOUT`, không treo |
 | A6 | Gửi `MAV_CMD` lạ | `COMMAND_ACK = UNSUPPORTED`, node không chết |
-| A7 | Gửi cùng một lệnh 3 lần cùng `confirmation` | trạng thái đổi **đúng một lần**, cả 3 lần đều có `ACK` |
+| A7 | Gửi cùng một lệnh 3 lần với `confirmation` = **0, 1, 2** | trạng thái đổi **đúng một lần**, cả 3 lần đều có `ACK`. Bản 0.1 dùng cùng `confirmation` nên không bao giờ lộ lỗi 4.2 |
 | A8 | `DRONE_TELEMETRY` khi chưa có nguồn nào | vẫn phát đúng 2 Hz; `BATTERY_VALID` = 0, `GLOBAL_POS_VALID` = 0 |
 | A9 | Cắt `gcs_sim.py` | sau 5 s `/gcs_link/connected` = false; sau 10 s nữa `failsafe_monitor_node` báo `FS_LINK_LOST` |
 | A10 | Bật lại `gcs_sim.py` | `/gcs_link/connected` = true, sự cố được gỡ |
 | A11 | Làm nghẽn: chặn đường ra 10 s rồi mở | `tx_dropped` tăng, `queue_depth` **không tăng vô hạn**, lệnh khẩn vẫn đi ngay khi mở |
 | A12 | Lệch `MAJOR` giả lập | `ERR_CONTRACT`; telemetry **vẫn phát**; lệnh hạ cánh **vẫn đi** |
+| **A13** | Sinh mã từ XML bản N và N+1 (N+1 thêm **một trường sau `<extensions/>`**), cho hai bên đọc gói của nhau **cả hai chiều** | cả bốn tổ hợp đọc được; bên cũ bỏ qua trường mới, bên mới thấy 0. **Đây là phép kiểm bảo vệ R2** — thiếu nó thì lỗi của bản 0.1 sẽ tái diễn |
+| **A14** | Thêm một trường **trước** `<extensions/>` rồi lặp A13 | gói bị loại vì sai `CRC_EXTRA`. **Phép kiểm này PHẢI thất bại** — nó chứng minh vì sao R2 tồn tại |
+| **A15** | Đổi một số trong `tags.yaml` ở một bên | `tagmap_crc` lệch; GCS khoá nạp kế hoạch (8.6) |
+| **A16** | `PARAM_REQUEST_LIST`, rồi thử `PARAM_SET` | đọc được 8 tham số mục 9.4; `PARAM_SET` bị bỏ qua + `STATUSTEXT` WARN |
+| **A17** | `STATUSTEXT` dài 88 byte | GCS ghép đủ, không mất phần cuối (7.5) |
 
 > **GCS đề nghị** (chờ Pi): sửa **A7** gửi với `confirmation` = 0, 1, 2 (11.P4); thêm **A13** kiểm
 > tương thích trường extension (11.P3); thêm **C5** đổi IP modem giữa chừng (11.P12).
@@ -759,167 +969,72 @@ Thêm điều kiện: modem 4G, GCS có điểm cuối ổn định.
 | C2 | Im lặng 5 phút rồi gửi lệnh | lệnh tới được — ánh xạ NAT còn sống nhờ heartbeat 1 Hz |
 | C3 | Đo `rtt_ms` và `rx_drop` 10 phút | ghi số vào tài liệu này; đây là **mốc chuẩn** để so về sau |
 | C4 | Bật chữ ký gói, gửi gói không chữ ký từ máy thứ ba | bị bỏ, `rx_bad_sig` tăng, **lệnh không được thi hành** |
+| **C5** | Tắt rồi bật dữ liệu di động giữa chuyến | telemetry và lệnh thông lại **≤ 5 s**, không phải khởi động lại gì ở hai bên (kiểm mục 2.1 sửa theo 11.P12) |
 
 ---
 
-## 11. Phản hồi của GCS cho bản 0.1 — [ĐỀ XUẤT từ GCS, chờ Pi]
+## 11. Trạng thái phân giải — bản 0.2
 
-*Phía GCS viết ngày 2026-09-16. Pi trả lời ở cột cuối bảng 11.3. Mục nào Pi nhập vào thân tài
-liệu thì đánh dấu ở bảng đó và xoá ghi chú `GCS → 11.Pn` tương ứng; khi mọi dòng đã có trả lời thì
-xoá cả mục 11.*
+### 11.1 Toàn bộ 17 đề xuất của GCS đã được xử lý
 
-### 11.1 GCS đồng ý nguyên văn — đã đổi nhãn sang [THOẢ THUẬN]
+GCS gửi 17 đề xuất ngày 2026-09-16 (lập luận đầy đủ ở commit `a88364e`). Pi trả lời 2026-09-16; nội
+dung đã **nhập vào thân tài liệu** nên mục này chỉ còn bảng truy vết — đúng quy tắc 0.2: một câu hỏi
+một câu trả lời, không giữ hai bản song song.
 
-2.1 (bảng vận chuyển), 2.2, 3.1, 3.3, 5.3, 6.2, 7.3, 7.6. Ngoài ra GCS đồng ý **nội dung** (không có
-nhãn riêng để đổi) của 0.2–0.4, 1.1, 1.2, 6.1, 6.3 R1/R3/R4/R5, 6.4, 6.5, 7.1, 7.2, 8.1, 8.2, 9.2, 9.3.
-
-Hệ quả phía GCS: bỏ ARM, TAKEOFF rời, GOTO, giữ vị trí tay, ghi tham số và dongle ESP-NOW; bỏ phương
-án mavlink-router; sinh mã từ `docs/mavlink/drone_gcs.xml` của repo này, không chép tay.
-
-### 11.2 Đề xuất chi tiết
-
-Mức: **Cao** = chặn việc viết mã · **TB** = cần trước nghiệm thu 10.B · **Thấp** = làm rõ.
-
-**P1 · Cao — Telemetry không có vị trí ngang và tư thế.** `DRONE_TELEMETRY` chỉ có `lat/lon` (luôn
-không hợp lệ), `alt_m`, `vel_ned`. Không có `x/y` trong hệ bản đồ tag và `yaw` thì GCS mất ba chức năng
-đã có: cảnh 3D, giám sát vùng cấm/vùng bay, kiểm chứng lệnh có hiệu lực. 2 Hz cũng quá thưa cho 3D
-(GCS nội suy với trễ hiển thị 150 ms, cần ≥ 5 Hz). Đề xuất theo 6.4 bước 1 — dùng chuẩn:
-`LOCAL_POSITION_NED` (32) và `ATTITUDE` (30), **5 Hz**.
-- Hệ NED, **gốc = gốc `tags.yaml`** (cùng hệ với bản đồ khu vực GCS), không lấy điểm cất cánh làm gốc.
-- Bản tin chuẩn không có chỗ cho cờ → quy tắc: **chỉ phát khi `POS_VALID` = 1**; không phát = không biết.
-- Băng thông ≈ (28 + 12 + 13 B) × 2 × 5 Hz ≈ 530 B/s; sửa 5.4 cho phép ngoại lệ này.
-- Định nghĩa `alt_m = −z` của `LOCAL_POSITION_NED` để hai số không thể lệch.
-
-**P2 · Cao — Không có cơ chế phát hiện bản đồ tag lệch.** Vị trí waypoint suy từ `tags.yaml` trên Pi,
-còn GCS đặt tag và vùng cấm bằng trang thiết kế khu vực. Hai bản lệch thì drone bay chỗ khác chỗ GCS
-vẽ, kiểm tra vùng cấm của GCS sai mà không ai biết; `ERR_UNKNOWN_TAG` chỉ bắt **thiếu** tag, không bắt
-**sai vị trí**. Đề xuất tối thiểu:
-1. Thêm `tagmap_crc` (`uint32`) vào `DRONE_TELEMETRY` (sau `<extensions/>`, xem P3).
-2. CRC-32 IEEE trên bản ghi little-endian `(uint16 tag_id, int32 n_mm, int32 e_mm, int32 d_mm,
-   int16 yaw_cdeg, uint16 size_mm, uint8 kind)`, sắp theo `tag_id` tăng dần, chỉ tag đang bật;
-   `kind`: 0 home, 1 pickup, 2 dropoff, 3 waypoint. (GCS đã hiện thực đúng công thức này.)
-3. GCS **xuất `tags.yaml`** từ thiết kế khu vực → triển khai lên Pi; GCS **khoá nạp kế hoạch** khi CRC lệch.
-4. Nạp bản đồ qua dây: để MINOR sau nếu cần.
-
-*Hỏi Pi:* `tags.yaml` hiện có những trường nào (`yaw`, `size`, `kind`)? Thiếu thì thống nhất tập trường tính CRC.
-
-**P3 · Cao — R2 và câu "xếp giảm dần để không sinh byte đệm" sai với cách MAVLink làm việc.**
-- Thêm trường "vào cuối" chỉ tương thích khi trường nằm **sau `<extensions/>`**. Nếu không, `mavgen`
-  sắp lại trường theo kích thước kiểu và `CRC_EXTRA` (tính trên mọi trường không phải extension) **đổi**
-  → bên cũ loại **cả gói** vì sai CRC.
-- `mavgen` tự sắp trường không phải extension theo kích thước khi xếp lên dây; MAVLink không có byte
-  đệm. Thứ tự trong XML chỉ quan trọng với trường extension.
-
-Đề xuất R2 mới: *"Trường mới chỉ được thêm sau thẻ `<extensions/>`, luôn ở cuối danh sách extension.
-Không thêm/xoá/đổi kiểu/đổi tên trường nằm trước `<extensions/>`."* Thêm phép kiểm **A13**: sinh mã từ
-XML bản N và N+1 (thêm một trường extension), hai bên đọc gói của nhau cả hai chiều.
-
-**P4 · Cao — Chống trùng lệnh mâu thuẫn với phát lại.** 4.2: GCS phát lại và **tăng `confirmation`**;
-Pi nhớ theo `(command, confirmation)` → bản phát lại luôn khác khoá, không bao giờ bị coi là trùng. A7
-dùng cùng `confirmation` nên không lộ. Đề xuất **bất biến theo trạng thái**: mỗi lệnh đưa FSM tới một
-trạng thái đích; nếu FSM đã ở hoặc đang chuyển tới trạng thái đó thì trả `ACCEPTED`, không làm gì thêm
-(vd. `RTL` khi đang `RTH`; `MISSION_START` khi đang chạy đúng `mission_id`). Nếu vẫn muốn bộ nhớ: khoá
-`(command, param1…7)` trong 5 s, **bỏ qua `confirmation`**. Sửa **A7**: `confirmation` = 0, 1, 2.
-
-**P5 · Cao — Lệnh khẩn không được bỏ cuộc sau 3 lần.** Trên 4G chập chờn, `DISARM`/`LAND`/`RTL` dừng
-sau 3 s là không chấp nhận được, và người vận hành không làm gì hơn máy được.
-
-| Nhóm | Lệnh | GCS phát lại |
+| Mã | Phán quyết của Pi | Nằm ở mục |
 |---|---|---|
-| Thường | 300, 193 (P7) | 1,0 s × 3 rồi báo |
-| **Khẩn** | 20, 21, 400, 42100 | mỗi **0,5 s, không giới hạn** tới khi có `ACK` hoặc người vận hành huỷ; báo động sau lần 3 nhưng vẫn phát |
+| **P3** | **Nhận. Đây là LỖI của Pi trong bản 0.1**, và là lỗi nặng nhất: R2 lẫn *trailing-zero trimming* với `CRC_EXTRA`. Thêm trường thường làm bên cũ **loại cả gói**, không phải bỏ qua phần thừa | 6.3 R2 viết lại · A13, A14 |
+| **P4** | **Nhận. Lỗi của Pi**: chống trùng theo `(command, confirmation)` tự triệt tiêu vì `confirmation` tăng mỗi lần phát lại | 4.2 viết lại · A7 sửa |
+| **P6** | **Nhận. Lỗi của Pi**: `HEARTBEAT` không có trường thời gian nên không đo được RTT | 7.4 · `TIMESYNC` vào 8.1 |
+| **P1** | Nhận nguyên văn, kèm 4 điểm chốt: gốc = gốc `odom`, chỉ phát khi `POS_VALID`, `alt_m = −z`, giữ cả `vel_ned` | 5.1 · 5.4 ngoại lệ có điều kiện |
+| **P2** | Nhận **mục đích**, **sửa công thức**: Pi không có `yaw`/`kind`, và `size` của `pad_a` còn là giả định chưa đo. CRC chỉ trên `(tag_id, n_mm, e_mm, d_mm)` | 8.6 · A15 |
+| **P5** | Nhận nguyên văn | 4.2 |
+| **P8** | Nhận. **Pi đã đối chiếu: bảng GCS gửi khớp chính xác cả bốn với hằng số ROS** | 8.5 |
+| **P7** | Nhận việc cấp số 193. **Trả lời: `RETRY_LOITER` KHÔNG dùng lại được** — nó cố định 3 s (`RETRY_LOITER_S`) và **tăng `retry_count`**, nên "giữ vô thời hạn" bằng nó sẽ tự đếm vào hạn mức thử lại rồi chuyển hạ cánh khẩn. Cần trạng thái riêng | 4.1 · 8.2 |
+| **P9** | Nhận cả 4 trường | 5.2 `status_flags` · 8.4 |
+| **P10** | Nhận cả ba: thêm `RSSI_VALID`, `int16`, **bỏ `fc_connected`** | 5.2 · 8.4 |
+| **P11** | Nhận | 8.4 |
+| **P12** | Nhận nguyên văn, đề xuất của GCS **tốt hơn** bản 0.1 | 2.1 · C5 |
+| **P13** | Nhận | 9.4 mới · A16 |
+| **P14** | Trả lời cả 4 câu. Câu 3 **làm lộ một lỗi trong `mission_fsm.py` của Pi** (`ACTION_NONE` bị xử lý như DROPOFF) — đã sửa ở commit `fa6bb17` | 3.2b |
+| **P15** | Nhận | 7.5 · A17 |
+| **P16** | Nhận cả hai | 4.1 |
+| **P17** | Nhận | 7.4 |
 
-An toàn nhờ P4. Chu kỳ chờ `ACK` chỉnh lại theo số đo C3.
+**Không đề xuất nào bị bác.** Ba mục P3, P4, P6 là lỗi của Pi; P2 là đề xuất đúng hướng nhưng chưa
+khả thi với dữ liệu Pi hiện có nên sửa công thức.
 
-**P6 · TB — `rtt_ms` không đo được bằng `HEARTBEAT`** (không có trường thời gian). Dùng `TIMESYNC`
-(111): mỗi bên gửi 0,2 Hz, bên kia trả ngay. Thêm 111 vào sổ 8.1.
+**Vì sao vẫn giữ 0.x chứ không lên 1.0:** theo 6.1, sửa nghĩa quy tắc tương thích (R2) là MAJOR.
+Nhưng chưa mục nào [CHỐT], chưa byte nào chạy trên dây, và chưa bên nào nạp bản 0.1 vào sản phẩm —
+nên tăng MAJOR ở đây chỉ tạo tiếng ồn. **Bản 1.0 là bản đầu tiên đi qua được toàn bộ phép kiểm 10.A.**
 
-**P7 · TB — Thiếu tạm dừng/tiếp tục.** Khác RTH: người vận hành thấy người/vật cản đi vào khu vực, muốn
-drone đứng chờ rồi đi tiếp. Đề xuất `MAV_CMD_DO_PAUSE_CONTINUE` (193), `param1` 0 = dừng, 1 = tiếp;
-giữ vị trí, không đổi `current_wp_index`. FSM chưa có thì trả `UNSUPPORTED` và GCS ẩn nút — nhưng
-**cấp số ngay** trong 4.1. *Hỏi Pi:* `RETRY_LOITER` dùng lại được cho "giữ vô thời hạn" không?
+### 11.2 Mục mới do Pi nêu — [ĐỀ XUẤT, chờ GCS]
 
-**P8 · Cao — Thiếu bảng giá trị enum trên dây.** Theo 6.4 bước 3, giá trị phải nằm trong tài liệu/XML.
-GCS đang dùng (đề nghị Pi đối chiếu hằng số ROS thật và sửa cho đúng):
+**P18 · Cao — "Nhà" của RTH và "home" trên bản đồ GCS có thể là hai chỗ khác nhau.**
 
-| Enum | Giá trị GCS đang dùng |
-|---|---|
-| `mission_state` | 0 IDLE, 1 TAKEOFF, 2 ENROUTE, 3 MARKER_SEARCH, 4 PRECISION_LAND, 5 ACTUATE_GRIPPER, 6 RETRY_LOITER, 7 RTH, 8 EMERGENCY_LAND, 9 MISSION_COMPLETE, 10 FAILSAFE |
-| `failsafe_type` | 0 NONE, 1 MARKER_TIMEOUT, 2 GRIP_CONFIRM_FAIL, 3 LINK_LOST, 4 LOW_BATTERY, 5 EKF_UNHEALTHY, 6 FC_COMM_LOST |
-| `gripper_state` | 0 OPEN, 1 CLOSED, 2 MOVING, 3 ERROR |
-| `action` | 0 NONE, 1 PICKUP, 2 DROPOFF |
+Cả hai bên đều chưa nêu chỗ này. `mission_fsm.py` hiện lấy **vị trí lúc cất cánh** làm nhà (chốt
+trong `_step_takeoff`, vì drone leo thẳng đứng nên x, y vẫn là của nhà). GCS thì sẽ vẽ "home" là
+**tag 0 / `pad_home`** theo bản đồ khu vực. Hai chỗ đó **chỉ trùng nếu drone cất cánh đúng trên
+`pad_home`**. Cất cánh lệch 3 m thì RTH về điểm cất cánh, còn người vận hành nhìn drone bay sai chỗ
+so với hình họ thấy — và sẽ tưởng là lỗi điều khiển.
 
-*Hỏi Pi:* `NAV_LAND` (hạ tại chỗ, không tìm tag) báo `mission_state` nào?
+Ba phương án, Pi nghiêng về (a):
 
-**P9 · TB — `DRONE_TELEMETRY` thiếu trường để hiển thị và kiểm chứng.**
+**(a) Giữ hành vi, báo sự thật** — RTH vẫn về điểm cất cánh, nhưng telemetry mang thêm
+`home_n_mm`/`home_e_mm` (đã đưa vào 8.4 làm trường extension) để GCS **vẽ đúng chỗ drone sẽ về**
+thay vì giả định. Không đổi hành vi bay, không cần đo thêm gì, và dùng được ngay.
 
-| Trường | Kiểu | Vì sao |
-|---|---|---|
-| `status_flags` | `uint16` | bit 0 `ARMED`, bit 1 `PI_HAS_AUTHORITY` (ch5/ch8), bit 2 `CARRYING`; hiệu lực theo `FC_LINK_VALID`. Không có `ARMED` thì GCS không kiểm chứng được `DISARM`; không có quyền Pi thì người vận hành không hiểu vì sao `MISSION_START` bị từ chối |
-| `wp_total` | `uint8` | "chặng 3/7" |
-| `expected_marker_id` | `int32` | tag đang **tìm** (khác đang bám); −1 = không tìm |
-| `retry_count` | `uint8` | cảnh báo trước khi thành failsafe |
+**(b) RTH về tag 0.** Ưu: `pad_home` là điểm đã khảo sát trong bản đồ, còn điểm cất cánh chỉ là một
+giá trị `odom` có thể đã trôi. Nhược: nếu drone cất cánh ở chỗ không phải bãi đáp thì tag 0 có thể
+rất xa, mà RTH lại thường được kích hoạt vì **pin yếu**.
 
-**P10 · Thấp — Trường tự vi phạm R3 / trùng nghĩa.** `gcs_rssi_dbm` "0 = chưa đọc được" → thêm bit 7
-`RSSI_VALID`, đổi `int32` → `int16`. `fc_connected` trùng bit 3 `FC_LINK_VALID` → bỏ trường, hoặc định
-nghĩa bit 3 = "`/mavros/state` còn tươi", trường = giá trị `connected`. `marker_id_tracking`: ghi rõ
-"`MARKER_VALID` = 0 thì bỏ qua trường" để không phải nhớ hai quy ước.
+**(c) Hạ chính xác tại nhà** — RTH bay về rồi tìm tag 0 và hạ theo marker. Đúng nhất về độ chính xác
+nhưng làm RTH phụ thuộc vào việc thấy tag, tức là đường thoát hiểm phụ thuộc thị giác. Pi không đề
+nghị làm.
 
-**P11 · Thấp — `stamp_us` theo đồng hồ nào.** GCS dùng thời điểm nhận để xét độ tươi, không dùng
-`stamp_us`. Ghi rõ: "đồng hồ hệ thống Pi, có thể lệch nếu chưa NTP; chỉ để log và sắp thứ tự".
+*Cần GCS trả lời:* bản đồ khu vực của GCS có bắt buộc drone cất cánh trên `pad_home` không? Nếu có
+thì (a) và (b) trùng nhau trong thực tế và câu hỏi này tự hết.
 
-**P12 · TB — Địa chỉ trả về sau NAT.** Theo "gói đầu tiên": modem nối lại/CGNAT đổi ánh xạ → GCS gửi về
-địa chỉ cũ → mất đường về tới khi khởi động lại GCS. Theo "gói mới nhất" bất kỳ: một gói giả cướp được
-đường về (không ra lệnh được nhờ chữ ký, nhưng cắt được lệnh khẩn). Đề xuất: *"GCS gửi về địa chỉ nguồn
-của gói **hợp lệ gần nhất** từ `(1, 191)`; khi bật chữ ký, hợp lệ = chữ ký đúng. Pi nhận và gửi trên
-**cùng một socket** bind 14551."* Thêm **C5**: tắt/bật dữ liệu di động giữa chừng → telemetry và lệnh
-thông lại ≤ 5 s, không khởi động lại gì.
-
-**P13 · Thấp (có thể MINOR sau) — Đối chiếu ngưỡng, chỉ đọc.** GCS so `system_config` với `safety.yaml`
-(yêu cầu sẵn trong `thiet_ke_kien_truc_node_ros2.md`). Không vi phạm 1.1 vì chỉ đọc: `PARAM_REQUEST_LIST`
-(21) → `PARAM_VALUE` (22); `PARAM_SET` → Pi bỏ qua + `STATUSTEXT` WARN. Tên ≤ 16 ký tự, vd.
-`LOW_BATT_PCT`, `CRIT_BATT_PCT`, `LINK_LOST_S`, `MARKER_SRCH_S`, `MAX_RETRIES`, `TAKEOFF_ALT_M`, `ACCEPT_RAD_M`.
-
-**P14 · TB — Một mục kế hoạch nghĩa là gì.** GCS sẽ đổi bộ lập kế hoạch sang "một mục cho mỗi điểm
-dừng theo marker". Cần Pi trả lời:
-1. Kế hoạch có **tự về home** ở cuối, hay GCS thêm mục cuối là marker home, `action = NONE`?
-2. Có cần mục đầu là home không?
-3. Một mục = bay tới → tìm marker → hạ chính xác → `action` → cất lại? `action = NONE` có hạ không?
-4. `alt_m` là độ cao tới mục đó hay độ cao hành trình cả chặng?
-
-**P15 · Thấp — `STATUSTEXT` > 50 byte.** Đề nghị **chia đoạn** bằng `id`/`chunk_seq` (extension MAVLink 2)
-thay vì cắt — chuỗi lý do của `mission_manager_node` thường dài hơn 50. GCS ghép đoạn được.
-
-**P16 · Thấp — Ngữ nghĩa `ACK` của lệnh chạy dài.** `ACCEPTED` cho 300/20/21 = FSM đã nhận và bắt đầu
-chuyển, không phải đã xong; GCS theo dõi kết quả qua `mission_state`; không dùng `IN_PROGRESS`. `ARM`
-(`param1 = 1`) trả `DENIED`, không trả `UNSUPPORTED`.
-
-**P17 · Thấp — `DRONE_LINK_STATS` hai chiều.** GCS cũng phát, nhưng có trường không đo được (vd.
-pymavlink không tách `rx_bad_crc`). Ghi rõ: *"trường bên phát không đo được thì = `UINT32_MAX`"*.
-
-### 11.3 Bảng theo dõi
-
-| Mã | Mức | Tóm tắt | Pi trả lời |
-|---|---|---|---|
-| P1 | Cao | `LOCAL_POSITION_NED` + `ATTITUDE` 5 Hz, gốc `tags.yaml` | |
-| P2 | Cao | `tagmap_crc` trong telemetry, GCS khoá nạp khi lệch | |
-| P3 | Cao | Sửa R2: trường mới chỉ sau `<extensions/>`; thêm A13 | |
-| P4 | Cao | Bất biến theo trạng thái, bỏ nhớ theo `confirmation`; sửa A7 | |
-| P5 | Cao | Lệnh khẩn phát lại không giới hạn | |
-| P8 | Cao | Bảng giá trị enum vào tài liệu/XML | |
-| P6 | TB | RTT bằng `TIMESYNC` | |
-| P7 | TB | Cấp số `DO_PAUSE_CONTINUE` (193) | |
-| P9 | TB | `status_flags`, `wp_total`, `expected_marker_id`, `retry_count` | |
-| P12 | TB | Địa chỉ trả về theo gói hợp lệ gần nhất, cùng socket; thêm C5 | |
-| P14 | TB | 4 câu hỏi về cấu trúc kế hoạch | |
-| P10 | Thấp | `RSSI_VALID`, bỏ trùng `fc_connected` | |
-| P11 | Thấp | Đồng hồ của `stamp_us` | |
-| P13 | Thấp | Tham số chỉ đọc qua `PARAM_*` | |
-| P15 | Thấp | Chia đoạn `STATUSTEXT` | |
-| P16 | Thấp | Ngữ nghĩa `ACK`, `ARM` → `DENIED` | |
-| P17 | Thấp | `UINT32_MAX` cho trường không đo được | |
-
----
 
 ## Phụ lục A — Tra cứu nhanh
 
@@ -955,4 +1070,5 @@ pymavlink không tách `rx_bad_crc`). Ghi rõ: *"trường bên phát không đo
 | Bản | Ngày | Sửa gì |
 |---|---|---|
 | 0.1 | 2026-09-15 | Bản thảo đầu. Toàn bộ là [ĐỀ XUẤT], chờ GCS phản hồi. Chốt: MAVLink 2/UDP, Pi gọi ra trước, dialect riêng `42000+` thay vì mượn `MISSION_ITEM_INT` (3.1), cờ hiệu lực (5.2), hàng đợi ưu tiên (5.3), chữ ký gói (7.6), sổ đăng ký (8), nghiệm thu A/B/C (10) |
+| **0.2** | **2026-09-16** | **Pi phân giải toàn bộ 17 đề xuất của GCS, nhập vào thân tài liệu; mục 11 thành bảng truy vết.** Ba lỗi của bản 0.1 được sửa: **R2** (lẫn *trailing-zero trimming* với `CRC_EXTRA` — P3), **4.2** (chống trùng lệnh tự triệt tiêu vì `confirmation` tăng — P4), **7.4** (`HEARTBEAT` không có trường thời gian → `TIMESYNC` — P6). Nhận: `LOCAL_POSITION_NED`+`ATTITUDE` 5 Hz có điều kiện (P1), `tagmap_crc` **công thức sửa lại** theo dữ liệu Pi thật có (P2), lệnh khẩn phát lại vô hạn (P5), bảng enum 8.5 (P8), 193 (P7), `status_flags`+3 trường (P9), `RSSI_VALID` và bỏ `fc_connected` (P10), địa chỉ NAT theo gói hợp lệ gần nhất (P12), `PARAM_*` chỉ đọc 9.4 (P13), chia đoạn `STATUSTEXT` (P15), ngữ nghĩa `ACK`/`ARM` (P16), `UINT32_MAX` (P17). Trả lời 4 câu về cấu trúc kế hoạch (3.2b) — câu 3 làm lộ lỗi `ACTION_NONE` trong `mission_fsm.py`. Thêm phép kiểm A13–A17, C5. **Pi nêu P18** (nhà của RTH ≠ home trên bản đồ GCS) — chờ GCS |
 | 0.1 | 2026-09-16 | **GCS phản hồi, không tăng số.** Đổi nhãn [ĐỀ XUẤT] → [THOẢ THUẬN] ở 2.1, 2.2, 3.1, 3.3, 5.3, 6.2, 7.3, 7.6. Thêm ghi chú `GCS → 11.Pn` tại chỗ và mục 11 (17 đề xuất, 6 mức cao: P1 vị trí/tư thế, P2 `tagmap_crc`, P3 R2 vs `<extensions/>`, P4 chống trùng lệnh, P5 lệnh khẩn, P8 bảng enum). Không sửa nội dung gốc của Pi |
