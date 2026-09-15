@@ -6,7 +6,7 @@
 |---|---|
 | Phiên bản hợp đồng | **0.3** |
 | Ngày | 2026-09-16 |
-| Trạng thái | **Bản thảo 0.2 — GCS chấp nhận toàn bộ phân giải của Pi và trả lời P18 (2026-09-16). Còn P19–P23 do GCS nêu, chờ Pi (mục 11.3).** Chưa mục nào [CHỐT] |
+| Trạng thái | **Bản thảo 0.3 — cả 23 đề xuất của hai bên đã phân giải, không còn mục mở (mục 11.4).** Chưa mục nào [CHỐT] — điều kiện là chạy thật trên dây (10.A) |
 | Phạm vi | Mọi thứ đi qua đường 4G/LTE giữa Pi và GCS. Kiến trúc nội bộ mỗi bên nằm ngoài phạm vi |
 | Tài liệu song sinh | `GIAO_UOC_FC_ROS2.md` (đường FC ↔ Pi) — **hai hợp đồng độc lập, xem mục 1.2** |
 
@@ -906,7 +906,7 @@ trên chuỗi bản ghi **little-endian**, sắp theo `tag_id` **tăng dần**:
 (tag 0 tại gốc, tag 1 tại x = 10 m), chuỗi 28 byte là
 
 ```
-00000000 00000000 00000000 0000  0100 00000000 10270000 00000000
+0000 00000000 00000000 00000000  0100 00000000 10270000 00000000
 ```
 
 và `zlib.crc32` cho **`0x6BDEA0A6`**. Phép kiểm **A15** dùng đúng con số này, **chạy được bằng pytest,
@@ -1230,6 +1230,7 @@ lúc đó, kể cả khi còn sửa nghĩa — vì chưa byte nào chạy trên 
 |---|---|---|
 | 0.1 | 2026-09-15 | Bản thảo đầu. Toàn bộ là [ĐỀ XUẤT], chờ GCS phản hồi. Chốt: MAVLink 2/UDP, Pi gọi ra trước, dialect riêng `42000+` thay vì mượn `MISSION_ITEM_INT` (3.1), cờ hiệu lực (5.2), hàng đợi ưu tiên (5.3), chữ ký gói (7.6), sổ đăng ký (8), nghiệm thu A/B/C (10) |
 | 0.1 | 2026-09-16 | **GCS phản hồi, không tăng số.** Đổi nhãn [ĐỀ XUẤT] → [THOẢ THUẬN] ở 2.1, 2.2, 3.1, 3.3, 5.3, 6.2, 7.3, 7.6. Thêm ghi chú `GCS → 11.Pn` tại chỗ và mục 11 (17 đề xuất, 6 mức cao: P1 vị trí/tư thế, P2 `tagmap_crc`, P3 R2 vs `<extensions/>`, P4 chống trùng lệnh, P5 lệnh khẩn, P8 bảng enum). Không sửa nội dung gốc của Pi |
-| **0.3** | **2026-09-16** | **Pi phân giải 5 mục GCS nêu khi duyệt 0.2; không còn mục mở.** Ba lỗi nữa của Pi được sửa: **P19 ý 3** — `home` chốt trong khung chưa neo nên **RTH bay về `pad_home` thay vì điểm cất cánh** (Pi tái hiện đúng kịch bản GCS nêu); **P20** — "nằm trên đất" không suy ra `POS_VALID` = 0, ngân sách phải lấy xấu nhất 6,5 kbit/s; **P22** — `alt_m` là so với **tag đích**, không phải điểm cất cánh (chú thích `MissionWaypoint.msg` cũng sai y vậy). Nhận: `POS_VALID` = đã neo (5.2b), N/E là trục bản đồ tag chứ không phải Bắc/Đông địa lý, bit 8 `HOME_VALID` (P21), `round()` + vectơ kiểm `0x6BDEA0A6` **Pi đã đối chiếu khớp** (P23). Trả lời: odom **nhảy tức thì** khi neo. Pi nêu tương tác P19×P20: `POS_VALID` thường = 0 khi đậu vì drone không thấy pad của chính nó. Thêm việc 9–11 vào danh sách 9.1 |
 | **0.2** | **2026-09-16** | **Pi phân giải toàn bộ 17 đề xuất của GCS, nhập vào thân tài liệu; mục 11 thành bảng truy vết.** Ba lỗi của bản 0.1 được sửa: **R2** (lẫn *trailing-zero trimming* với `CRC_EXTRA` — P3), **4.2** (chống trùng lệnh tự triệt tiêu vì `confirmation` tăng — P4), **7.4** (`HEARTBEAT` không có trường thời gian → `TIMESYNC` — P6). Nhận: `LOCAL_POSITION_NED`+`ATTITUDE` 5 Hz có điều kiện (P1), `tagmap_crc` **công thức sửa lại** theo dữ liệu Pi thật có (P2), lệnh khẩn phát lại vô hạn (P5), bảng enum 8.5 (P8), 193 (P7), `status_flags`+3 trường (P9), `RSSI_VALID` và bỏ `fc_connected` (P10), địa chỉ NAT theo gói hợp lệ gần nhất (P12), `PARAM_*` chỉ đọc 9.4 (P13), chia đoạn `STATUSTEXT` (P15), ngữ nghĩa `ACK`/`ARM` (P16), `UINT32_MAX` (P17). Trả lời 4 câu về cấu trúc kế hoạch (3.2b) — câu 3 làm lộ lỗi `ACTION_NONE` trong `mission_fsm.py`. Thêm phép kiểm A13–A17, C5. **Pi nêu P18** (nhà của RTH ≠ home trên bản đồ GCS) — chờ GCS |
 | 0.2 | 2026-09-16 | **GCS duyệt bản 0.2, không tăng số.** Chấp nhận toàn bộ phân giải 11.1 (gồm công thức `tagmap_crc` sửa lại). Trả lời P18: chọn (a), GCS vẽ nhà RTH từ `home_*` và cảnh báo trước `MISSION_START`. Nêu P19–P23 (11.3): khung trước/sau khi odom neo và `POS_VALID`, điều kiện phát 32/30, bit `HOME_VALID`, ba cách hiểu `alt_m`, làm tròn và vectơ kiểm CRC `0x6BDEA0A6`. Sửa chữ không đổi nghĩa: câu cụt ở 2.1; "thêm vào cuối" còn sót ở 6.1, 8.3, 8.4 → "sau `<extensions/>`"; "bốn lệnh" ở 6.2, 7.3, Phụ lục A (4.1 nay có 6 lệnh; 6.2 là bốn lệnh **khẩn**); bỏ ghi chú GCS đã phân giải ở 10.A; xếp lại bảng lịch sử theo thời gian |
+| **0.3** | **2026-09-16** | **Pi phân giải 5 mục GCS nêu khi duyệt 0.2; không còn mục mở.** Ba lỗi nữa của Pi được sửa: **P19 ý 3** — `home` chốt trong khung chưa neo nên **RTH bay về `pad_home` thay vì điểm cất cánh** (Pi tái hiện đúng kịch bản GCS nêu); **P20** — "nằm trên đất" không suy ra `POS_VALID` = 0, ngân sách phải lấy xấu nhất 6,5 kbit/s; **P22** — `alt_m` là so với **tag đích**, không phải điểm cất cánh (chú thích `MissionWaypoint.msg` cũng sai y vậy). Nhận: `POS_VALID` = đã neo (5.2b), N/E là trục bản đồ tag chứ không phải Bắc/Đông địa lý, bit 8 `HOME_VALID` (P21), `round()` + vectơ kiểm `0x6BDEA0A6` **Pi đã đối chiếu khớp** (P23). Trả lời: odom **nhảy tức thì** khi neo. Pi nêu tương tác P19×P20: `POS_VALID` thường = 0 khi đậu vì drone không thấy pad của chính nó. Thêm việc 9–11 vào danh sách 9.1 |
+| 0.3 | 2026-09-16 | **GCS duyệt bản 0.3, không tăng số. GCS chấp nhận toàn bộ; bắt đầu triển khai phía GCS.** Sửa chữ không đổi nghĩa: dòng trạng thái đầu tài liệu còn ghi "chờ Pi P19–P23"; nhóm byte của vectơ kiểm 8.6 (bản ghi đầu là `uint16` rồi ba `int32`, giá trị không đổi); xếp lại bảng lịch sử theo thời gian |
