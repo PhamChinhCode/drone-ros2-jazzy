@@ -6,7 +6,7 @@
 |---|---|
 | Phiên bản hợp đồng | **0.2** |
 | Ngày | 2026-09-16 |
-| Trạng thái | **Bản thảo — GCS đã phản hồi (2026-09-16), chờ Pi trả lời mục 11.** Chưa mục nào [CHỐT] |
+| Trạng thái | **Bản thảo 0.2 — GCS chấp nhận toàn bộ phân giải của Pi và trả lời P18 (2026-09-16). Còn P19–P23 do GCS nêu, chờ Pi (mục 11.3).** Chưa mục nào [CHỐT] |
 | Phạm vi | Mọi thứ đi qua đường 4G/LTE giữa Pi và GCS. Kiến trúc nội bộ mỗi bên nằm ngoài phạm vi |
 | Tài liệu song sinh | `GIAO_UOC_FC_ROS2.md` (đường FC ↔ Pi) — **hai hợp đồng độc lập, xem mục 1.2** |
 
@@ -55,8 +55,8 @@ Nhãn được ghi ở từng mục; chỗ nào không ghi thì hiểu là nhãn
 
 **Ở bản 0.2, hầu hết mục là [THOẢ THUẬN]** — Pi đề xuất, GCS đã phản hồi, hai bên thống nhất.
 **Chưa mục nào [CHỐT]**, vì chưa có byte nào chạy trên dây; đó là điều kiện duy nhất để lên [CHỐT]
-và cũng là điều kiện để hợp đồng lên **1.0** (mục 11.1). Còn **đúng một mục mở**: P18 do Pi nêu,
-chờ GCS trả lời (mục 11.2).
+và cũng là điều kiện để hợp đồng lên **1.0** (mục 11.1). P18 do Pi nêu **đã được GCS trả lời**
+(mục 11.2). Còn **năm mục mở P19–P23** do GCS nêu khi duyệt bản 0.2, chờ Pi (mục 11.3).
 
 ### 0.4 Quy ước đặt tên
 
@@ -122,7 +122,7 @@ Hệ quả cụ thể, dễ làm sai:
 
 Đây là điểm bắt buộc phải làm đúng, không phải chi tiết hiện thực: modem 4G hầu như luôn nằm sau
 NAT của nhà mạng (thường là CGNAT), nên **GCS không thể chủ động mở kết nối tới Pi**. Pi phải phát
-`HEARTBEAT` 1 Hz tới `gcs_host:gcs_port` ngay khi khởi động, kể cả khi chưa nhận được gì; GCS ghi
+`HEARTBEAT` 1 Hz tới `gcs_host:gcs_port` ngay khi khởi động, kể cả khi chưa nhận được gì.
 **GCS gửi về địa chỉ nguồn của gói HỢP LỆ GẦN NHẤT từ `(sysid 1, compid 191)`** — khi đã bật chữ ký
 gói thì "hợp lệ" nghĩa là **chữ ký đúng**. Pi nhận và gửi trên **cùng một socket** bind ở 14551.
 
@@ -223,6 +223,9 @@ Hợp đồng không thêm hành vi ngầm — về nhà hay không là quyết 
 > **Đã sửa ở commit `fa6bb17`** (riêng, không trộn vào việc kênh GCS): `ACTION_NONE` có nhánh riêng
 > — hạ cánh, giữ ổn định, **không dính gripper**, log *"ghé tại tag N"*, rồi đi mục tiếp. Hành vi bay
 > giữ nguyên, chỉ tên gọi thành thật. Thêm một test khẳng định log không còn chứa "thả"/"gắp".
+
+> **GCS → 11.P22:** "tính từ điểm cất cánh" và công thức `tag_z + alt_m` bên dưới là **hai gốc
+> khác nhau** (chỉ trùng vì mọi tag hiện có `z = 0`). Đề nghị chốt theo công thức.
 
 **4. `alt_m` là độ cao TẠI mục đó**, tính từ điểm cất cánh (`target = toạ_độ_tag_z + alt_m`). Vì
 `position_controller_node` bay thẳng tới điểm 3D đó nên nó **cũng là độ cao hành trình của chặng** —
@@ -334,6 +337,10 @@ Chu kỳ 0,5 s / 1,0 s là **giá trị khởi điểm**, chỉnh lại theo s�
 4. `vel_ned` của `DRONE_TELEMETRY` **trùng** `vx/vy/vz` của bản tin 32. Giữ cả hai: gói 42010 phải
    tự đủ nghĩa khi bản tin 32 không được phát (lúc `POS_VALID` = 0).
 
+> **GCS → 11.P19 (cao):** theo chú thích trong `tags.yaml`, odom **chỉ neo theo bảng tag sau khi EKF
+> thấy tag**, và trục x theo yaw FC (tương đối). Đề nghị: `POS_VALID` = 1 chỉ khi odom **đã neo**;
+> ghi rõ N/E là **trục bản đồ tag**, không phải Bắc/Đông địa lý; `ATTITUDE.yaw` đo so với trục đó.
+
 **`DRONE_TELEMETRY` phát đúng nhịp kể cả khi không có nguồn nào cập nhật** — nguồn thiếu thì để
 giá trị mặc định và **hạ cờ hiệu lực tương ứng**. Đây là quy tắc R5 của hợp đồng FC: trạng thái
 phải hỏi lại được, vì GCS có thể khởi động lại bất cứ lúc nào và sẽ lỡ mọi sự kiện trước đó.
@@ -409,6 +416,10 @@ lệnh khẩn đi ngay khi đường truyền xấu.
 này **tắt hẳn**, đưa băng thông về mức nghỉ. Đây là lý do ngoại lệ này chấp nhận được: nó tự tắt đúng
 lúc đường truyền cần dư địa nhất — khi drone chưa bay thì chưa cần vẽ 3D.
 
+> **GCS → 11.P20:** "nằm trên đất = `POS_VALID` = 0" không suy ra được từ định nghĩa bit ở 5.2 (drone
+> trên đất vẫn có thể thấy tag). GCS **cần** vị trí trên đất để kiểm trước `MISSION_START` (trả lời
+> P18). Đề nghị điều kiện phát **chỉ là `POS_VALID`**; băng thông xấu nhất vẫn ≈ 6,5 kbit/s.
+
 **Không thêm luồng định kỳ nào** mà không sửa bảng này trước.
 
 ---
@@ -422,7 +433,7 @@ lúc đường truyền cần dư địa nhất — khi drone chưa bay thì ch�
 | Đổi gì | Tăng gì |
 |---|---|
 | Đổi nghĩa/dấu/đơn vị một trường đang dùng; bỏ một bản tin; đổi mã `MAV_CMD`; đổi ý nghĩa một bit `valid_flags` | **MAJOR** |
-| Thêm bản tin; thêm trường vào cuối bản tin cũ; thêm mã lỗi; thêm bit `valid_flags` mới | **MINOR** |
+| Thêm bản tin; thêm trường **sau `<extensions/>`** của bản tin cũ (R2); thêm mã lỗi; thêm bit `valid_flags` mới | **MINOR** |
 | Sửa chính tả, thêm giải thích, thêm số đo | không tăng |
 
 ### 6.2 Hai bên biết nhau ở phiên bản nào [THOẢ THUẬN]
@@ -439,7 +450,7 @@ vẫn biết ngay, không phải hỏi lại.
 - **GCS hiển thị cảnh báo rõ ràng**, không cho người vận hành soạn nhiệm vụ.
 
 Lý do vẫn nhận lệnh khẩn khi lệch MAJOR: lệnh hạ cánh là thứ **phải luôn đi được**, kể cả khi hai
-bên hiểu khác nhau về mọi thứ khác. Bốn lệnh ở mục 4.1 vì vậy **không bao giờ được đổi nghĩa** —
+bên hiểu khác nhau về mọi thứ khác. Bốn lệnh khẩn ở mục 4.2 (20, 21, 400, 42100) vì vậy **không bao giờ được đổi nghĩa** —
 đó là phần bất biến nhất của hợp đồng này.
 
 ### 6.3 Năm quy tắc tương thích
@@ -526,7 +537,7 @@ mã hoá. Có chủ ý: gỡ lỗi được quan trọng hơn giữ kín nội d
 
 ### 7.3 `tools/gcs_sim.py` — GCS tối thiểu, ở trong repo [THOẢ THUẬN]
 
-Một script `pymavlink` khoảng 150 dòng, làm đúng bốn việc: nạp kế hoạch từ YAML, gửi bốn lệnh ở
+Một script `pymavlink` khoảng 150 dòng, làm đúng bốn việc: nạp kế hoạch từ YAML, gửi các lệnh ở
 mục 4.1, in `DRONE_TELEMETRY` và `STATUSTEXT`, đếm gói mất.
 
 Vai trò: **cả hai bên test ngược vào nó.** Pi test khi chưa có GCS thật; GCS test bằng cách so với
@@ -669,7 +680,7 @@ dùng khi nó vừa, từ chối khi phải mượn trường sai nghĩa.
 | `seq` | `uint8` | `seq` | 0 trở lên, liên tục. `uint8` để khớp `MissionWaypoint.seq` |
 | `expected_marker_id` | `int32` | `expected_marker_id` | **nguồn vị trí duy nhất.** Phải có trong `tags.yaml` |
 | `action` | `uint8` | `action` | 0 `NONE`, 1 `PICKUP`, 2 `DROPOFF` |
-| `alt_m` | `float` | `alt_m` | m, so với điểm cất cánh |
+| `alt_m` | `float` | `alt_m` | m, so với điểm cất cánh — **xem 11.P22** |
 | `acceptance_radius_m` | `float` | `acceptance_radius_m` | m, ngang |
 | `max_vel_mps` | `float` | `max_vel_mps` | m/s, trong `(0; 1,9]` |
 | `loiter_s` | `float` | `loiter_s` | s |
@@ -678,13 +689,13 @@ dùng khi nó vừa, từ chối khi phải mượn trường sai nghĩa.
 mirror `mission_waypoint_t` phía GCS/FC, nhưng `mission_manager_node` **bỏ qua hoàn toàn** — vị trí
 suy từ `expected_marker_id`. Chở chúng lên dây chỉ tạo ra ảo giác là chúng có tác dụng.
 
-Đây là chỗ **hợp đồng cố tình hẹp hơn message ROS**. Khi nào có GPS thì thêm trường mới vào cuối
-(MINOR, theo R2), đừng hồi sinh ba trường này.
+Đây là chỗ **hợp đồng cố tình hẹp hơn message ROS**. Khi nào có GPS thì thêm trường mới sau
+`<extensions/>` (MINOR, theo R2), đừng hồi sinh ba trường này.
 
 ### 8.4 Trường của ba bản tin còn lại
 
-Đủ để viết `drone_gcs.xml` mà không phải đoán. **Thứ tự trường là phần của hợp đồng** — MAVLink 2
-chỉ cho thêm vào cuối (R2).
+Đủ để viết `drone_gcs.xml` mà không phải đoán. **Tên, kiểu và việc trường nằm trước hay sau
+`<extensions/>` là phần của hợp đồng**; thứ tự chỉ ràng buộc với trường extension (R2).
 
 **`DRONE_MISSION_COUNT`** (42001, GCS→Pi) — mở đầu một lượt nạp:
 
@@ -734,6 +745,9 @@ nhiên khi thấy tên bị cắt trong log.
 | `tagmap_crc` | `uint32` **`ext`** | tính từ `tags.yaml` | mục 8.6 |
 | `home_n_mm` | `int32` **`ext`** | `MissionFsm.home[0]` × 1000 | mục 11.P18 |
 | `home_e_mm` | `int32` **`ext`** | `MissionFsm.home[1]` × 1000 | mục 11.P18 |
+
+> **GCS → 11.P21:** `home_n_mm`/`home_e_mm` chưa có giá trị "không biết" (trước cất cánh `home` là
+> `None`). Đề nghị thêm bit 8 `HOME_VALID` vào `valid_flags`.
 
 **Bỏ trường `fc_connected` khỏi gói** [THOẢ THUẬN]: nó trùng nghĩa với bit `FC_LINK_VALID`. Giữ cả
 hai thì phải nhớ hai quy ước cho cùng một thông tin, và chúng sẽ lệch nhau vào đúng lúc quan trọng.
@@ -812,6 +826,9 @@ nhất trên cả kênh**, không để hai hệ cùng tồn tại.
 
 Chỉ gồm tag đang bật. Với `tags.yaml` hiện tại (tag 0 tại gốc, tag 1 tại x = 10 m) thì chuỗi là hai
 bản ghi 14 byte.
+
+> **GCS: chấp nhận công thức sửa.** GCS đổi phía mình sang đúng 14 byte/tag. **GCS → 11.P23:** thêm
+> quy tắc làm tròn mét → mm và vectơ kiểm để hai bên tự kiểm trước khi lên dây.
 
 **Thêm `size_mm` vào CRC là việc MINOR**, làm sau khi đo `pad_a` bằng thước (nợ nhật ký 6.2 #5) và
 sau khi `tags.yaml` gánh luôn `size` thay vì để ở `apriltag.yaml`. Không làm bây giờ để CRC không
@@ -944,9 +961,6 @@ Không cần drone, không cần 4G. Đủ để chốt phần lớn hợp đồ
 | **A16** | `PARAM_REQUEST_LIST`, rồi thử `PARAM_SET` | đọc được 8 tham số mục 9.4; `PARAM_SET` bị bỏ qua + `STATUSTEXT` WARN |
 | **A17** | `STATUSTEXT` dài 88 byte | GCS ghép đủ, không mất phần cuối (7.5) |
 
-> **GCS đề nghị** (chờ Pi): sửa **A7** gửi với `confirmation` = 0, 1, 2 (11.P4); thêm **A13** kiểm
-> tương thích trường extension (11.P3); thêm **C5** đổi IP modem giữa chừng (11.P12).
-
 ### 10.B — Chạy trong Gazebo
 
 Thêm điều kiện: `sim_mission.launch.py`. Kiểm hợp đồng trong ngữ cảnh bay thật (mô phỏng).
@@ -1008,7 +1022,10 @@ khả thi với dữ liệu Pi hiện có nên sửa công thức.
 Nhưng chưa mục nào [CHỐT], chưa byte nào chạy trên dây, và chưa bên nào nạp bản 0.1 vào sản phẩm —
 nên tăng MAJOR ở đây chỉ tạo tiếng ồn. **Bản 1.0 là bản đầu tiên đi qua được toàn bộ phép kiểm 10.A.**
 
-### 11.2 Mục mới do Pi nêu — [ĐỀ XUẤT, chờ GCS]
+**GCS chấp nhận toàn bộ bảng trên (2026-09-16)**, gồm cả công thức `tagmap_crc` đã sửa (P2) và câu
+trả lời về `RETRY_LOITER` (P7).
+
+### 11.2 Mục mới do Pi nêu — đã được GCS trả lời
 
 **P18 · Cao — "Nhà" của RTH và "home" trên bản đồ GCS có thể là hai chỗ khác nhau.**
 
@@ -1035,6 +1052,101 @@ nghị làm.
 *Cần GCS trả lời:* bản đồ khu vực của GCS có bắt buộc drone cất cánh trên `pad_home` không? Nếu có
 thì (a) và (b) trùng nhau trong thực tế và câu hỏi này tự hết.
 
+**GCS trả lời (2026-09-16): chọn (a).** [THOẢ THUẬN, phụ thuộc P19 và P21]
+
+- **GCS không bắt buộc cứng** việc cất cánh trên `pad_home`: bộ lập kế hoạch GCS chỉ bắt buộc bản đồ
+  có đúng một tag `home`, không ràng buộc chỗ drone đứng. Bắt buộc cứng thì cần một phép đo trước cất
+  cánh, và phép đo đó chính là thứ (a) cung cấp.
+- **GCS vẽ "nhà của RTH" từ `home_n_mm`/`home_e_mm`**, tách biệt với biểu tượng `pad_home`. Khi
+  `HOME_VALID` = 0 (P21) thì **không vẽ gì**, không vẽ thay bằng `pad_home`.
+- **GCS cảnh báo trước `MISSION_START`** khi vị trí drone trên đất (`LOCAL_POSITION_NED`, cần P20) cách
+  `pad_home` quá dung sai bãi đáp, hoặc khi chưa có vị trí. Chỉ cảnh báo, không chặn: quyết định cất
+  cánh vẫn là của người vận hành và Pi (mục 1.1).
+- **(b) không chọn** vì đúng lập luận của Pi: RTH hay đến do pin yếu, không được kéo dài đường về.
+  **(c) không chọn**: đường thoát hiểm không được phụ thuộc thị giác.
+
+**Điều kiện để (a) đúng — xem P19 mục 3:** `home` phải được chốt **trong khung đã neo theo tag**.
+Nếu chốt khi odom còn chưa neo thì toạ độ nhà thuộc một khung khác với khung sau khi neo, và cả RTH
+lẫn hình GCS vẽ đều sai.
+
+### 11.3 Mục mới do GCS nêu khi duyệt bản 0.2 — [ĐỀ XUẤT, chờ Pi]
+
+Cả năm mục đều **đổi `drone_gcs.xml` hoặc `TelemetryPacket`**, tức bước 1–2 của danh sách 9.1. Đề
+nghị Pi trả lời **trước khi đóng băng XML**. Các phần khác (bắt tay 3.x, lệnh 4.x, hàng đợi 5.3, chữ
+ký 7.6) không phụ thuộc năm mục này, hai bên bắt đầu viết được ngay.
+
+**P19 · Cao — Khung toạ độ trước và sau khi odom neo theo tag.**
+Chú thích trong `src/drone_bringup/config/tags.yaml` ghi: *"Khi EKF đã thấy tag, odom neo theo bảng
+này; hướng trục x theo yaw của FC (từ kế chưa kiểm 10.6a — yaw tương đối)"*. Đọc cùng mục 5.1, có ba
+hệ quả mà hợp đồng chưa nói:
+
+1. **Trước khi thấy tag lần đầu, gốc odom là chỗ EKF khởi động**, không phải gốc bản đồ tag. Nếu
+   `POS_VALID` bật lên chỉ vì "EKF hội tụ" (5.2), GCS sẽ vẽ drone ở toạ độ thuộc một khung khác rồi
+   thấy nó **nhảy** khi odom neo. Đề nghị định nghĩa lại bit 0:
+   **`POS_VALID` = odom đã neo theo `tags.yaml` ít nhất một lần, VÀ EKF khoẻ, VÀ `/odometry/filtered` còn tươi.**
+2. **"NED" trên kênh này không phải Bắc/Đông địa lý.** N/E là trục của bản đồ tag (`n = y`, `e = x` của
+   `tags.yaml`), và `ATTITUDE.yaw` đo so với trục N đó. Đề nghị ghi thẳng vào 5.1 để không ai đem so
+   với la bàn hay bản đồ nền. GCS vẽ khu vực theo đúng trục này.
+3. **Nhà của RTH (P18) phải được chốt trong khung đã neo.** `mission_fsm.py` chốt `home` ngay khi có
+   `position` lúc cất cánh. Nếu lúc đó odom chưa neo (camera nhìn xuống thường không thấy tag khi drone
+   nằm ngay trên nó) thì `home` là toạ độ khung cũ. Sau khi neo, **RTH bay tới một điểm không phải
+   điểm cất cánh**. Ví dụ khởi động lệch `pad_home` 3 m: `home` = (0, 0) khung cũ → sau neo, (0, 0) là
+   `pad_home` → RTH về `pad_home` chứ không về chỗ cất cánh. **Đề nghị Pi kiểm lại trong Gazebo.** Nếu
+   đúng như vậy thì chỉ chốt `home` khi `POS_VALID` = 1 (định nghĩa mới ở ý 1), hoặc chốt lại một lần
+   khi odom neo. Ngoài hợp đồng, nhưng làm (a) của P18 sai nên ghi ở đây.
+
+*Câu hỏi:* sau khi neo, odom **nhảy** tức thì hay **trượt dần**? Nhảy thì GCS không nội suy qua bước
+nhảy > 1 m; trượt thì GCS không cần làm gì.
+
+**P20 · TB — Điều kiện phát `LOCAL_POSITION_NED`/`ATTITUDE` chỉ là `POS_VALID`.** 5.4 viết "nằm trên
+đất hoặc mất vị trí thì hai luồng này tắt hẳn" như thể nằm trên đất suy ra `POS_VALID` = 0. Điều đó
+không suy ra được từ định nghĩa bit ở 5.2: drone đứng trên đất vẫn có thể thấy một tag khác. GCS
+**cần** vị trí trên đất để cảnh báo trước `MISSION_START` (câu trả lời P18). Đề nghị điều kiện phát là
+**`POS_VALID` và không gì khác**, và sửa câu ở 5.4 thành "mất vị trí thì hai luồng tắt". Băng thông
+xấu nhất không đổi: ≈ 6,5 kbit/s.
+
+**P21 · TB — `home_n_mm`/`home_e_mm` cần giá trị "không biết".** Trước lần cất cánh đầu `home` là
+`None`, nên theo R3 không được điền 0 (0 là toạ độ thật của `pad_home`). Đề nghị thêm **bit 8
+`HOME_VALID`** vào `valid_flags`: = 1 khi `home` đã chốt trong khung đã neo (P19 ý 3). Bản 0.2 chưa lên
+dây nên thêm bit lúc này không cần tăng MINOR, cùng lập luận giữ 0.x ở 11.1.
+
+**P22 · TB — `alt_m` đang có ba cách hiểu.**
+
+| Chỗ | Nói gì |
+|---|---|
+| 8.3 `DRONE_MISSION_ITEM.alt_m` | "m, so với điểm cất cánh" |
+| 3.2b câu 4 | `target = toạ_độ_tag_z + alt_m`, tức **so với tag đích** |
+| 5.1 ý 3 `DRONE_TELEMETRY.alt_m` | `−z` của `LOCAL_POSITION_NED`, tức **so với gốc odom** |
+
+Ba cách chỉ trùng nhau vì mọi tag hiện có `z = 0` và drone cất cánh ở độ cao gốc. Tag đặt trên bục
+0,8 m thì drone bay cao hơn GCS tính 0,8 m, và kiểm tra trần bay của GCS sai. Đề nghị chốt theo đúng
+hành vi `mission_fsm.py`:
+- 8.3: **`alt_m` = độ cao so với tag đích của mục đó**; điểm tới `z_odom = tag_z + alt_m`.
+- 5.1: `DRONE_TELEMETRY.alt_m` = **độ cao so với gốc bản đồ tag** (= `−z`). Giữ nguyên, chỉ đổi chữ.
+
+GCS tự quy đổi khi vẽ và khi kiểm trần bay.
+
+**P23 · Thấp — Quy tắc làm tròn và vectơ kiểm cho `tagmap_crc`.** Hai bên cùng Python nhưng đổi
+m → mm không được để ngầm. Đề nghị thêm vào 8.6:
+- `n_mm = round(y * 1000)` và tương tự cho `e`, `d`, dùng **`round()` của Python** (làm tròn nửa về
+  số chẵn). Không dùng `int()` vì `int()` cắt cụt.
+- **Vectơ kiểm** với `tags.yaml` hiện tại (tag 0 tại (0, 0, 0), tag 1 tại x = 10 m):
+  - 28 byte: `0000 00000000 00000000 00000000` + `0100 00000000 10270000 00000000`
+  - `tagmap_crc` = **`0x6BDEA0A6`** (`zlib.crc32`)
+- Thêm vào A15: *"hàm tính `tagmap_crc` của cả hai bên trả `0x6BDEA0A6` với `tags.yaml` hiện tại"*.
+  Phép kiểm này chạy được bằng pytest, **không cần lên dây**.
+
+### 11.4 Bảng theo dõi P18–P23
+
+| Mã | Mức | Tóm tắt | Trạng thái |
+|---|---|---|---|
+| P18 | Cao | Nhà RTH ≠ `pad_home` | **GCS chọn (a)**, phụ thuộc P19, P21 |
+| P19 | Cao | Khung trước/sau neo; `POS_VALID` = đã neo; N/E là trục bản đồ; `home` chốt trong khung đã neo | chờ Pi |
+| P20 | TB | Điều kiện phát 32/30 chỉ là `POS_VALID` | chờ Pi |
+| P21 | TB | Bit 8 `HOME_VALID` | chờ Pi |
+| P22 | TB | `alt_m` mục kế hoạch = so với tag đích | chờ Pi |
+| P23 | Thấp | Làm tròn `round()`, vectơ kiểm `0x6BDEA0A6` | chờ Pi |
+
 
 ## Phụ lục A — Tra cứu nhanh
 
@@ -1044,7 +1156,7 @@ thì (a) và (b) trùng nhau trong thực tế và câu hỏi này tự hết.
 | `sysid`/`compid` | 2.2 |
 | Nạp kế hoạch: chuỗi bắt tay | 3.2 |
 | Mã lỗi khi từ chối kế hoạch | 3.3 |
-| Bốn lệnh GCS gửi được | 4.1 |
+| Lệnh GCS gửi được | 4.1 |
 | Nhịp phát từng bản tin | 5.1 |
 | Cờ hiệu lực — trường nào đang vô nghĩa | 5.2 |
 | Lệch phiên bản thì làm gì | 6.2 |
@@ -1052,7 +1164,7 @@ thì (a) và (b) trùng nhau trong thực tế và câu hỏi này tự hết.
 | Bảo mật | 7.6 |
 | Số ID còn trống | 8.1, 8.2 |
 | Cái gì đang là cấu hình chết | 9.2 |
-| Phản hồi của GCS cho bản 0.1 | 11 |
+| Truy vết đề xuất hai bên, mục còn mở | 11 |
 
 ## Phụ lục B — Liên kết
 
@@ -1070,5 +1182,6 @@ thì (a) và (b) trùng nhau trong thực tế và câu hỏi này tự hết.
 | Bản | Ngày | Sửa gì |
 |---|---|---|
 | 0.1 | 2026-09-15 | Bản thảo đầu. Toàn bộ là [ĐỀ XUẤT], chờ GCS phản hồi. Chốt: MAVLink 2/UDP, Pi gọi ra trước, dialect riêng `42000+` thay vì mượn `MISSION_ITEM_INT` (3.1), cờ hiệu lực (5.2), hàng đợi ưu tiên (5.3), chữ ký gói (7.6), sổ đăng ký (8), nghiệm thu A/B/C (10) |
-| **0.2** | **2026-09-16** | **Pi phân giải toàn bộ 17 đề xuất của GCS, nhập vào thân tài liệu; mục 11 thành bảng truy vết.** Ba lỗi của bản 0.1 được sửa: **R2** (lẫn *trailing-zero trimming* với `CRC_EXTRA` — P3), **4.2** (chống trùng lệnh tự triệt tiêu vì `confirmation` tăng — P4), **7.4** (`HEARTBEAT` không có trường thời gian → `TIMESYNC` — P6). Nhận: `LOCAL_POSITION_NED`+`ATTITUDE` 5 Hz có điều kiện (P1), `tagmap_crc` **công thức sửa lại** theo dữ liệu Pi thật có (P2), lệnh khẩn phát lại vô hạn (P5), bảng enum 8.5 (P8), 193 (P7), `status_flags`+3 trường (P9), `RSSI_VALID` và bỏ `fc_connected` (P10), địa chỉ NAT theo gói hợp lệ gần nhất (P12), `PARAM_*` chỉ đọc 9.4 (P13), chia đoạn `STATUSTEXT` (P15), ngữ nghĩa `ACK`/`ARM` (P16), `UINT32_MAX` (P17). Trả lời 4 câu về cấu trúc kế hoạch (3.2b) — câu 3 làm lộ lỗi `ACTION_NONE` trong `mission_fsm.py`. Thêm phép kiểm A13–A17, C5. **Pi nêu P18** (nhà của RTH ≠ home trên bản đồ GCS) — chờ GCS |
 | 0.1 | 2026-09-16 | **GCS phản hồi, không tăng số.** Đổi nhãn [ĐỀ XUẤT] → [THOẢ THUẬN] ở 2.1, 2.2, 3.1, 3.3, 5.3, 6.2, 7.3, 7.6. Thêm ghi chú `GCS → 11.Pn` tại chỗ và mục 11 (17 đề xuất, 6 mức cao: P1 vị trí/tư thế, P2 `tagmap_crc`, P3 R2 vs `<extensions/>`, P4 chống trùng lệnh, P5 lệnh khẩn, P8 bảng enum). Không sửa nội dung gốc của Pi |
+| **0.2** | **2026-09-16** | **Pi phân giải toàn bộ 17 đề xuất của GCS, nhập vào thân tài liệu; mục 11 thành bảng truy vết.** Ba lỗi của bản 0.1 được sửa: **R2** (lẫn *trailing-zero trimming* với `CRC_EXTRA` — P3), **4.2** (chống trùng lệnh tự triệt tiêu vì `confirmation` tăng — P4), **7.4** (`HEARTBEAT` không có trường thời gian → `TIMESYNC` — P6). Nhận: `LOCAL_POSITION_NED`+`ATTITUDE` 5 Hz có điều kiện (P1), `tagmap_crc` **công thức sửa lại** theo dữ liệu Pi thật có (P2), lệnh khẩn phát lại vô hạn (P5), bảng enum 8.5 (P8), 193 (P7), `status_flags`+3 trường (P9), `RSSI_VALID` và bỏ `fc_connected` (P10), địa chỉ NAT theo gói hợp lệ gần nhất (P12), `PARAM_*` chỉ đọc 9.4 (P13), chia đoạn `STATUSTEXT` (P15), ngữ nghĩa `ACK`/`ARM` (P16), `UINT32_MAX` (P17). Trả lời 4 câu về cấu trúc kế hoạch (3.2b) — câu 3 làm lộ lỗi `ACTION_NONE` trong `mission_fsm.py`. Thêm phép kiểm A13–A17, C5. **Pi nêu P18** (nhà của RTH ≠ home trên bản đồ GCS) — chờ GCS |
+| 0.2 | 2026-09-16 | **GCS duyệt bản 0.2, không tăng số.** Chấp nhận toàn bộ phân giải 11.1 (gồm công thức `tagmap_crc` sửa lại). Trả lời P18: chọn (a), GCS vẽ nhà RTH từ `home_*` và cảnh báo trước `MISSION_START`. Nêu P19–P23 (11.3): khung trước/sau khi odom neo và `POS_VALID`, điều kiện phát 32/30, bit `HOME_VALID`, ba cách hiểu `alt_m`, làm tròn và vectơ kiểm CRC `0x6BDEA0A6`. Sửa chữ không đổi nghĩa: câu cụt ở 2.1; "thêm vào cuối" còn sót ở 6.1, 8.3, 8.4 → "sau `<extensions/>`"; "bốn lệnh" ở 6.2, 7.3, Phụ lục A (4.1 nay có 6 lệnh; 6.2 là bốn lệnh **khẩn**); bỏ ghi chú GCS đã phân giải ở 10.A; xếp lại bảng lịch sử theo thời gian |
