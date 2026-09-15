@@ -37,6 +37,29 @@ Không cần cài MAVROS, apriltag_ros, robot_localization hay v4l2_camera trên
 
 Lần chạy Gazebo đầu tiên cần Internet để tải model X3 từ Gazebo Fuel.
 
+## 1b. BẮT BUỘC: tách miền ROS khỏi drone thật
+
+Mô phỏng dùng **đúng tên topic/service của MAVROS** (`/mavros/setpoint_raw/local`,
+`/mavros/state`, `/odometry/filtered`, service `/mavros/cmd/command`). ROS 2 tự phát hiện node
+qua multicast trên LAN, nên nếu PC và Pi cùng `ROS_DOMAIN_ID` (mặc định 0) thì **hai hệ trộn vào
+nhau**: FC giả đè lên dữ liệu FC thật, `position_controller_node` trên Pi nhận vị trí drone ảo,
+và setpoint của mô phỏng đi thẳng xuống FC thật qua MAVROS.
+
+Đặt **cả hai** biến trước khi chạy bất cứ lệnh nào của `drone_sim`:
+
+```bash
+export ROS_DOMAIN_ID=42                      # khac mien voi drone that
+export ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST   # chan tim node ra ngoai may nay
+```
+
+Kiểm tra trước khi tune — `ros2 node list` **chỉ được** thấy `/gz_bridge`,
+`/sim_fc_bridge_node`, `/position_controller_node`. Thấy `/mavros/*`, `/ekf_filter_node` hay
+`/marker_detector_node` là đang dính vào drone thật, **dừng ngay**.
+
+Dấu hiệu đã bị trộn: `ros2 topic echo /mavros/debug_value/named_value_int` cho **hai dãy
+`OB_RX_OK` xen kẽ** với giá trị cách xa nhau.
+
+
 ## 2. Chạy mô phỏng tune
 
 ```bash

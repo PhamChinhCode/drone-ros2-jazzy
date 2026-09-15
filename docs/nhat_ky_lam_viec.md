@@ -720,3 +720,129 @@ lệnh vz. Cần chạy lại với `--trace` để phân biệt.
    (`lenh ngang bao hoa` không tính z); hạ dưới laser 1,2 m bị kẹp 0,285 m/s nên `--back` về gần đất không
    phản ánh gain; thử trục x/y phải khi drone đang ở trên không.
 3. Kiểm dấu trục x chưa làm.
+
+---
+
+## Phiên 9 — 15/09/2026 (chiều)
+
+Làm mục 8.6 trên **máy tune mới**: PC x86_64 6 nhân, RAM 15 GiB, GTX 1050 (driver 580.173.02),
+Ubuntu 24.04, máy thật không phải máy ảo. Workspace clone sạch tại `/home/ubt/drone-ros2-jazzy`,
+**chưa có gì**: không ROS, không Gazebo, không `colcon`.
+
+### 9.1 Dựng nền
+
+Cài ROS 2 Jazzy desktop + Gazebo Harmonic + `ros_gz` + gói message (0 lỗi apt).
+Gazebo về qua **gói vendor của ROS** (`ros-jazzy-gz-sim-vendor`, Sim **8.15.0**), nên `gz` chỉ có
+trên PATH **sau khi `source /opt/ros/jazzy/setup.bash`** — khác bản Gazebo độc lập mà README giả định.
+`colcon build --packages-up-to drone_sim` sạch 22 s; pytest **126/126**.
+
+RTF = **1,000** và `render_engine:=ogre2` chạy mượt — máy này không cần hạ về Ogre1 như máy ảo (8.5).
+
+### 9.2 Phát hiện nghiêm trọng: mô phỏng và drone thật dùng chung miền ROS
+
+Cả hai đều ở `ROS_DOMAIN_ID = 0` trên cùng LAN, DDS tự phát hiện qua multicast, nên **16 node của
+drone thật hiện diện ngay trên PC**, trộn với mô phỏng. `ros2 node list` lúc đó có **hai
+`/position_controller_node`**, cộng nguyên bộ `/mavros/*`, `/ekf_filter_node`, `/marker_detector_node`.
+
+Bắt được bằng chứng ở `/mavros/debug_value/named_value_int`: **hai dãy `OB_RX_OK` xen kẽ** —
+`4400, 4410, 4420…` (mô phỏng, mới chạy) và `490356, 490366…` (hệ thật, đã chạy rất lâu), cả hai
+cùng +10 mỗi 0,5 s. Kèm các tên `FC_DIRTY`, `OB_EXIT`, `OB_RX_CLP` mà `sim_fc.py` **không hề phát**.
+
+Những gì đã trộn: `/odometry/filtered` (FC giả đè EKF thật), `/mavros/setpoint_raw/local` (hai
+controller cùng phát, MAVROS thật chuyển thẳng xuống FC), `/mavros/state`, `/mavros/odometry/in`,
+`/mavros/mtf01p`, và service `/mavros/cmd/command` **trùng tên với service ARM/DISARM thật**.
+
+Giảm nhẹ: mọi setpoint mô phỏng đều là vận tốc 0 (drone ảo nằm đất, không nguồn điều khiển nào
+hoạt động) và **chưa chạy `step_test` lần nào** khi phát hiện. Người dùng rút nguồn Pi 4 ngay.
+
+**=> Đây là nguyên nhân gốc của bất thường trục z ở Phiên 8.5.** `step_test` khi đó đọc
+`/odometry/filtered` **trộn hai nguồn**: vị trí X3 trong Gazebo và vị trí EKF của drone thật nằm
+trên bàn. Đường cong "0,31 → 3,26 → 0,28" không phải dao động của X3 mà là **hai vật thể đo xen kẽ**.
+Không có gì phải sửa trong `drone_sim` hay `worlds/drone_tune.sdf`.
+
+Cách chặn (đã ghi vào `src/drone_sim/README.md` mục **1b**, hai lớp độc lập):
+`ROS_DOMAIN_ID=42` và `ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST`.
+Kiểm: `ros2 node list` chỉ được thấy `/gz_bridge`, `/sim_fc_bridge_node`, `/position_controller_node`.
+
+### 9.3 Gỡ nợ 8.6 #1 và #3
+
+Chạy lại trong miền cô lập, `kp` 0,5, đúng lệnh của nợ 8.6 #1:
+
+| | 8.5 lần 1 | 8.5 lần 2 | Phiên 9 (cô lập) |
+|---|---|---|---|
+| Vượt đích | 96,9 % | 51,7 % | **0,1 %** |
+| Sai số cuối | ≈1,53 m | ≈1,30 m | **0,000 m** |
+
+`--trace` cho thấy `vz` giảm đơn điệu 0,74 → 0,00, nghiêng **0,0° suốt**, FC giữ `OFFBOARD ARMED`
+**không một lần rớt**. Cả 4 nghi vấn của 8.5 (X3 trễ, FC vào KHOÁ, X3 mất thăng bằng, X3 không bám
+`vz`) đều bị loại. Phép lặp cho số trùng khít (rise 3,10 vs 3,12 s).
+
+**Dấu cả ba trục đã kiểm** (nợ 8.6 #3, và y thì chưa ai kiểm bao giờ): lệnh dương → trục tăng, đúng
+quy ước FLU. Trục x nghiêng đỉnh 5,1° rồi về 0, độ cao giữ nguyên trong lúc bay ngang.
+
+### 9.4 Tune `cruise.*` — gain môi trường sạch là SAI
+
+Quét `kp` ở môi trường sạch thì `kp` 0,9 trông tốt nhất (z: vượt 6,1 %, ổn định 2,02 s).
+**Nhưng bài kiểm độ bền README §6** (`odom_delay_s:=0.1 odom_noise_m:=0.03` — EKF có trễ và nhiễu
+thật) lật lại: cùng `kp` 0,9 vượt đích lên **21,4 %**, quá cả ngưỡng dừng 20 % của README.
+
+| `kp` (trục z) | môi trường sạch | trễ 0,1 s + nhiễu 3 cm |
+|---|---|---|
+| 0,9 | 6,1 % | **21,4 %** |
+| 0,7 | 2,4 % | 7,5 % |
+| 0,5 | 0,1 % | 3,9 % |
+
+**Chốt: `cruise.{x,y,z}.kp = 0.7`, `ki = kd = 0`** (sai số tĩnh đo được 0,000 m nên không cần `ki`;
+vượt đích đã < 10 % nên không cần `kd` — D chỉ khuếch đại nhiễu EKF). Đã chép vào
+`src/drone_bringup/config/control.yaml`.
+
+Số tại `kp` 0,7 dưới điều kiện thực tế (bước 2 m, dải 0,15 m, cả hai chiều):
+z vượt 7,5 / 7,1 %, ổn định 3,08 / 3,36 s · x vượt 5,3 / 5,7 %, ổn định 2,94 / 2,88 s.
+
+**Bẫy đo lường:** ở bước 1 m, nhiễu σ = 3 cm tự sinh ra ~9 % "vượt đích" (một mẫu lệch 3σ trên
+quãng 1 m), che mất động học thật — các mức `kp` 0,4–0,6 đo ra không phân biệt được nhau. Phải
+dùng bước 2 m và dải 0,15 m thì xu hướng mới sạch và đơn điệu.
+
+### 9.5 Phát hiện phụ: khởi động tiến trình ROS mới làm FC vào KHOÁ
+
+Quét gain bằng cách chạy `ros2 run step_test` nhiều lượt thì FC thỉnh thoảng vào KHOÁ
+(`OB_AUTH = 0`, `OB_STATE = 0`, `mode` về `POSHOLD`), sau đó Pi vẫn phát lệnh đều nhưng drone
+**đứng im** — dễ nhầm là gain sai.
+
+Đo được: mỗi lần một tiến trình ROS mới khởi động, DDS discovery làm
+`/mavros/setpoint_raw/local` **đứt ~0,376 s** — sát ngưỡng hết hạn 500 ms của FC. Vượt ngưỡng là
+KHOÁ, và `sim_fc` **không tự phục hồi** (phải DISARM mới trả quyền), đúng như giao ước.
+`OB_RX_REJ = 0` xác nhận không setpoint nào bị từ chối — KHOÁ thuần tuý do đứt thời gian.
+
+Đã thêm bước kiểm `OB_AUTH` trước mỗi lượt quét để không lấy số từ một FC đã khoá.
+
+**Đáng lưu ý cho drone thật:** bất kỳ việc gì làm `position_controller_node` nghẽn quá 500 ms
+(khởi động tiến trình, nạp node mới) đều khoá FC giữa chuyến bay. Liên quan tới nợ 6.2 #1
+(ưu tiên thời gian thực `chrt` cho tuyến setpoint) — nay có số đo cụ thể chống lưng.
+
+### 9.6 Kiểm chứng
+
+| Việc kiểm | Kết quả |
+|---|---|
+| `colcon build --packages-up-to drone_sim` | sạch, 22 s |
+| pytest 5 package | **126/126** |
+| Cô lập miền | `ros2 node list` chỉ 3 node mô phỏng, 0 node drone thật |
+| Bước z và x, môi trường sạch | vượt ≤ 0,1 %, sai số cuối 0,000 m |
+| Bước z, x, y có trễ + nhiễu, `kp` 0,7 | vượt 5–8 %, ổn định < 3,5 s, không dao động |
+| **Bay nhiệm vụ đầy đủ** (`sim_mission.launch.py`, gain nạp từ `control.yaml`) | ARM → leo → ENROUTE 10 m → tìm tag → thử lại 1/1 → hết lượt → hạ tại chỗ → DISARM → xong. Vị trí cuối **x = 9,99999 m** (đích 10 m), y = 5·10⁻⁶ m |
+
+**Chưa kiểm chứng:** gain trên drone thật (chưa có điện động cơ). Vòng vận tốc X3 chưa đối chiếu
+với τ vòng vận tốc FC thật (nợ cũ, cần 12.B) — nên đây vẫn chỉ là **điểm xuất phát an toàn**,
+không phải con số cuối. README §5 giữ nguyên: bay thật thì dùng ~50 % gain này.
+
+### 9.7 Việc còn nợ
+
+1. **`landing.*` vẫn = 0.0** — mô phỏng chưa có camera/tag nên chưa tune được. Đây là nút chặn của
+   nhánh hạ cánh chính xác.
+2. **Đo τ vòng vận tốc FC thật** rồi chỉnh `velocityGain` của X3 trong `worlds/drone_tune.sdf` cho
+   khớp và tune lại — cần điện động cơ.
+3. `max_vel_mps` của waypoint vẫn **chưa áp** vào `position_controller_node` (nợ 8.3 #3).
+4. MARKER_SEARCH chưa có quỹ đạo tìm (nợ 8.3 #4).
+5. Nợ 6.2 #1 (ưu tiên thời gian thực cho tuyến setpoint) — nay có số đo 9.5 chống lưng, nên làm sớm.
+6. Các nợ còn lại của Phiên 7/8: ACTUATE_GRIPPER, RTH thật, `gcs_link_node`,
+   `telemetry_aggregator_node`, `marker_quality_node`, `estimation.launch.py` tự bật MAVROS.
