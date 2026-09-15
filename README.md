@@ -65,6 +65,8 @@ chạy cả stack thì thêm lệnh `ros2 launch` vào MỤC 3 **và** đổi un
 |---|---|
 | `docs/so_do_he_thong.drawio` | **Bắt đầu từ đây** — sơ đồ khởi động, cây launch, luồng dữ liệu giữa các node |
 | `docs/RUNBOOK.md` | Quy trình vận hành |
+| `docs/GIAO_UOC_FC_ROS2.md` | **Hợp đồng FC ↔ Pi** — mọi thứ đi qua dây MAVLink tới flight controller |
+| `docs/GIAO_UOC_GCS_PI.md` | **Hợp đồng GCS ↔ Pi** — kênh nhiệm vụ/telemetry qua 4G. Bản thảo 0.1, chờ GCS |
 | `docs/CAMERA.md` | Camera OV9281: cấu hình, sự cố đã gặp và cách xử lý |
 | `docs/thiet_ke_kien_truc_node_ros2.md` | Kiến trúc node |
 | `docs/ke_hoach_thiet_ke_node.md` | Quyết định thiết kế và lý do |

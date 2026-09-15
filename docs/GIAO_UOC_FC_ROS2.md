@@ -1089,7 +1089,9 @@ Bản tin chuẩn đã cấp:
 > Cái giá phải trả: so khớp chuỗi tên, nên tên đã cấp **không bao giờ đổi** (9.3).
 
 **Chưa cấp ID dialect riêng nào.** Kênh Pi ↔ GCS dùng dialect riêng nhưng **không đi qua
-đường FC** (xem mục 10.5), nên không thuộc sổ này.
+đường FC** (xem mục 10.5), nên không thuộc sổ này — nó có sổ riêng ở
+`GIAO_UOC_GCS_PI.md` mục 8, dải `42000+`, **cố ý không trùng** dải `180–229` của sổ này để
+nhìn một dump là biết đang xem kênh nào.
 
 ### 9.2 `custom_mode` — dải cấp phát
 
@@ -1312,7 +1314,7 @@ là lý do `NAMED_VALUE_INT` được ưu tiên trên `STATUSTEXT`.
 
 | Việc | Đi đường nào | Vì sao không qua FC |
 |---|---|---|
-| Pi ↔ GCS (nhiệm vụ, telemetry, lệnh khẩn) | **4G/LTE gắn thẳng Pi**, dialect riêng | không phải sửa firmware FC để forward; đường FC vốn dành cho điều khiển |
+| Pi ↔ GCS (nhiệm vụ, telemetry, lệnh khẩn) | **4G/LTE gắn thẳng Pi**, dialect riêng — hợp đồng riêng: `GIAO_UOC_GCS_PI.md` | không phải sửa firmware FC để forward; đường FC vốn dành cho điều khiển |
 | Khung nhị phân riêng tới ESP32 | USART3 của FC | không trộn với UART8 |
 | Console CLI, hiệu chuẩn, `set`/`save` | USART1 của FC | |
 | Ảnh camera, AprilTag thô, EKF của Pi | nội bộ ROS 2 | FC không cần biết |
