@@ -15,14 +15,17 @@ GZ_LAUNCH = os.path.join(get_package_share_directory('ros_gz_sim'), 'launch', 'g
 SIM_TIME = {'use_sim_time': True}
 
 
-def gazebo(gui):
-    """-r: chay ngay; -s: chi server, khong cua so."""
-    def include(args, condition):
+def gazebo(gui, render_engine):
+    """-r: chay ngay; -s: chi server, khong cua so.
+
+    render_engine 'ogre' (Ogre1): Ogre2 mac dinh nhap nhay tren may ao / GPU yeu."""
+    def include(flags, condition):
+        args = [flags, ' --render-engine ', render_engine, f' {WORLD}']
         return IncludeLaunchDescription(PythonLaunchDescriptionSource(GZ_LAUNCH),
-                                        launch_arguments={'gz_args': args}.items(),
+                                        launch_arguments=[('gz_args', args)],
                                         condition=condition)
-    return [include(f'-r {WORLD}', IfCondition(gui)),
-            include(f'-r -s {WORLD}', UnlessCondition(gui))]
+    return [include('-r', IfCondition(gui)),
+            include('-r -s', UnlessCondition(gui))]
 
 
 def gz_bridge():

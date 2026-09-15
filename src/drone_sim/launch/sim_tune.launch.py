@@ -2,6 +2,7 @@
 
   ros2 launch drone_sim sim_tune.launch.py                      # co cua so Gazebo
   ros2 launch drone_sim sim_tune.launch.py gui:=false           # chi server (PC yeu)
+  ros2 launch drone_sim sim_tune.launch.py render_engine:=ogre2 # mac dinh ogre (may ao)
   ros2 launch drone_sim sim_tune.launch.py odom_delay_s:=0.1 odom_noise_m:=0.03
 
 FC gia tu arm va tu phat /mission/state (watchdog P6). Doi gain luc dang chay:
@@ -19,9 +20,10 @@ from drone_sim.sim_launch import controller_node, gazebo, gz_bridge, sim_fc_brid
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('gui', default_value='true'),
+        DeclareLaunchArgument('render_engine', default_value='ogre'),
         DeclareLaunchArgument('odom_delay_s', default_value='0.0'),
         DeclareLaunchArgument('odom_noise_m', default_value='0.0'),
-        *gazebo(LaunchConfiguration('gui')),
+        *gazebo(LaunchConfiguration('gui'), LaunchConfiguration('render_engine')),
         gz_bridge(),
         sim_fc_bridge(auto_arm=True, heartbeat=True,
                       delay=LaunchConfiguration('odom_delay_s'),

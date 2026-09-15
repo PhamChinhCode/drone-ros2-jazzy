@@ -43,6 +43,9 @@ Lần chạy Gazebo đầu tiên cần Internet để tải model X3 từ Gazebo
 ros2 launch drone_sim sim_tune.launch.py            # thêm gui:=false nếu PC yếu
 ```
 
+Mặc định dùng renderer Ogre1 (`render_engine:=ogre`): Ogre2 làm màn hình 3D nhấp nháy trên máy ảo.
+PC thật có GPU tốt muốn dùng Ogre2 thì thêm `render_engine:=ogre2`.
+
 Kiểm tra trước khi tune (terminal khác, nhớ `source install/setup.bash`):
 
 ```bash

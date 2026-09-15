@@ -28,10 +28,11 @@ SIM_TIME = {'use_sim_time': True}
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('gui', default_value='true'),
+        DeclareLaunchArgument('render_engine', default_value='ogre'),
         DeclareLaunchArgument('odom_delay_s', default_value='0.0'),
         DeclareLaunchArgument('odom_noise_m', default_value='0.0'),
         DeclareLaunchArgument('takeoff_alt_m', default_value='2.0'),
-        *gazebo(LaunchConfiguration('gui')),
+        *gazebo(LaunchConfiguration('gui'), LaunchConfiguration('render_engine')),
         gz_bridge(),
         sim_fc_bridge(auto_arm=False, heartbeat=False,
                       delay=LaunchConfiguration('odom_delay_s'),
