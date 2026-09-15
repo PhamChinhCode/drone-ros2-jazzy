@@ -32,6 +32,7 @@ from nav_msgs.msg import Odometry
 from rclpy.experimental import EventsExecutor
 from rclpy.node import Node
 from sensor_msgs.msg import Range
+from std_msgs.msg import Float32
 
 from drone_control.pid import PID, check_gain_param
 from drone_control.qos import EVENT_QOS, SENSOR_QOS
@@ -81,6 +82,8 @@ class PositionControllerNode(Node):
         self.odom = None
         self.mission_setpoint = None
         self.mission_setpoint_stamp_s = None
+        self.max_vel_mps = None
+        self.max_vel_stamp_s = None
         self.landing_target = None
         self.landing_stamp_s = None
         self.active_source = (SOURCE_NONE, SOURCE_NONE)
@@ -95,6 +98,7 @@ class PositionControllerNode(Node):
         self.create_subscription(Odometry, '/odometry/filtered', self.on_odom, SENSOR_QOS)
         self.create_subscription(Range, '/mavros/mtf01p', self.on_range, SENSOR_QOS)
         self.create_subscription(PoseStamped, '/mission/setpoint', self.on_mission_setpoint, EVENT_QOS)
+        self.create_subscription(Float32, '/mission/max_vel', self.on_max_vel, EVENT_QOS)
         # Lenh van toc FLU truc tiep (cat/ha canh) - uu tien hon duong vi tri khi con moi.
         self.create_subscription(
             TwistStamped, '/mission/velocity_setpoint', self.on_velocity_setpoint, SENSOR_QOS)
@@ -143,6 +147,24 @@ class PositionControllerNode(Node):
     def on_mission_setpoint(self, msg):
         self.mission_setpoint = msg
         self.mission_setpoint_stamp_s = self.get_clock().now().nanoseconds / 1e9
+
+    def on_max_vel(self, msg):
+        self.max_vel_mps = msg.data
+        self.max_vel_stamp_s = self.get_clock().now().nanoseconds / 1e9
+
+    def limit_waypoint_speed(self, now_s, vx, vy):
+        """Kep toc do NGANG theo max_vel_mps cua waypoint dang bay toi.
+
+        Kep theo DO LON vector chu khong tung truc: kep tung truc thi bay cheo van vuot gioi han
+        1,41 lan. Qua han (mission ngung phat) thi bo gioi han rieng, chi con tran cua FC."""
+        if (self.max_vel_mps is None or self.max_vel_mps <= 0.0
+                or now_s - self.max_vel_stamp_s > MISSION_SETPOINT_STALE_S):
+            return vx, vy
+        speed = math.hypot(vx, vy)
+        if speed <= self.max_vel_mps:
+            return vx, vy
+        k = self.max_vel_mps / speed
+        return vx * k, vy * k
 
     def on_velocity_setpoint(self, msg):
         self.velocity_setpoint = msg
@@ -231,6 +253,8 @@ class PositionControllerNode(Node):
         if xy in (SOURCE_CRUISE, SOURCE_LANDING):
             vx = self.pids[xy]['x'].update(errors[xy][0], dt)
             vy = self.pids[xy]['y'].update(errors[xy][1], dt)
+        if xy == SOURCE_CRUISE:
+            vx, vy = self.limit_waypoint_speed(now_s, vx, vy)
 
         vx, vy, vz, yaw_rate = self.ramp.apply(now_s, (xy, z), (vx, vy, vz, yaw_rate))
         vx, vy, vz, yaw_rate = limit_velocity(vx, vy, vz, yaw_rate, self.current_range_m())

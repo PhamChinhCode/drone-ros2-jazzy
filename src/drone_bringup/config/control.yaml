@@ -10,7 +10,17 @@ landing_target_bridge_node:
 # Tai kp 0,7: vuot dich 5-8 %, on dinh < 3,5 s, sai so tinh 0 nen khong can ki/kd.
 # Bay THAT lan dau: dung ~50 % gain nay, buoc day hoac long an toan, tang dan roi lui 30-50%.
 #
-# CANH BAO: landing.* van la 0.0 - mo phong chua co camera/tag nen chua tune duoc.
+# landing.{x,y}: tune 15/09/2026 bang sim_tag_node (gia lap phat hien tag tu ground truth,
+# khong can camera), do bang sai so cham dat tren tag that trong Gazebo, co nhieu pose tag 1 cm,
+# mat 10 % khung, EKF tre 0,1 s + nhieu 3 cm:
+#   kp 0,5 -> lech 3 cm, 0 lan thu lai, 25 s   <- chon
+#   kp 1,5 -> lech 4 cm, 2 lan thu lai, 30 s
+#   kp 2,5 -> lech 9 cm, 4 lan thu lai, 38 s (co luc mat tag o cuoi va ha mu)
+# Gain cao PHAN TAC DUNG: khuech dai nhieu pose tag thanh chuyen dong ngang, day tag ra khoi
+# khung hinh (camera nghieng 20 do nen FOV doc chi con it bien o do cao thap).
+#
+# landing.z.* KHONG DUOC DOC O DAU: SOURCE_LANDING chi chi phoi vx, vy; toc do ha trong
+# PRECISION_LAND den tu lenh van toc cua mission. Giu lai de khong doi cau truc file.
 position_controller_node:
   ros__parameters:
     control_rate_hz: 20.0
@@ -31,12 +41,12 @@ position_controller_node:
     cruise.z.kd: 0.0
     cruise.z.i_limit: 1.0
     cruise.z.out_limit: 1.5
-    landing.x.kp: 0.0
+    landing.x.kp: 0.5
     landing.x.ki: 0.0
     landing.x.kd: 0.0
     landing.x.i_limit: 0.5
     landing.x.out_limit: 1.0
-    landing.y.kp: 0.0
+    landing.y.kp: 0.5
     landing.y.ki: 0.0
     landing.y.kd: 0.0
     landing.y.i_limit: 0.5

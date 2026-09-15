@@ -15,7 +15,7 @@ from rclpy.exceptions import ParameterUninitializedException
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from sensor_msgs.msg import BatteryState, Range
-from std_msgs.msg import Bool, Int32
+from std_msgs.msg import Bool, Float32, Int32
 from std_srvs.srv import Trigger
 
 from drone_interfaces.msg import (FailsafeEvent, GripperCommand, GripperStatus, MissionPlan,
@@ -100,6 +100,9 @@ class MissionManagerNode(Node):
         self.pub_state = self.create_publisher(MissionState, '/mission/state', EVENT_QOS)
         self.pub_expected_id = self.create_publisher(Int32, '/mission/expected_marker_id', EVENT_QOS)
         self.pub_setpoint = self.create_publisher(PoseStamped, '/mission/setpoint', EVENT_QOS)
+        # Tran toc do ngang cua waypoint dang bay toi, di kem /mission/setpoint. Tach topic
+        # rieng thay vi them truong vao MissionState: MissionState nam trong giao uoc FC/GCS.
+        self.pub_max_vel = self.create_publisher(Float32, '/mission/max_vel', EVENT_QOS)
         self.pub_gripper = self.create_publisher(GripperCommand, '/gripper/command', EVENT_QOS)
         # Lenh van toc FLU cho position_controller_node (cat/ha canh khong can gain PID vi tri).
         self.pub_velocity = self.create_publisher(
@@ -251,6 +254,8 @@ class MissionManagerNode(Node):
             msg.pose.position.x, msg.pose.position.y, msg.pose.position.z = action.position_target
             msg.pose.orientation.w = 1.0
             self.pub_setpoint.publish(msg)
+            if action.max_vel_mps is not None:
+                self.pub_max_vel.publish(Float32(data=float(action.max_vel_mps)))
         self.publish_mission_state(action.detail, action.expected_marker_id)
 
     def send_arm(self, arm):

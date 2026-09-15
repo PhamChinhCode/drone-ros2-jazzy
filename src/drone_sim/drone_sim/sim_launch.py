@@ -10,7 +10,9 @@ from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
 WORLD = os.path.join(get_package_share_directory('drone_sim'), 'worlds', 'drone_tune.sdf')
-CONTROL_YAML = os.path.join(get_package_share_directory('drone_bringup'), 'config', 'control.yaml')
+CONFIG = os.path.join(get_package_share_directory('drone_bringup'), 'config')
+CONTROL_YAML = os.path.join(CONFIG, 'control.yaml')
+TAGS_YAML = os.path.join(CONFIG, 'tags.yaml')
 GZ_LAUNCH = os.path.join(get_package_share_directory('ros_gz_sim'), 'launch', 'gz_sim.launch.py')
 SIM_TIME = {'use_sim_time': True}
 
@@ -51,3 +53,20 @@ def controller_node():
     return Node(package='drone_control', executable='position_controller_node',
                 name='position_controller_node', parameters=[CONTROL_YAML, SIM_TIME],
                 output='screen')
+
+
+def sim_tag(noise, dropout):
+    """Gia lap phat hien tag tu ground truth - thay ca camera + apriltag_ros."""
+    return Node(package='drone_sim', executable='sim_tag_node', name='sim_tag_node',
+                parameters=[TAGS_YAML,
+                            {'noise_m': ParameterValue(noise, value_type=float),
+                             'dropout_prob': ParameterValue(dropout, value_type=float)},
+                            SIM_TIME],
+                output='screen')
+
+
+def landing_bridge():
+    """Node that, khong sua gi - nhan /apriltag/detections + TF, ra /landing_target/pose."""
+    return Node(package='drone_control', executable='landing_target_bridge_node',
+                name='landing_target_bridge_node',
+                parameters=[CONTROL_YAML, TAGS_YAML, SIM_TIME], output='screen')

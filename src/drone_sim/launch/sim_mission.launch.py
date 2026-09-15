@@ -7,7 +7,9 @@
 
 Chay node Pi that: fc_command_bridge_node, mission_manager_node, position_controller_node,
 ekf_health_node, failsafe_monitor_node. CHUA gia lap camera/tag: MARKER_SEARCH se het gio, thu lai
-roi ha canh tai cho - dung de xem ENROUTE va chuoi thu lai, chua ha duoc xuong tag.
+Da co sim_tag_node gia lap phat hien tag tu ground truth (khong can camera), nen chuoi
+MARKER_SEARCH -> PRECISION_LAND chay duoc day du. Them nhieu/mat khung:
+  ros2 launch drone_sim sim_mission.launch.py tag_noise_m:=0.02 tag_dropout:=0.1
 """
 
 import os
@@ -19,7 +21,8 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
-from drone_sim.sim_launch import controller_node, gazebo, gz_bridge, sim_fc_bridge
+from drone_sim.sim_launch import (controller_node, gazebo, gz_bridge, landing_bridge,
+                                  sim_fc_bridge, sim_tag)
 
 CONFIG = os.path.join(get_package_share_directory('drone_bringup'), 'config')
 SIM_TIME = {'use_sim_time': True}
@@ -32,12 +35,16 @@ def generate_launch_description():
         DeclareLaunchArgument('odom_delay_s', default_value='0.0'),
         DeclareLaunchArgument('odom_noise_m', default_value='0.0'),
         DeclareLaunchArgument('takeoff_alt_m', default_value='2.0'),
+        DeclareLaunchArgument('tag_noise_m', default_value='0.0'),
+        DeclareLaunchArgument('tag_dropout', default_value='0.0'),
         *gazebo(LaunchConfiguration('gui'), LaunchConfiguration('render_engine')),
         gz_bridge(),
         sim_fc_bridge(auto_arm=False, heartbeat=False,
                       delay=LaunchConfiguration('odom_delay_s'),
                       noise=LaunchConfiguration('odom_noise_m')),
         controller_node(),
+        sim_tag(LaunchConfiguration('tag_noise_m'), LaunchConfiguration('tag_dropout')),
+        landing_bridge(),
         Node(package='drone_mission', executable='fc_command_bridge_node',
              name='fc_command_bridge_node',
              parameters=[os.path.join(CONFIG, 'mission.yaml'), SIM_TIME], output='screen'),

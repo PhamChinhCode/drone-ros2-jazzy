@@ -467,3 +467,85 @@ def test_hang_so_escalate_khop_failsafe_event():
             m.ESCALATE_EMERGENCY_LAND) == (F.ESCALATE_NONE, F.ESCALATE_LOITER,
                                            F.ESCALATE_RETRY_LOITER, F.ESCALATE_RTH,
                                            F.ESCALATE_EMERGENCY_LAND)
+
+
+# ---------------------------------------------------------------- RTH (ve nha)
+
+def fsm_dang_bay_toi_diem():
+    """TAKEOFF -> ENROUTE, da chot nha o (0, 0), dang o giua duong toi tag (5, 5)."""
+    fsm = fsm_dang_treo([wp(0, marker=1)])
+    fsm.step(snap(0.5, armed=True, range_m=0.2, position=(0.0, 0.0, 0.2)))
+    fsm.step(snap(0.6, armed=True, range_m=1.0, position=(0.0, 0.0, 1.0)))
+    assert fsm.state == m.ENROUTE
+    assert fsm.home == (0.0, 0.0, 0.2)
+    return fsm
+
+
+def test_muc_3_bay_ve_nha_chu_khong_ha_tai_cho():
+    fsm = fsm_dang_bay_toi_diem()
+    act = fsm.step(snap(1.0, armed=True, range_m=2.0, position=(3.0, 0.0, 2.0),
+                        failsafe_escalate_to=m.ESCALATE_RTH))
+    assert fsm.state == m.RTH
+    assert fsm.rth_alt_m == 2.0
+    # Diem den la NHA, giu do cao luc vao RTH.
+    act = fsm.step(snap(1.2, armed=True, range_m=2.0, position=(3.0, 0.0, 2.0),
+                        failsafe_escalate_to=m.ESCALATE_RTH))
+    assert act.position_target == (0.0, 0.0, 2.0)
+
+
+def test_muc_4_ha_ngay_khong_ve_nha():
+    """Pin kiet / mat FC: moi giay bay them deu la rui ro - khong duoc bay ve nha."""
+    fsm = fsm_dang_bay_toi_diem()
+    fsm.step(snap(1.0, armed=True, range_m=2.0, position=(3.0, 0.0, 2.0),
+                  failsafe_escalate_to=m.ESCALATE_EMERGENCY_LAND))
+    assert fsm.state == m.EMERGENCY_LAND
+
+
+def test_rth_toi_nha_thi_ha_canh():
+    fsm = fsm_dang_bay_toi_diem()
+    fsm.step(snap(1.0, armed=True, range_m=2.0, position=(3.0, 0.0, 2.0),
+                  failsafe_escalate_to=m.ESCALATE_RTH))
+    assert fsm.state == m.RTH
+    fsm.step(snap(2.0, armed=True, range_m=2.0, position=(0.5, 0.0, 2.0),
+                  failsafe_escalate_to=m.ESCALATE_RTH))
+    assert fsm.state == m.EMERGENCY_LAND
+
+
+def test_rth_qua_han_thi_ha_tai_cho():
+    fsm = fsm_dang_bay_toi_diem()
+    fsm.step(snap(1.0, armed=True, range_m=2.0, position=(3.0, 0.0, 2.0),
+                  failsafe_escalate_to=m.ESCALATE_RTH))
+    xa = (50.0, 0.0, 2.0)
+    fsm.step(snap(1.0 + m.RTH_TIMEOUT_S + 0.1, armed=True, range_m=2.0, position=xa,
+                  failsafe_escalate_to=m.ESCALATE_RTH))
+    assert fsm.state == m.EMERGENCY_LAND
+
+
+def test_mat_vi_tri_khi_rth_thi_ha_tai_cho():
+    fsm = fsm_dang_bay_toi_diem()
+    fsm.step(snap(1.0, armed=True, range_m=2.0, position=(3.0, 0.0, 2.0),
+                  failsafe_escalate_to=m.ESCALATE_RTH))
+    fsm.step(snap(1.5, armed=True, range_m=2.0, position=None,
+                  failsafe_escalate_to=m.ESCALATE_RTH))
+    assert fsm.state == m.EMERGENCY_LAND
+
+
+def test_khong_biet_nha_thi_khong_rth():
+    """Chua tung co vi tri EKF luc cat canh -> khong RTH duoc, ha canh tai cho."""
+    fsm = fsm_dang_treo([wp(0, marker=1)])
+    fsm.step(snap(0.6, armed=True, range_m=1.0, position=None))
+    assert fsm.state == m.ENROUTE and fsm.home is None
+    fsm.step(snap(1.0, armed=True, range_m=2.0, position=(3.0, 0.0, 2.0),
+                  failsafe_escalate_to=m.ESCALATE_RTH))
+    assert fsm.state == m.EMERGENCY_LAND
+
+
+def test_ekf_hong_khi_dang_rth_thi_dung_lai_giu_vi_tri():
+    """EKF khong healthy -> vi tri khong tin duoc -> khong bay tiep ve nha."""
+    fsm = fsm_dang_bay_toi_diem()
+    fsm.step(snap(1.0, armed=True, range_m=2.0, position=(3.0, 0.0, 2.0),
+                  failsafe_escalate_to=m.ESCALATE_RTH))
+    assert fsm.state == m.RTH
+    fsm.step(snap(1.5, armed=True, range_m=2.0, position=(3.0, 0.0, 2.0),
+                  failsafe_escalate_to=m.ESCALATE_LOITER))
+    assert fsm.state == m.FAILSAFE

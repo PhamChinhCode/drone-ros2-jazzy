@@ -846,3 +846,126 @@ không phải con số cuối. README §5 giữ nguyên: bay thật thì dùng ~
 5. Nợ 6.2 #1 (ưu tiên thời gian thực cho tuyến setpoint) — nay có số đo 9.5 chống lưng, nên làm sớm.
 6. Các nợ còn lại của Phiên 7/8: ACTUATE_GRIPPER, RTH thật, `gcs_link_node`,
    `telemetry_aggregator_node`, `marker_quality_node`, `estimation.launch.py` tự bật MAVROS.
+
+---
+
+## Phiên 10 — 15/09/2026 (tối)
+
+Làm tiếp trên mô phỏng sau khi tune xong `cruise.*`. Người dùng nêu hai ràng buộc mới:
+**FC tạm thời chưa gửi telemetry pin** và **chưa có GPS** (khớp thiết kế không GPS sẵn có).
+
+### 10.1 Failsafe khi ĐANG BAY — trước nay mới thử trên bàn
+
+| Sự cố tiêm giữa chuyến bay | Kết quả |
+|---|---|
+| EKF không healthy (ép `/ekf/health`) | Bắt trong **0,2 s** lúc đang bay ngang ở 1,9 m → LOITER giữ vị trí. Giữ x = 7,22 / y = 0,02 suốt hơn 60 s. Hết sự cố → hạ → DISARM → IDLE, đúng thiết kế 7.1 |
+| Pin 20 % (**chỉ thử nghiệm** — FC chưa gửi pin) | `FS_LOW_BATTERY` → leo thang 3 |
+| Mất GCS | `FS_LINK_LOST` sau **đúng 10 s** ngưỡng → leo thang 3 |
+
+**Đo được nợ 8.3 #2:** failsafe kích hoạt lúc đang bay thì drone **đi thêm ~2,1 m** theo hướng cũ
+(hai lần độc lập: 5,11 → 7,22 và 7,20 → 9,34) do chuỗi 0,5 s bỏ setpoint cũ + 0,8 s ramp + quán tính.
+Đang đứng yên thì trôi **0 m**. "Hạ cánh tại chỗ" thực tế lệch chỗ hơn 2 m — đáng lưu ý khi hạ gần
+vật cản hoặc gần người.
+
+**Lỗ hổng an toàn phát hiện được:** `failsafe_rules.evaluate()` chỉ xét pin khi
+`battery_pct is not None`. FC chưa gửi pin → biến luôn `None` → **không sự cố nào sinh ra và không
+có cảnh báo nào**. Nhánh FC thì ngược lại: chưa từng nhận heartbeat vẫn tính từ `node_start_s` và
+vẫn báo `FS_FC_COMM_LOST`. Nhánh pin thiếu cơ chế tương đương, nên `low_battery_pct: 25` trong
+`safety.yaml` hiện là **cấu hình chết** — trông như đã bật nhưng không bao giờ kích hoạt. **Chưa sửa.**
+
+### 10.2 `sim_tag_node` — giả lập tag, gỡ nút chặn lớn nhất
+
+Thay cả chuỗi camera → `image_proc` → `apriltag_ros` mà không cần camera: lấy vị trí thật của drone
+trong Gazebo, tính pose tag trong khung ảnh, phát `/apriltag/detections` + TF. Dùng **đúng chuỗi TF
+của drone thật** (`base_link → camera_link → camera_optical_frame`, số đo lấy từ
+`estimation.launch.py`) nên `landing_target_bridge_node` chạy **nguyên xi không sửa một dòng**.
+
+Bãi đáp trong world (`pad_home` 0,0 và `pad_a` 10,0) vốn đã trùng `tags.yaml`.
+
+**Lần đầu tiên chuỗi hạ cánh chính xác chạy trọn vẹn:** ENROUTE → MARKER_SEARCH → PRECISION_LAND →
+`"da ha xuong tag 1 va disarm"`, đường thật chứ không phải hạ cánh khẩn cấp.
+
+Mô phỏng tái hiện được một ràng buộc **thật**: ở z = 0,27 m drone mất tag. Kiểm bằng hình học —
+camera chếch 20° ra trước, drone lúc đó quá tag 3 cm nên tag lệch 18,4° về phía sau; cộng 20° thành
+38,4°, vượt nửa FOV dọc 32°. FSM xử lý đúng: **từ chối hạ mù**, leo lên bắt lại rồi hạ tiếp.
+
+**Chưa mô phỏng:** mờ ảnh khi bay nhanh, thiếu sáng, tag loá, sai số PnP theo góc. Tag ở đây **dễ
+thấy hơn ngoài đời**.
+
+### 10.3 Tune `landing.{x,y}` = 0.5
+
+Chỉ tiêu là sai số chạm đất trên tag và số lần mất tag (nhiễu pose tag 1 cm, mất 10 % khung, EKF trễ
+0,1 s + nhiễu 3 cm):
+
+| `landing.kp` | Sai số chạm đất | Số lần thử lại | Thời gian |
+|---|---|---|---|
+| 0,0 | 9 cm (thuần quán tính) | — | — |
+| **0,5** | **3 cm** | **0** | **25 s** |
+| 1,5 | 4 cm | 2 | 30 s |
+| 2,5 | 9 cm | 4 | 38 s, có lúc mất tag ở cuối và hạ mù |
+
+Gain cao **phản tác dụng theo cơ chế khác hẳn `cruise.*`**: không phải vọt lố mà là khuếch đại nhiễu
+pose tag thành chuyển động ngang, đẩy tag ra khỏi khung hình. Lặp lại `kp` 0,5 cho kết quả trùng.
+
+**`landing.z.*` không được đọc ở đâu**: `SOURCE_LANDING` chỉ chi phối `vx, vy`; tốc độ hạ trong
+PRECISION_LAND đến từ lệnh vận tốc của mission. Giữ lại trong `control.yaml`, có ghi chú.
+
+### 10.4 Áp `max_vel_mps` (nợ 8.3 #3)
+
+Waypoint khai `max_vel_mps` nhưng chưa dùng ở đâu. Thêm một kênh nhỏ `/mission/max_vel` (`Float32`)
+đi kèm `/mission/setpoint`, thay vì thêm trường vào `MissionState` — message đó nằm trong giao ước
+FC/GCS, sửa là kéo theo cả ba tầng. `position_controller_node` kẹp theo **độ lớn vector** ngang
+(kẹp từng trục thì bay chéo vẫn vượt 1,41 lần), bỏ giới hạn khi quá hạn.
+
+| `max_vel_mps` | Tốc độ ngang lớn nhất đo được | Thời gian ENROUTE 10 m |
+|---|---|---|
+| 1,9 | 1,747 m/s | 7,2 s |
+| 0,4 | **0,368 m/s** | 27,2 s |
+
+### 10.5 RTH thật (nợ 7.2 #6)
+
+Trước đây mức leo thang 3 và 4 **bị gộp chung** thành "hạ cánh tại chỗ". Nay tách:
+
+- **mức 4** (pin kiệt, mất FC) → hạ ngay, mỗi giây bay thêm đều là rủi ro;
+- **mức 3** (pin yếu, mất GCS) → RTH bay về nhà rồi hạ.
+
+"Nhà" = **vị trí lúc cất cánh**, chốt trong `_step_takeoff` (drone leo thẳng đứng nên x, y vẫn là của
+nhà). Chọn cách này thay vì giả định "tag 0 là nhà": một cơ chế duy nhất, không phụ thuộc ID tag.
+Không GPS nên đây cũng chính là mốc neo của khung `odom` — **RTH do đó phụ thuộc hoàn toàn vào EKF
+không trôi**, và đúng thứ tự ưu tiên: EKF hỏng (mức 1) thì LOITER chứ không RTH.
+
+RTH bỏ `max_vel_mps` của waypoint, dùng trần cho phép: giới hạn waypoint là ràng buộc nghiệp vụ
+(hàng hoá), không còn ý nghĩa khi đã bỏ nhiệm vụ. Có `RTH_TIMEOUT_S = 90 s` để không treo vô hạn.
+Thêm `MARKER_SEARCH → RTH` vào bảng chuyển: pin yếu lúc đang treo tìm tag thì về nhà hợp lý hơn hạ
+xuống chỗ lạ. Thiếu điều kiện (chưa biết nhà / mất vị trí / trạng thái không cho) thì **hạ tại chỗ**.
+
+Kiểm chứng Gazebo: mất GCS lúc đang ENROUTE ở x = 6,86 m → RTH → bay ngược về → hạ tại
+**x = 0,05, y = −0,01** (nhà ở 0,0), sai số 5 cm sau 7 m đường về.
+Cũng kiểm nhánh dự phòng: sự cố lúc đang PRECISION_LAND ở 1,16 m → `"khong RTH duoc, ha canh tai cho"`,
+đúng (đang hạ xuống tag thì hạ nốt an toàn hơn leo lên bay về).
+
+Pytest `drone_mission` thêm 7 test RTH. Tổng **133/133**.
+
+### 10.6 Hai cái bẫy của công cụ, không phải của hệ thống
+
+1. **`pkill -f <ten node>` tự giết shell gọi nó** — dòng lệnh của shell có chứa tên node nên khớp
+   chính nó. Đã thay bằng `tat_sim.py` lọc theo đường dẫn thực thi và loại trừ toàn bộ tổ tiên.
+2. **Không giết tiến trình `ros2 launch` cha** thì lần khởi động sau chồng lên lần trước → **hai
+   `gz sim server` tranh `/clock`** → đồng hồ mô phỏng đứng, mọi node dùng sim time đóng băng trong
+   khi `ros2 node list` vẫn thấy đủ node. Triệu chứng dễ nhầm là lỗi logic. Đã thêm `bin/ros2 launch`
+   vào danh sách cần tắt.
+
+### 10.7 Việc còn nợ
+
+1. **Failsafe pin là cấu hình chết** (10.1) — nên thêm cảnh báo "đã ARM mà chưa từng nhận dữ liệu
+   pin" để không ai tưởng nhầm failsafe đang bảo vệ mình. Chờ quyết định.
+2. **Trôi 2,1 m sau khi failsafe kích hoạt** (10.1) — cân nhắc rút ngắn ramp hoặc dừng ngang ngay khi
+   vào failsafe. Là thay đổi thiết kế, chưa tự sửa.
+3. **Nhiệm vụ nhiều waypoint chưa thử được**: sau PRECISION_LAND cần ACTUATE_GRIPPER mới đi tiếp
+   điểm sau, mà trạng thái đó chưa hiện thực.
+4. Nợ 8.3 #5 (ép `/set_pose` giữa chuyến bay làm vị trí nhảy) — chưa đo.
+5. `camera.yaml` vẫn trỏ `camera_info_url` vào `/home/pc/.ros/...` (đường dẫn tuyệt đối trên Pi)
+   trong khi repo đã có bản sao ở `config/camera_info/`. Không ảnh hưởng mô phỏng.
+6. Nợ cũ còn nguyên: `gcs_link_node`, `telemetry_aggregator_node`, `marker_quality_node`,
+   gripper (phần cứng), đo τ vòng vận tốc FC thật, ưu tiên thời gian thực (6.2 #1),
+   `estimation.launch.py` tự bật MAVROS.

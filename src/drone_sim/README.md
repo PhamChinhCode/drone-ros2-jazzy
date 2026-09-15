@@ -11,6 +11,7 @@ lên trên vòng vận tốc của FC.
 | FC STM32 (vòng góc + vòng vận tốc OFFBOARD) | Plugin `MulticopterVelocityControl` của Gazebo (drone X3) |
 | MAVROS + hợp đồng FC (ARM/DISARM, `OB_*`, hết hạn 500 ms, laser) | `sim_fc_bridge_node` + `sim_fc.py` |
 | EKF (`robot_localization`) | Vị trí thật từ Gazebo, thêm trễ/nhiễu tuỳ chọn |
+| Camera + `image_proc` + `apriltag_ros` | `sim_tag_node` tính pose tag từ ground truth |
 | `position_controller_node`, `mission_manager_node`, `fc_command_bridge_node`, `failsafe_monitor_node` | **Chạy nguyên code thật** |
 
 **Giới hạn cần nhớ:** gain chỉ dùng được cho drone thật khi vòng vận tốc của X3 phản ứng giống vòng
@@ -18,7 +19,7 @@ vận tốc của FC. Hằng số thời gian τ của FC chưa đo (cần có �
 là **điểm xuất phát an toàn**, không phải con số cuối.
 
 Khác FC thật (có chủ đích): quyền điều khiển luôn có sẵn (không có ch8). DISARM trả lại quyền sau
-`KHOA`. Chưa giả lập camera/tag.
+`KHOA`.
 
 ## 1. Cài đặt (một lần)
 
@@ -117,6 +118,52 @@ Ghi lại để vẽ (PlotJuggler/Foxglove):
 
 Chép gain đạt vào `src/drone_bringup/config/control.yaml`.
 
+## 3b. Giả lập tag — `sim_tag_node`
+
+Thay cả chuỗi camera → `image_proc` → `apriltag_ros` mà không cần camera: lấy vị trí thật của drone
+trong Gazebo, tính pose tag trong khung ảnh, rồi phát đúng hai thứ `landing_target_bridge_node` cần —
+`/apriltag/detections` và TF `camera_optical_frame → <tên khung tag>`. Dùng **đúng chuỗi TF của drone
+thật** (`base_link → camera_link → camera_optical_frame`, số đo lấy từ `estimation.launch.py`), nên
+phép `lookupTransform` của bridge đi qua y hệt đường thật, kể cả sai số do lắp camera nghiêng 20°.
+
+Bãi đáp trong `worlds/drone_tune.sdf` (`pad_home` ở 0,0 và `pad_a` ở 10,0) đã trùng khớp `tags.yaml`.
+
+```bash
+ros2 launch drone_sim sim_mission.launch.py tag_noise_m:=0.01 tag_dropout:=0.1
+```
+
+Tầm nhìn mô phỏng bằng hình chóp: nửa FOV 44,7° ngang và 32,0° dọc (suy từ hiệu chỉnh 640×400,
+fx 323,62 / fy 320,33), tầm 0,15–8 m. Camera nghiêng 20° ra trước nên **drone mất tag ở độ cao thấp
+nếu bay quá tag một chút** — đây là ràng buộc thật, đo được trong mô phỏng: ở z = 0,27 m và lệch 3 cm
+về phía sau tag, góc tới tag là 38,4°, vượt nửa FOV dọc 32°. FSM xử lý đúng: từ chối hạ mù, leo lên
+bắt lại rồi hạ tiếp.
+
+**KHÔNG mô phỏng:** mờ ảnh khi bay nhanh, thiếu sáng, tag bị loá, sai số PnP theo góc nghiêng. Tag ở
+đây **dễ thấy hơn ngoài đời**, nên gain `landing.*` tune được vẫn chỉ là điểm xuất phát.
+
+## 3c. Tune `landing.*`
+
+Cùng cách với `cruise.*` nhưng chỉ tiêu là **sai số chạm đất trên tag** và **số lần mất tag**:
+
+```bash
+ros2 param set /position_controller_node landing.x.kp 0.5
+ros2 param set /position_controller_node landing.y.kp 0.5
+ros2 run drone_mission send_mission_plan <ke_hoach co acceptance_radius_m lon>
+```
+
+Đo được (nhiễu pose tag 1 cm, mất 10 % khung, EKF trễ 0,1 s + nhiễu 3 cm):
+
+| `landing.kp` | Sai số chạm đất | Số lần thử lại | Thời gian |
+|---|---|---|---|
+| 0,5 | 3 cm | 0 | 25 s |
+| 1,5 | 4 cm | 2 | 30 s |
+| 2,5 | 9 cm | 4 | 38 s |
+
+Gain cao **phản tác dụng**: khuếch đại nhiễu pose tag thành chuyển động ngang, đẩy tag ra khỏi khung
+hình. Khác hẳn `cruise.*` nơi gain cao chỉ gây vọt lố.
+
+`landing.z.*` **không được đọc ở đâu**: `SOURCE_LANDING` chỉ chi phối `vx, vy`.
+
 ## 4. Thử bay waypoint qua nhiệm vụ thật
 
 ```bash
@@ -152,4 +199,5 @@ Chỉ khi đã có điện động cơ (giai đoạn C):
 | `drone_sim/step_response.py`, `step_test.py` | Thử đáp ứng bước và tính chỉ số |
 | `worlds/drone_tune.sdf` | X3 + `MulticopterVelocityControl` + `OdometryPublisher`, hai bãi đáp trùng `tags.yaml` |
 | `launch/sim_tune.launch.py` | Gazebo + cầu + FC giả tự arm + `position_controller_node` |
-| `launch/sim_mission.launch.py` | Thêm `fc_command_bridge_node`, `mission_manager_node`, `ekf_health_node`, `failsafe_monitor_node` |
+| `drone_sim/sim_tag_node.py` | Giả lập phát hiện tag từ ground truth: `/apriltag/detections` + TF, thay cả camera và `apriltag_ros` |
+| `launch/sim_mission.launch.py` | Thêm `fc_command_bridge_node`, `mission_manager_node`, `ekf_health_node`, `failsafe_monitor_node`, `sim_tag_node`, `landing_target_bridge_node` |

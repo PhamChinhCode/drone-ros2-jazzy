@@ -24,6 +24,7 @@ setup(
     entry_points={
         'console_scripts': [
             'sim_fc_bridge_node = drone_sim.sim_fc_bridge_node:main',
+            'sim_tag_node = drone_sim.sim_tag_node:main',
             'step_test = drone_sim.step_test:main',
         ],
     },
