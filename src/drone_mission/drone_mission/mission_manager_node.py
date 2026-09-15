@@ -211,10 +211,7 @@ class MissionManagerNode(Node):
         self.snapshot.failsafe_escalate_to = max(self.failsafe_active.values(), default=0)
 
     def tick(self):
-        """Gom Snapshot, goi FSM, dich Action, publish MissionState deu dan ke ca khi khong doi.
-
-        TODO: gripper_command khi ACTUATE_GRIPPER duoc hien thuc.
-        """
+        """Gom Snapshot, goi FSM, dich Action, publish MissionState deu dan ke ca khi khong doi."""
         now = self.now_s()
         snap = self.snapshot
         snap.now_s = now
@@ -240,6 +237,8 @@ class MissionManagerNode(Node):
 
         if action.fc_command in ('arm', 'disarm'):
             self.send_arm(action.fc_command == 'arm')
+        if action.gripper_command in ('open', 'close'):
+            self.send_gripper(action.gripper_command)
         self.pub_expected_id.publish(Int32(data=action.expected_marker_id))
         if action.velocity_up_mps is not None:
             msg = TwistStamped()
@@ -257,6 +256,16 @@ class MissionManagerNode(Node):
             if action.max_vel_mps is not None:
                 self.pub_max_vel.publish(Float32(data=float(action.max_vel_mps)))
         self.publish_mission_state(action.detail, action.expected_marker_id)
+
+    def send_gripper(self, lenh):
+        """Phat GripperCommand. FSM tu gian nhip phat lai; o day chi dich lenh va danh seq."""
+        self.gripper_seq += 1
+        msg = GripperCommand()
+        msg.seq = self.gripper_seq
+        msg.command = (GripperCommand.GRIPPER_CLOSE if lenh == 'close'
+                       else GripperCommand.GRIPPER_OPEN)
+        self.pub_gripper.publish(msg)
+        self.get_logger().info(f'gripper {lenh.upper()} (seq {msg.seq})')
 
     def send_arm(self, arm):
         """Goi fc_command_bridge_node ~/arm khong chan; lenh truoc chua xong thi bo lan nay."""

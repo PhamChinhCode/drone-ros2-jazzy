@@ -70,3 +70,11 @@ def landing_bridge():
     return Node(package='drone_control', executable='landing_target_bridge_node',
                 name='landing_target_bridge_node',
                 parameters=[CONTROL_YAML, TAGS_YAML, SIM_TIME], output='screen')
+
+
+def gripper_node():
+    """Node that o che do simulate: gia lap hanh trinh servo + cong tac xac nhan."""
+    return Node(package='drone_mission', executable='gripper_controller_node',
+                name='gripper_controller_node',
+                parameters=[os.path.join(CONFIG, 'mission.yaml'), {'simulate': True}, SIM_TIME],
+                output='screen')

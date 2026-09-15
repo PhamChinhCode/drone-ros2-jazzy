@@ -36,7 +36,10 @@ TRANSITIONS = {
     # ve nha tot hon la ha xuong cho la.
     MARKER_SEARCH:   [PRECISION_LAND, RETRY_LOITER, RTH, FAILSAFE, EMERGENCY_LAND],
     PRECISION_LAND:  [ACTUATE_GRIPPER, MARKER_SEARCH, FAILSAFE, MISSION_COMPLETE, EMERGENCY_LAND],
-    ACTUATE_GRIPPER: [TAKEOFF, ENROUTE, MISSION_COMPLETE, RETRY_LOITER, FAILSAFE],
+    # EMERGENCY_LAND PHAI co: thieu no thi ~/land tra 'thanh cong' nhung khong lam gi, va het
+    # ke hoach cung khong ha canh duoc - drone nam dat nhung van arm.
+    ACTUATE_GRIPPER: [TAKEOFF, ENROUTE, MISSION_COMPLETE, RETRY_LOITER, FAILSAFE,
+                      EMERGENCY_LAND],
     RETRY_LOITER:    [MARKER_SEARCH, RTH, FAILSAFE, EMERGENCY_LAND],
     RTH:             [EMERGENCY_LAND, MISSION_COMPLETE, FAILSAFE],
     EMERGENCY_LAND:  [MISSION_COMPLETE, FAILSAFE],
@@ -72,6 +75,7 @@ PRECISION_BLIND_BELOW_M = 0.35
 # RETRY_LOITER giu tai diem chung nay roi tim lai. Dai hon chu ky failsafe_monitor_node (2 Hz) de
 # su co FS_MARKER_TIMEOUT kip tat, khong bi dem them mot lan ngay khi vao lai MARKER_SEARCH.
 RETRY_LOITER_S = 3.0
+GRIPPER_RETRY_S = 1.0       # phat lai lenh gap/tha neu co cau chua doi trang thai
 # RTH khong bao gio duoc keo dai vo han: su co kich RTH (pin yeu, mat GCS) deu la thu chi
 # xau di theo thoi gian. Khong toi duoc nha trong ngan nay -> ha canh tai cho, con hon het pin
 # giua duong.
@@ -206,6 +210,9 @@ class MissionFsm:
     # moc neo cua khung odom. None = chua tung cat canh -> khong RTH duoc.
     home: tuple = None
     rth_alt_m: float = None           # do cao giu khi bay ve, chot luc vao RTH
+    # Rieng cho nhip phat lai lenh gap/tha. KHONG dung chung last_fc_command_s: truong do
+    # danh cho nhip thu lai DISARM trong _descend_and_disarm.
+    last_gripper_command_s: float = None
     search_timeout_s: float = None
 
     def load_plan(self, mission_id, raw_waypoints, max_retries, search_timeout_s, known_tags):
@@ -255,6 +262,7 @@ class MissionFsm:
         if new_state in (IDLE, ENROUTE):
             self.retry_count = 0
         self.last_fc_command_s = None
+        self.last_gripper_command_s = None
         if new_state != IDLE:
             self.start_requested_s = None
         if new_state in (EMERGENCY_LAND, IDLE):
@@ -299,7 +307,6 @@ class MissionFsm:
           - moi lan that bai retry_count += 1; qua max_retries -> EMERGENCY_LAND tai cho (RTH
             tam thoi); con luot -> RETRY_LOITER giu tai diem RETRY_LOITER_S roi tim lai.
 
-        TODO: ACTUATE_GRIPPER (CHO gripper_sensor_confirmed, khong dung timeout thay), RTH.
         """
         now = snap.now_s
         lost = snap.ob_auth is False or snap.ob_state == OB_STATE_KHOA
@@ -356,6 +363,8 @@ class MissionFsm:
             return self._step_land(snap)
         if self.state == PRECISION_LAND:
             return self._step_precision_land(snap)
+        if self.state == ACTUATE_GRIPPER:
+            return self._step_actuate_gripper(snap)
         if self.state == MISSION_COMPLETE:
             return self.transition(IDLE, now, 'xong')
         return Action(detail=f'{self.state}: chua hien thuc')
@@ -486,6 +495,53 @@ class MissionFsm:
                                    f'{reason} - het {limit} lan thu lai, ha canh tai cho')
         return self._enter_search(now_s, retry_state,
                                   f'{reason} - thu lai {self.retry_count}/{limit}')
+
+    def _step_actuate_gripper(self, snap):
+        """Gap hoac tha hang tai diem da ha canh. Drone dang NAM DAT va VAN ARM.
+
+        Nguyen tac 3 (dau file): chi roi trang thai khi gripper_sensor_confirmed doi DUNG CHIEU -
+        khong bao gio dung timeout thay xac nhan. Timeout chi de failsafe PHAT HIEN su co, va su
+        co do vao day duoi dang ESCALATE_RETRY_LOITER.
+
+        PICKUP xong = da gap chac (sensor_confirmed True). DROPOFF xong = da nha ra
+        (sensor_confirmed False) - dieu kien NGUOC nhau, khong phai cung mot co.
+        """
+        now = snap.now_s
+        wp = self.current_waypoint()
+        if wp is None:
+            return self.transition(EMERGENCY_LAND, now, 'khong con diem nao - ha canh')
+        dong = wp.action == ACTION_PICKUP
+        xong = snap.gripper_sensor_confirmed if dong else not snap.gripper_sensor_confirmed
+        viec = 'gap' if dong else 'tha'
+
+        # Vua cham dat, khung may con rung: giu yen roi moi cho co cau chay.
+        if self.time_in_state(now) < self.params.pre_dropoff_settle_s:
+            return Action(velocity_up_mps=0.0, detail=f'giu on dinh truoc khi {viec}')
+
+        if xong:
+            return self._xong_hanh_dong(now, wp, viec)
+
+        # Gripper khong xac nhan qua lau -> mot lan that bai cua CA chang, thu lai tu dau.
+        if snap.failsafe_escalate_to == ESCALATE_RETRY_LOITER:
+            return self._search_failed(now, RETRY_LOITER,
+                                       f'gripper khong xac nhan khi {viec} tai tag {wp.marker_id}')
+
+        act = Action(velocity_up_mps=0.0, detail=f'{viec} hang tai tag {wp.marker_id}')
+        if (self.last_gripper_command_s is None
+                or now - self.last_gripper_command_s >= GRIPPER_RETRY_S):
+            act.gripper_command = 'close' if dong else 'open'
+            self.last_gripper_command_s = now
+        return act
+
+    def _xong_hanh_dong(self, now, wp, viec):
+        """Xong viec tai diem: con diem sau thi cat canh lai, het thi ha canh va disarm."""
+        self.current_wp_index += 1
+        if self.current_wp_index >= len(self.waypoints):
+            # Dang nam dat: _step_land thay landed se DISARM ngay, khong xuong them.
+            return self.transition(EMERGENCY_LAND, now,
+                                   f'xong {viec} tai tag {wp.marker_id} - het ke hoach, disarm')
+        return self.transition(TAKEOFF, now, f'xong {viec} tai tag {wp.marker_id} - '
+                                             f'cat canh toi diem {self.current_wp_index}')
 
     def _step_land(self, snap):
         now = snap.now_s

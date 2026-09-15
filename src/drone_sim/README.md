@@ -12,6 +12,7 @@ lên trên vòng vận tốc của FC.
 | MAVROS + hợp đồng FC (ARM/DISARM, `OB_*`, hết hạn 500 ms, laser) | `sim_fc_bridge_node` + `sim_fc.py` |
 | EKF (`robot_localization`) | Vị trí thật từ Gazebo, thêm trễ/nhiễu tuỳ chọn |
 | Camera + `image_proc` + `apriltag_ros` | `sim_tag_node` tính pose tag từ ground truth |
+| Servo gripper + công tắc hành trình | `gripper_controller_node` với `simulate:=true` |
 | `position_controller_node`, `mission_manager_node`, `fc_command_bridge_node`, `failsafe_monitor_node` | **Chạy nguyên code thật** |
 
 **Giới hạn cần nhớ:** gain chỉ dùng được cho drone thật khi vòng vận tốc của X3 phản ứng giống vòng
@@ -180,6 +181,27 @@ Chưa giả lập camera nên chưa hạ xuống tag được. Gain `landing.*` 
 
 Lưu ý: `control.yaml` phải đã có gain `cruise.*` khác 0 thì ENROUTE mới bay.
 
+## 4b. Nhiệm vụ nhiều chặng có gắp/thả
+
+`gripper_controller_node` chạy ở `simulate:=true` giả lập hành trình servo (`sim_travel_s`, mặc
+định 0,8 s) và công tắc xác nhận, đủ để chạy hết chuỗi ACTUATE_GRIPPER mà không cần phần cứng.
+
+```yaml
+# hai chang: gap tai tag 1 roi bay ve tha tai tag 0
+waypoints:
+  - {marker_id: 1, action: pickup,  alt_m: 2.0, acceptance_radius_m: 0.5, max_vel_mps: 1.9, loiter_s: 1.0}
+  - {marker_id: 0, action: dropoff, alt_m: 2.0, acceptance_radius_m: 0.5, max_vel_mps: 1.9, loiter_s: 1.0}
+```
+
+`action` nhận **tên** (`none` / `pickup` / `dropoff`), không nhận số.
+
+Chuỗi đầy đủ đã chạy được: ARM → TAKEOFF → ENROUTE → MARKER_SEARCH → PRECISION_LAND → **ACTUATE_GRIPPER
+(giữ ổn định → gắp → chờ xác nhận cảm biến)** → TAKEOFF lại → ENROUTE tới tag 0 → … → **thả** →
+hạ cánh và DISARM.
+
+**Thử đường thất bại:** không chạy `gripper_controller_node` thì `/gripper/status` không bao giờ
+tới, failsafe `FS_GRIP_CONFIRM_FAIL` bật sau 5 s và FSM thử lại cả chặng, hết lượt thì hạ tại chỗ.
+
 ## 5. Đưa gain sang drone thật — chưa làm bây giờ
 
 Chỉ khi đã có điện động cơ (giai đoạn C):
@@ -200,4 +222,4 @@ Chỉ khi đã có điện động cơ (giai đoạn C):
 | `worlds/drone_tune.sdf` | X3 + `MulticopterVelocityControl` + `OdometryPublisher`, hai bãi đáp trùng `tags.yaml` |
 | `launch/sim_tune.launch.py` | Gazebo + cầu + FC giả tự arm + `position_controller_node` |
 | `drone_sim/sim_tag_node.py` | Giả lập phát hiện tag từ ground truth: `/apriltag/detections` + TF, thay cả camera và `apriltag_ros` |
-| `launch/sim_mission.launch.py` | Thêm `fc_command_bridge_node`, `mission_manager_node`, `ekf_health_node`, `failsafe_monitor_node`, `sim_tag_node`, `landing_target_bridge_node` |
+| `launch/sim_mission.launch.py` | Thêm `fc_command_bridge_node`, `mission_manager_node`, `ekf_health_node`, `failsafe_monitor_node`, `sim_tag_node`, `landing_target_bridge_node`, `gripper_controller_node` |

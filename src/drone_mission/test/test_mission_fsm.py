@@ -549,3 +549,87 @@ def test_ekf_hong_khi_dang_rth_thi_dung_lai_giu_vi_tri():
     fsm.step(snap(1.5, armed=True, range_m=2.0, position=(3.0, 0.0, 2.0),
                   failsafe_escalate_to=m.ESCALATE_LOITER))
     assert fsm.state == m.FAILSAFE
+
+
+# ------------------------------------------------------- ACTUATE_GRIPPER (gap/tha)
+
+def fsm_dang_gap(action=None, waypoints=None):
+    """... -> cham dat tai diem co hanh dong -> ACTUATE_GRIPPER luc 3,0."""
+    wps = waypoints or [wp(0, marker=1, action=action or m.ACTION_PICKUP)]
+    fsm = fsm_dang_ha_chinh_xac(wps)
+    fsm.step(snap(3.0, armed=True, range_m=0.18, landed=True, disarm_ready=True))
+    assert fsm.state == m.ACTUATE_GRIPPER
+    return fsm
+
+
+def gap_snap(t, **kw):
+    return snap(t, armed=True, range_m=0.18, landed=True, disarm_ready=True, **kw)
+
+
+def test_giu_on_dinh_roi_moi_ra_lenh_gap():
+    """Vua cham dat, khung may con rung - khong duoc cho co cau chay ngay."""
+    fsm = fsm_dang_gap()
+    act = fsm.step(gap_snap(3.5))           # pre_dropoff_settle_s mac dinh 2,0 s
+    assert act.gripper_command == '' and 'on dinh' in act.detail
+    act = fsm.step(gap_snap(5.5))
+    assert act.gripper_command == 'close'
+
+
+def test_pickup_cho_xac_nhan_cam_bien_khong_dung_timeout():
+    """Nguyen tac 3: het gio KHONG duoc coi la da gap."""
+    fsm = fsm_dang_gap(m.ACTION_PICKUP)
+    fsm.step(gap_snap(5.5))
+    for t in (7.0, 20.0, 60.0):
+        fsm.step(gap_snap(t, gripper_sensor_confirmed=False))
+        assert fsm.state == m.ACTUATE_GRIPPER
+    fsm.step(gap_snap(61.0, gripper_sensor_confirmed=True))
+    assert fsm.state != m.ACTUATE_GRIPPER
+
+
+def test_dropoff_xong_khi_cam_bien_NHA_ra():
+    """DROPOFF nguoc PICKUP: xong = sensor_confirmed ve False, khong phai True."""
+    fsm = fsm_dang_gap(m.ACTION_DROPOFF)
+    act = fsm.step(gap_snap(5.5, gripper_sensor_confirmed=True))
+    assert act.gripper_command == 'open'
+    fsm.step(gap_snap(6.0, gripper_sensor_confirmed=True))
+    assert fsm.state == m.ACTUATE_GRIPPER           # con dang giu -> chua xong
+    fsm.step(gap_snap(6.5, gripper_sensor_confirmed=False))
+    assert fsm.state == m.EMERGENCY_LAND            # diem cuoi -> ha canh va disarm
+
+
+def test_gian_nhip_phat_lai_lenh_gripper():
+    fsm = fsm_dang_gap()
+    assert fsm.step(gap_snap(5.5)).gripper_command == 'close'
+    assert fsm.step(gap_snap(5.7)).gripper_command == ''      # chua du GRIPPER_RETRY_S
+    assert fsm.step(gap_snap(5.5 + m.GRIPPER_RETRY_S)).gripper_command == 'close'
+
+
+def test_gripper_khong_xac_nhan_thi_thu_lai_ca_chang():
+    fsm = fsm_dang_gap()
+    fsm.max_retries = 2
+    fsm.step(gap_snap(5.5))
+    fsm.step(gap_snap(6.0, failsafe_escalate_to=m.ESCALATE_RETRY_LOITER))
+    assert fsm.state == m.RETRY_LOITER and fsm.retry_count == 1
+
+
+def test_het_luot_thu_lai_gripper_thi_ha_canh():
+    fsm = fsm_dang_gap()
+    fsm.max_retries = 0
+    fsm.step(gap_snap(5.5))
+    fsm.step(gap_snap(6.0, failsafe_escalate_to=m.ESCALATE_RETRY_LOITER))
+    assert fsm.state == m.EMERGENCY_LAND
+
+
+def test_con_diem_sau_thi_cat_canh_lai():
+    fsm = fsm_dang_gap(waypoints=[wp(0, marker=1, action=m.ACTION_PICKUP), wp(1, marker=0)])
+    fsm.step(gap_snap(5.5))
+    fsm.step(gap_snap(6.0, gripper_sensor_confirmed=True))
+    assert fsm.state == m.TAKEOFF and fsm.current_wp_index == 1
+
+
+def test_yeu_cau_ha_canh_thoat_duoc_actuate_gripper():
+    """Thieu EMERGENCY_LAND trong bang chuyen thi ~/land bao thanh cong nhung khong lam gi."""
+    fsm = fsm_dang_gap()
+    fsm.request_land()
+    fsm.step(gap_snap(5.5))
+    assert fsm.state == m.EMERGENCY_LAND

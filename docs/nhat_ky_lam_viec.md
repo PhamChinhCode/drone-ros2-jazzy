@@ -969,3 +969,98 @@ Pytest `drone_mission` thêm 7 test RTH. Tổng **133/133**.
 6. Nợ cũ còn nguyên: `gcs_link_node`, `telemetry_aggregator_node`, `marker_quality_node`,
    gripper (phần cứng), đo τ vòng vận tốc FC thật, ưu tiên thời gian thực (6.2 #1),
    `estimation.launch.py` tự bật MAVROS.
+
+---
+
+## Phiên 11 — 15/09/2026 (khuya)
+
+Hoàn thiện ACTUATE_GRIPPER — nút chặn cuối của nhiệm vụ nhiều chặng.
+
+### 11.1 Hiện trạng trước khi làm: ngõ cụt
+
+Khung xung quanh đã gần đủ (trạng thái trong bảng chuyển, đường vào từ PRECISION_LAND có test,
+message `GripperCommand`/`GripperStatus` đầy đủ, failsafe `FS_GRIP_CONFIRM_FAIL` xong, log nghiệp vụ
+`GRIP_CONFIRMED`/`GRIP_RELEASED` xong) nhưng **thiếu đúng phần lõi**. Chạy thật để xác nhận:
+
+```
+[25.3s] ACTUATE_GRIPPER | cham dat tai tag 1            <- vao dung, khong DISARM
+[25.5s] ACTUATE_GRIPPER | ACTUATE_GRIPPER: chua hien thuc
+[30.5s] FAILSAFE type=2 escalate=2: gripper chua xac nhan sau 5 s
+```
+
+Sau đó **không có gì xảy ra nữa**: `state 5`, `armed: true`, `mode OFFBOARD` — drone nằm trên mặt đất,
+vẫn ARM, động cơ vẫn quay, **kẹt vĩnh viễn**. Ba nguyên nhân:
+
+1. Không có `_step_actuate_gripper`; dispatch rơi xuống `Action(detail='...: chua hien thuc')`.
+2. **`~/land` không cứu được** — gọi hai lần đều trả `success=True` nhưng trạng thái không đổi, vì
+   `EMERGENCY_LAND` **không có** trong `TRANSITIONS[ACTUATE_GRIPPER]`. Service báo thành công mà
+   không làm gì là kiểu lỗi nguy hiểm nhất.
+3. Failsafe bắt đúng nhưng **vô hiệu**: trả `ESCALATE_RETRY_LOITER`, mức mà theo thiết kế "để trạng
+   thái nhiệm vụ tự xử lý" — mà trạng thái đó chưa có hàm xử lý.
+4. `gripper_controller_node` là khung rỗng: `publish_status` **không có thân hàm**, nên
+   `/gripper/status` chưa bao giờ phát một bản tin nào.
+
+### 11.2 Đã làm
+
+| Việc | Nội dung |
+|---|---|
+| `_step_actuate_gripper` | Giữ ổn định `pre_dropoff_settle_s` (2 s — vừa chạm đất, khung máy còn rung) → phát lệnh gắp/thả, giãn nhịp phát lại `GRIPPER_RETRY_S` = 1 s → **chờ `sensor_confirmed`**, tuyệt đối không dùng timeout thay |
+| Điều kiện xong **ngược nhau** | PICKUP xong = `sensor_confirmed` **True**; DROPOFF xong = `sensor_confirmed` **False** (đã nhả ra). Không phải cùng một cờ |
+| `EMERGENCY_LAND` vào bảng chuyển | `~/land` có tác dụng; hết kế hoạch cũng hạ cánh được |
+| Xong việc tại điểm | Còn điểm sau → TAKEOFF lại; hết kế hoạch → EMERGENCY_LAND (đang nằm đất nên `_step_land` DISARM ngay) |
+| `ESCALATE_RETRY_LOITER` | Coi là **một lần thất bại của cả chặng** → `_search_failed` → RETRY_LOITER; quá `max_retries` → hạ tại chỗ |
+| `mission_manager_node` | `send_gripper()` dịch `action.gripper_command` thành `GripperCommand` kèm `seq`. Xoá TODO |
+| `gripper_controller_node` | `simulate=true` **chạy thật**: giả lập hành trình servo (`sim_travel_s` 0,8 s) + công tắc xác nhận. Lệnh lặp lại không khởi động lại hành trình. Nhánh phần cứng giữ TODO, có gộp công tắc + cảm biến lực |
+| `sim_mission.launch.py` | Thêm `gripper_controller_node` |
+
+Trường riêng `last_gripper_command_s` chứ **không dùng chung `last_fc_command_s`**: trường đó đang
+dành cho nhịp thử lại DISARM trong `_descend_and_disarm`.
+
+### 11.3 Kiểm chứng
+
+**Nhiệm vụ hai chặng chạy trọn vẹn lần đầu tiên** — gắp ở tag 1 (x = 10), bay về thả ở tag 0 (x = 0):
+
+```
+[25.5s] ACTUATE_GRIPPER x+10.00 | cham dat tai tag 1
+[25.7s] ACTUATE_GRIPPER x+10.00 | giu on dinh truoc khi gap
+[27.5s] ACTUATE_GRIPPER x+10.00 | gap hang tai tag 1          -> gripper CLOSE (seq 1)
+[28.3s] TAKEOFF         x+10.00 | xong gap tai tag 1 - cat canh toi diem 1
+[40.3s] PRECISION_LAND  x +0.36 | thay dung tag 0 - ha chinh xac
+[47.7s] ACTUATE_GRIPPER x -0.00 | cham dat tai tag 0
+[49.7s] ACTUATE_GRIPPER x -0.00 | tha hang tai tag 0           -> gripper OPEN (seq 2)
+[49.9s] EMERGENCY_LAND  x -0.00 | xong tha tai tag 0 - het ke hoach, disarm
+[51.7s] MISSION_COMPLETE        | da cham dat va disarm
+```
+
+Hạ chính xác cả hai bãi: tag 1 tại x = 10,00 / y = 0,00; tag 0 tại x = −0,00 / y = −0,00.
+Chỉ đúng **2 lệnh gripper** (`seq 1`, `seq 2`) — cơ chế giãn nhịp phát lại và "lệnh lặp không khởi
+động lại hành trình" đều hoạt động.
+
+**Đường thất bại** (không chạy `gripper_controller_node` nên `/gripper/status` không bao giờ tới):
+thử lại 1/2 → leo lên, tìm tag, hạ lại → thử lại 2/2 → lần ba thất bại → *"het 2 lan thu lai, ha
+canh tai cho"* → DISARM → IDLE. Đúng thiết kế.
+
+Pytest thêm 8 test gripper (giữ ổn định, không dùng timeout thay xác nhận, DROPOFF ngược chiều,
+giãn nhịp phát lại, thử lại, hết lượt, còn điểm sau, `~/land` thoát được). Tổng **141/141**.
+
+### 11.4 Hai cái bẫy nữa của công cụ
+
+1. **`pkill`/`kill -9 $(pgrep -f ...)` khớp chính shell gọi nó** — lặp lại lỗi 10.6 #1 ở dạng khác.
+   Cách chắc chắn: mẫu dạng ngoặc vuông `"[g]ripper_controller_node --ros-args"`, vì dòng lệnh của
+   shell chứa `[g]ripper...` không chứa chuỗi `gripper...`.
+2. **Giết shell cha KHÔNG giết script con.** Lần đầu chạy phép thử thất bại, `kill -9` giết shell
+   gọi nhưng script vẫn chạy tiếp, nên có **hai script cùng điều khiển một mô phỏng và cùng ghi một
+   file log** — log bị cắt ngang giữa dòng và chuỗi trạng thái lặp hai lần. Triệu chứng rất dễ nhầm
+   là lỗi FSM. Đã dọn hết tiến trình lạc rồi chạy lại: log sạch, đúng một chu trình.
+
+### 11.5 Việc còn nợ
+
+1. **Xung đột nhỏ chưa sửa:** `failsafe_rules` coi ACTUATE_GRIPPER luôn là "đang gắp"
+   (`gripper_confirmed is not True` → sự cố). Với DROPOFF thì nhả ra **là thành công**, nên nếu cơ
+   cấu nhả chậm hơn `grip_confirm_timeout_s` = 5 s sẽ báo sự cố oan. Hiện không xảy ra vì FSM rời
+   trạng thái ngay khi nhả xong. Muốn sửa đúng thì `failsafe_rules` phải biết `action` của waypoint.
+2. **`~/start` được chấp nhận khi chưa nạp kế hoạch** — drone cất cánh rồi treo vô hạn với ghi chú
+   "chưa nạp kế hoạch". Nên từ chối.
+3. `send_mission_plan` văng `KeyError` thô khi `action` sai định dạng, thay vì báo lỗi rõ.
+4. Nợ 10.7 còn nguyên: failsafe pin là cấu hình chết, trôi 2,1 m sau failsafe, nợ 8.3 #5.
+5. Phần cứng gripper (pigpio, servo, công tắc, cảm biến lực) vẫn là TODO — chỉ chạy được `simulate`.
