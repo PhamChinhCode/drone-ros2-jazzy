@@ -595,3 +595,46 @@ mục này chỉ tóm tắt và ghi việc còn nợ.
 7. **Trục z của EKF chưa có mốc tuyệt đối khi không thấy marker** — cân nhắc đưa `z` của `ODOMETRY` FC vào.
 8. **Còn TODO trong code:** trạng thái nhiệm vụ (waypoint, marker, gripper, `on_plan`), `landing_target_bridge_node`
    (P1), watchdog P6. `fc_command_bridge_node` vẫn dùng `MultiThreadedExecutor` (service chờ chặn ACK).
+
+---
+
+## Phiên 7 — 15/09/2026
+
+### 7.1 Đã làm
+
+| Việc | Kết quả chính |
+|---|---|
+| **Giao nhiệm vụ không GPS** — `config/tags.yaml` dùng chung; vị trí waypoint suy từ `expected_marker_id`; `on_plan` kiểm và nạp kế hoạch (chỉ IDLE, **không tự cất cánh**); công cụ `ros2 run drone_mission send_mission_plan <yaml>`, mẫu `config/missions/ban_home.yaml` | Kế hoạch đúng được nhận; tag lạ bị từ chối kèm lý do |
+| **Hạ cánh theo marker (P1)** — `landing_target_bridge_node`, nguồn `SOURCE_LANDING` trong `position_controller_node`, trạng thái PRECISION_LAND + service `~/precision_land` | Pose tag 29 Hz; dấu căn tâm đúng (kp tạm 0,5, đã trả về 0) |
+| **Failsafe** — `failsafe_monitor_node` + `failsafe_rules.py`; FSM xử lý mức leo thang (RTH tạm = hạ tại chỗ, LOITER giữ rồi hạ khi hết sự cố, IDLE huỷ yêu cầu cất cánh) | Tắt/bật EKF → sự cố bật/hết đúng; giả lập pin thấp → không tự ARM |
+| **Thử cả chuỗi trên bàn** (cánh tháo): kế hoạch → `~/start` → `~/precision_land` → tự DISARM | 1 ARM + 1 DISARM `ACCEPTED`, về IDLE, không cần dự phòng |
+
+Pytest: `drone_mission` 64, `drone_control` 8, `drone_safety` 10.
+
+### 7.2 Vấn đề phát hiện, chưa xử lý
+
+1. **EKF phân kỳ không tự hồi phục.** Qua đêm 14→15/09 EKF trôi tới phương sai 1,2·10¹⁰ m²; phải khởi động
+   lại `robot_localization`. Nguyên nhân: khi trạng thái đã lệch xa, `pose0_rejection_threshold: 2.0` loại cả
+   đo marker ĐÚNG → không bao giờ kéo về được. `failsafe_monitor_node` bắt đúng (LOITER) nên không nguy hiểm
+   trên bàn, nhưng khi bay là mất vị trí vĩnh viễn. Hướng sửa: khi `/ekf/health` không healthy mà vẫn thấy tag
+   → gọi service `set_pose` của `robot_localization` bằng pose từ marker; hoặc nới / bỏ ngưỡng loại trừ
+   pose0 và đo lại.
+2. **Nhánh PRECISION_LAND ở độ cao > 0,35 m chưa kiểm trên phần cứng** (chờ căn tâm, xuống theo tag, mất tag
+   → MARKER_SEARCH). Trên bàn laser 0,15 m nên luôn đi nhánh "sát đất". Cần kê drone cao hơn 0,35 m, tag
+   trong tầm camera. Đã có pytest.
+3. **Gain `landing.*` và `cruise.*` = 0.0** — căn tâm theo tag và bay vị trí chưa có tác dụng; phải tune
+   trong Gazebo trước (không tune lần đầu trên drone thật).
+4. **Trạng thái nhiệm vụ còn TODO:** ENROUTE, MARKER_SEARCH, RETRY_LOITER, ACTUATE_GRIPPER, RTH. MARKER_SEARCH
+   hiện chỉ đứng yên nếu PRECISION_LAND mất tag. ESCALATE_RETRY_LOITER (tìm marker quá lâu, gripper không
+   xác nhận) FSM **chưa xử lý** — để các trạng thái đó làm.
+5. **Nhánh tạm TAKEOFF → PRECISION_LAND** (service `~/precision_land`) chỉ để thử trên bàn — thay bằng
+   ENROUTE → MARKER_SEARCH → PRECISION_LAND khi viết bước 4.
+6. **RTH tạm thời = hạ cánh tại chỗ** (pin < 25 %, mất GCS) cho tới khi bay vị trí được.
+7. **Chưa có ACK kế hoạch về GCS** — `gcs_link_node` vẫn là khung (chưa định nghĩa dialect MAVLink tuỳ biến);
+   kết quả nhận/từ chối hiện chỉ ở `/mission/state.detail` và log.
+8. **`mission_logger_node`, `telemetry_aggregator_node` vẫn là khung.**
+9. **`failsafe_monitor_node` không còn gọi `fc_command_bridge_node/simple_command`** như thiết kế cũ: leo
+   thang = đổi trạng thái FSM (giao ước 5.1, 5.3). `simple_command`, `takeoff`, `goto_waypoint` của bridge
+   vẫn trả "chưa hiện thực".
+10. Nợ Phiên 6 mục 6.2 vẫn còn nguyên (ưu tiên thời gian thực, dấu optical flow, góc ảnh hiệu chỉnh, `pad_a`,
+    `estimation.launch.py` tự bật MAVROS, trục z EKF).

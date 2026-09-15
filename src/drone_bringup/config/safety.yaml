@@ -7,6 +7,7 @@ failsafe_monitor_node:
     link_lost_timeout_s: 10.0
     marker_search_timeout_s: 20.0
     fc_comm_timeout_s: 3.0
+    grip_confirm_timeout_s: 5.0  # chi de PHAT HIEN gripper khong xac nhan, khong thay sensor_confirmed
     max_retries: 3
     check_rate_hz: 2.0
 

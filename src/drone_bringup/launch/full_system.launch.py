@@ -33,7 +33,8 @@ def generate_launch_description():
 
         Node(package='drone_mission', executable='mission_manager_node',
              name='mission_manager_node',
-             parameters=[os.path.join(CONFIG, 'mission.yaml')], output='screen'),
+             parameters=[os.path.join(CONFIG, 'mission.yaml'), os.path.join(CONFIG, 'tags.yaml')],
+             output='screen'),
 
         Node(package='drone_mission', executable='gripper_controller_node',
              name='gripper_controller_node',

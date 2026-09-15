@@ -1,0 +1,8 @@
+# Nhiem vu thu tren ban: mot diem, ha canh chinh xac xuong tag Home (ID 0), khong gap/tha.
+# Gui: ros2 run drone_mission send_mission_plan ~/ros2_ws/src/drone_bringup/config/missions/ban_home.yaml
+mission_id: 1
+plan_name: ban_home
+max_retries: 0          # 0 = dung mission.yaml
+search_timeout_s: 0.0   # 0 = dung mission.yaml
+waypoints:
+  - {marker_id: 0, action: none, alt_m: 0.5, acceptance_radius_m: 0.3, max_vel_mps: 0.5, loiter_s: 2.0}

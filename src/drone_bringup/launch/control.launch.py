@@ -22,7 +22,8 @@ def generate_launch_description():
 
         Node(package='drone_control', executable='landing_target_bridge_node',
              name='landing_target_bridge_node',
-             parameters=[os.path.join(CONFIG, 'control.yaml')], output='screen'),
+             parameters=[os.path.join(CONFIG, 'control.yaml'), os.path.join(CONFIG, 'tags.yaml')],
+             output='screen'),
 
         Node(package='drone_control', executable='position_controller_node',
              name='position_controller_node',

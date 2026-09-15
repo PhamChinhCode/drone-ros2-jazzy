@@ -49,7 +49,8 @@ def generate_launch_description():
 
         Node(package='drone_estimation', executable='marker_pose_republisher_node',
              name='marker_pose_republisher_node',
-             parameters=[os.path.join(CONFIG, 'estimation.yaml')], output='screen'),
+             parameters=[os.path.join(CONFIG, 'estimation.yaml'), os.path.join(CONFIG, 'tags.yaml')],
+             output='screen'),
 
         # Van toc FC da loc mau khong hop le -> /fc/velocity_xy, /fc/velocity_z cho EKF.
         Node(package='drone_estimation', executable='fc_velocity_node', name='fc_velocity_node',

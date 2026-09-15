@@ -21,6 +21,7 @@ setup(
             'mission_manager_node = drone_mission.mission_manager_node:main',
             'gripper_controller_node = drone_mission.gripper_controller_node:main',
             'fc_command_bridge_node = drone_mission.fc_command_bridge_node:main',
+            'send_mission_plan = drone_mission.send_mission_plan:main',
         ],
     },
 )

@@ -37,6 +37,7 @@ FRAME_BODY_NED = 8
 TYPE_MASK_VELOCITY_YAWRATE = 0x07C7
 RANGE_STALE_S = 0.5             # laser 20 Hz; qua han coi nhu mat laser -> xuong cham
 VELOCITY_STALE_S = 0.5          # mission_manager_node phat 5 Hz; qua han -> bo, ve duong vi tri/0
+LANDING_STALE_S = 0.5           # pose tag ~25 Hz; bridge ngung phat khi mat tag -> qua han la bo
 
 SOURCE_MISSION = 'mission'
 SOURCE_LANDING = 'landing'
@@ -64,6 +65,7 @@ class PositionControllerNode(Node):
         self.odom = None
         self.mission_setpoint = None
         self.landing_target = None
+        self.landing_stamp_s = None
         self.active_source = SOURCE_MISSION
         self.ramp_started_at = None
         self.range_m = None
@@ -112,6 +114,7 @@ class PositionControllerNode(Node):
 
     def on_landing_target(self, msg):
         self.landing_target = msg
+        self.landing_stamp_s = self.get_clock().now().nanoseconds / 1e9
 
     def switch_source(self, source):
         """TODO: bat dau ramp thay vi doi setpoint tuc thoi; GIU nguyen tich phan PID neu
@@ -119,9 +122,15 @@ class PositionControllerNode(Node):
         del source
 
     def control_step(self):
-        """Tinh van toc FLU tu sai so vi tri, kep, publish. Thieu odom/setpoint -> van toc 0.
+        """Tinh van toc FLU, kep, publish. Thieu moi nguon -> van toc 0.
 
-        TODO: nguon SOURCE_LANDING (P1 - Pi dong vong van toc theo marker) va ramp khi doi nguon.
+        Thu tu: lenh van toc cua mission (con moi) > vong vi tri cruise. Rieng van toc NGANG: khi
+        pose tag tu landing_target_bridge_node con moi (bridge chi phat khi mission dat
+        expected_marker_id va thay dung ID) thi vx, vy = PID landing tren do lech tag trong
+        base_link (SOURCE_LANDING, P1); vz van theo mission (vd PRECISION_LAND ra lenh xuong).
+        Gain landing.* dang 0.0 - TUNE TRONG GAZEBO TRUOC.
+
+        TODO: ramp khi doi nguon (switch_source).
         """
         vx = vy = vz = yaw_rate = 0.0
         now_s = self.get_clock().now().nanoseconds / 1e9
@@ -142,6 +151,17 @@ class PositionControllerNode(Node):
             vx = pids['x'].update(ex_body, dt)
             vy = pids['y'].update(ey_body, dt)
             vz = pids['z'].update(target.z - p.position.z, dt)
+
+        if self.landing_stamp_s is not None and now_s - self.landing_stamp_s <= LANDING_STALE_S:
+            # Tag trong base_link (FLU): tag phia truoc (+x) -> bay toi (+vx); sai so = vi tri tag.
+            dt = 1.0 / self.get_parameter('control_rate_hz').value
+            tag = self.landing_target.pose.position
+            pids = self.pids['landing']
+            vx = pids['x'].update(tag.x, dt)
+            vy = pids['y'].update(tag.y, dt)
+            self.active_source = SOURCE_LANDING
+        else:
+            self.active_source = SOURCE_MISSION
 
         vx, vy, vz, yaw_rate = limit_velocity(vx, vy, vz, yaw_rate, self.current_range_m())
 

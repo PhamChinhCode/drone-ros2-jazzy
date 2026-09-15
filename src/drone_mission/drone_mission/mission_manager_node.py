@@ -4,12 +4,16 @@ Node nay chi lam ba viec: gom input thanh Snapshot, goi FSM, dich Action ra serv
 Toan bo logic chuyen trang thai nam trong mission_fsm.py de test duoc khong can ROS.
 """
 
+import math
+
 import rclpy
 from geometry_msgs.msg import PoseStamped, TwistStamped
 from mavros_msgs.msg import DebugValue, PositionTarget, State
 from nav_msgs.msg import Odometry
 from rclpy.experimental import EventsExecutor
+from rclpy.exceptions import ParameterUninitializedException
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from sensor_msgs.msg import BatteryState, Range
 from std_msgs.msg import Bool, Int32
 from std_srvs.srv import Trigger
@@ -26,6 +30,7 @@ from drone_mission.qos import EVENT_QOS, SENSOR_QOS
 COVARIANCE_INVALID = 1e5
 VZ_COVARIANCE_INDEX = 2 * 6 + 2
 RANGE_STALE_S = 0.5             # laser 20 Hz
+TARGET_STALE_S = 0.5            # pose tag ~25 Hz tu landing_target_bridge_node
 
 
 class MissionManagerNode(Node):
@@ -40,6 +45,8 @@ class MissionManagerNode(Node):
         self.declare_parameter('pre_dropoff_settle_s', 2.0)
         self.declare_parameter('takeoff_alt_m', 5.0)
         self.declare_parameter('state_publish_rate_hz', 5.0)
+        # Ban do tag dung chung (config/tags.yaml). Khong co GPS: vi tri waypoint suy tu day.
+        self.declare_parameter('known_tags', Parameter.Type.DOUBLE_ARRAY)
 
         self.fsm = mission_fsm.MissionFsm(params=mission_fsm.Params(
             search_timeout_s=self.get_parameter('search_timeout_s').value,
@@ -49,6 +56,12 @@ class MissionManagerNode(Node):
             takeoff_alt_m=self.get_parameter('takeoff_alt_m').value))
 
         self.snapshot = mission_fsm.Snapshot()
+        try:
+            self.known_tags = mission_fsm.parse_known_tags(self.get_parameter('known_tags').value)
+        except ParameterUninitializedException:
+            self.known_tags = {}
+            self.get_logger().warning(
+                'chua nap config/tags.yaml (known_tags) - moi ke hoach se bi tu choi')
         self.plan = None
         self.gripper_seq = 0
         self.landing_detector = LandingDetector()
@@ -57,6 +70,9 @@ class MissionManagerNode(Node):
         self.fc_status = fc_link.FcStatus()
         self.range_m = None
         self.range_stamp_s = None
+        self.failsafe_active = {}         # FailsafeEvent.type -> escalate_to dang bat
+        self.target_offset_m = None
+        self.target_stamp_s = None
         self.arm_future = None           # moi luc chi mot lenh ARM/DISARM dang cho ACK
         self.last_detail = ''
 
@@ -65,6 +81,9 @@ class MissionManagerNode(Node):
         self.create_subscription(BatteryState, '/mavros/battery', self.on_battery, SENSOR_QOS)
         self.create_subscription(Odometry, '/odometry/filtered', self.on_odom, SENSOR_QOS)
         self.create_subscription(Bool, '/landing_target/lost', self.on_target_lost, EVENT_QOS)
+        # Pose tag da xac thuc ID (base_link) - FSM chi can do lech ngang de quyet dinh xuong.
+        self.create_subscription(
+            PoseStamped, '/landing_target/pose', self.on_landing_target_pose, SENSOR_QOS)
         self.create_subscription(MarkerQuality, '/marker/tracking_quality', self.on_marker, EVENT_QOS)
         self.create_subscription(GripperStatus, '/gripper/status', self.on_gripper, EVENT_QOS)
         self.create_subscription(FailsafeEvent, '/failsafe_event', self.on_failsafe, EVENT_QOS)
@@ -87,6 +106,8 @@ class MissionManagerNode(Node):
         # Cat canh = ARM roi leo; KHONG co lenh cat canh o FC (5.1). Ha canh xong tu DISARM thuong.
         self.create_service(Trigger, '~/start', self.on_start)
         self.create_service(Trigger, '~/land', self.on_land)
+        # Ha chinh xac xuong tag cua waypoint hien tai (khi dang TAKEOFF - thu tren ban).
+        self.create_service(Trigger, '~/precision_land', self.on_precision_land)
 
         # Moi lenh xuong FC deu di qua fc_command_bridge_node, khong goi MAVROS truc tiep.
         self.cli_arm = self.create_client(Arm, '/fc_command_bridge_node/arm')
@@ -98,8 +119,25 @@ class MissionManagerNode(Node):
         self.create_timer(1.0 / self.get_parameter('state_publish_rate_hz').value, self.tick)
 
     def on_plan(self, msg):
-        """TODO: xac thuc ke hoach (it nhat 1 waypoint, action hop le), nap vao FSM, ACK ve GCS."""
-        del msg
+        """Kiem tra va nap ke hoach vao FSM (chi khi IDLE). KHONG tu cat canh - van can ~/start.
+
+        Ket qua bao qua /mission/state (mission_id + detail) va log.
+        TODO: ACK ve GCS khi gcs_link_node duoc hien thuc.
+        """
+        raw = [dict(seq=w.seq, marker_id=w.expected_marker_id, action=w.action, alt_m=w.alt_m,
+                    acceptance_radius_m=w.acceptance_radius_m, max_vel_mps=w.max_vel_mps,
+                    loiter_s=w.loiter_s) for w in msg.waypoints]
+        refusal = self.fsm.load_plan(msg.mission_id, raw, msg.max_retries, msg.search_timeout_s,
+                                     self.known_tags)
+        if refusal:
+            detail = f'tu choi ke hoach {msg.mission_id}: {refusal}'
+            self.get_logger().warning(detail)
+        else:
+            markers = [w.marker_id for w in self.fsm.waypoints]
+            detail = (f'nhan ke hoach {msg.mission_id} "{msg.plan_name}": {len(markers)} diem, '
+                      f'tag {markers} - goi ~/start de bay')
+            self.get_logger().info(detail)
+        self.publish_mission_state(detail)
 
     def now_s(self):
         return self.get_clock().now().nanoseconds / 1e9
@@ -118,6 +156,18 @@ class MissionManagerNode(Node):
         response.success, response.message = True, 'nhan yeu cau ha canh'
         self.get_logger().info(f'~/land: {response.message}')
         return response
+
+    def on_precision_land(self, request, response):
+        del request
+        refusal = self.fsm.request_precision_land()
+        response.success = not refusal
+        response.message = refusal or 'nhan yeu cau ha chinh xac'
+        self.get_logger().info(f'~/precision_land: {response.message}')
+        return response
+
+    def on_landing_target_pose(self, msg):
+        self.target_offset_m = math.hypot(msg.pose.position.x, msg.pose.position.y)
+        self.target_stamp_s = self.now_s()
 
     def on_named_value(self, msg):
         self.fc_status.update(msg.name, msg.value_int, self.now_s())
@@ -160,7 +210,13 @@ class MissionManagerNode(Node):
         self.snapshot.gripper_sensor_confirmed = msg.sensor_confirmed
 
     def on_failsafe(self, msg):
-        self.snapshot.failsafe_escalate_to = msg.escalate_to if msg.active else 0
+        # Nhieu su co cung luc: giu tung loai, FSM nhan muc NANG NHAT; het mot loai khong xoa
+        # loai khac.
+        if msg.active:
+            self.failsafe_active[msg.type] = msg.escalate_to
+        else:
+            self.failsafe_active.pop(msg.type, None)
+        self.snapshot.failsafe_escalate_to = max(self.failsafe_active.values(), default=0)
 
     def tick(self):
         """Gom Snapshot, goi FSM, dich Action, publish MissionState deu dan ke ca khi khong doi.
@@ -177,6 +233,9 @@ class MissionManagerNode(Node):
         snap.disarm_ready = self.fc_status.disarm_ready(now)
         fresh = self.range_stamp_s is not None and now - self.range_stamp_s <= RANGE_STALE_S
         snap.range_m = self.range_m if fresh else None
+        target_fresh = (self.target_stamp_s is not None and not snap.landing_target_lost
+                        and now - self.target_stamp_s <= TARGET_STALE_S)
+        snap.target_offset_m = self.target_offset_m if target_fresh else None
 
         prev_state = self.fsm.state
         action = self.fsm.step(snap)
@@ -188,13 +247,14 @@ class MissionManagerNode(Node):
 
         if action.fc_command in ('arm', 'disarm'):
             self.send_arm(action.fc_command == 'arm')
+        self.pub_expected_id.publish(Int32(data=action.expected_marker_id))
         if action.velocity_up_mps is not None:
             msg = TwistStamped()
             msg.header.stamp = self.get_clock().now().to_msg()
             msg.header.frame_id = 'base_link'
             msg.twist.linear.z = float(action.velocity_up_mps)
             self.pub_velocity.publish(msg)
-        self.publish_mission_state(action.detail)
+        self.publish_mission_state(action.detail, action.expected_marker_id)
 
     def send_arm(self, arm):
         """Goi fc_command_bridge_node ~/arm khong chan; lenh truoc chua xong thi bo lan nay."""
@@ -216,11 +276,12 @@ class MissionManagerNode(Node):
         else:
             self.get_logger().warning(text)
 
-    def publish_mission_state(self, detail):
+    def publish_mission_state(self, detail, expected_marker_id=-1):
         msg = MissionState()
         msg.state = getattr(MissionState, self.fsm.state)
+        msg.mission_id = self.fsm.mission_id
         msg.current_wp_index = self.fsm.current_wp_index
-        msg.expected_marker_id = -1
+        msg.expected_marker_id = expected_marker_id
         msg.retry_count = self.fsm.retry_count
         msg.state_entered_stamp.sec = int(self.fsm.state_entered_s)
         msg.state_entered_stamp.nanosec = int((self.fsm.state_entered_s % 1.0) * 1e9)

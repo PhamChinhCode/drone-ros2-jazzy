@@ -1,0 +1,12 @@
+# BAN DO BAI DAP (tag) DUNG CHUNG - nguon duy nhat cho marker_pose_republisher_node,
+# landing_target_bridge_node va mission_manager_node (nap kem file yaml rieng cua tung node).
+# Khong co GPS: vi tri waypoint cua nhiem vu SUY TU BANG NAY theo expected_marker_id.
+# PHAI khop tag.ids / tag.frames trong apriltag.yaml.
+/**:
+  ros__parameters:
+    # [id, x, y, z, ...] - toa do tag trong khung odom (ENU, m). Khi EKF da thay tag, odom neo
+    # theo bang nay; huong truc x theo yaw cua FC (tu ke chua kiem 10.6a - yaw tuong doi).
+    known_tags: [0.0, 0.0, 0.0, 0.0,
+                 1.0, 10.0, 0.0, 0.0]
+    # Ten khung TF tung tag, cung thu tu known_tags
+    tag_frames: [pad_home, pad_a]
