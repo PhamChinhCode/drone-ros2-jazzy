@@ -6,15 +6,17 @@ Phat /mission/setpoint 5 Hz (position_controller_node bo setpoint cu hon 0,5 s).
 
   ros2 run drone_sim step_test --axis z --step 2.0
   ros2 run drone_sim step_test --axis x --step 2.0 --back
+  ros2 run drone_sim step_test --axis z --step 1.5 --trace     # in dien bien 4 dong/s
 """
 
 import argparse
+import math
 import time
 
 import rclpy
 from rclpy.parameter import Parameter
 from geometry_msgs.msg import PoseStamped
-from mavros_msgs.msg import PositionTarget
+from mavros_msgs.msg import PositionTarget, State
 from nav_msgs.msg import Odometry
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 
@@ -26,15 +28,19 @@ SAT_MPS = 1.88                  # position_controller_node kep ngang 1,9 m/s (95
 
 class StepTest:
 
-    def __init__(self, node):
+    def __init__(self, node, trace=False):
         self.node = node
+        self.trace = trace
         self.pos = None
+        self.tilt_deg = 0.0
         self.cmd = None
+        self.fc_state = None
         self.record = None
         best_effort = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.BEST_EFFORT)
         node.create_subscription(Odometry, '/odometry/filtered', self.on_odom, best_effort)
         node.create_subscription(
             PositionTarget, '/mavros/setpoint_raw/local', self.on_cmd, best_effort)
+        node.create_subscription(State, '/mavros/state', self.on_state, QoSProfile(depth=10))
         self.pub = node.create_publisher(
             PoseStamped, '/mission/setpoint', QoSProfile(depth=10))
 
@@ -44,6 +50,10 @@ class StepTest:
     def on_odom(self, msg):
         p = msg.pose.pose.position
         self.pos = (p.x, p.y, p.z)
+        q = msg.pose.pose.orientation
+        # Goc giua truc z than va phuong thang dung.
+        cos_tilt = 1.0 - 2.0 * (q.x * q.x + q.y * q.y)
+        self.tilt_deg = math.degrees(math.acos(max(-1.0, min(1.0, cos_tilt))))
         if self.record is not None:
             self.record['pos'].append((self.now_s(), self.pos))
 
@@ -52,11 +62,25 @@ class StepTest:
         if self.record is not None:
             self.record['cmd'].append(self.cmd)
 
+    def on_state(self, msg):
+        self.fc_state = f'{msg.mode}{" ARMED" if msg.armed else ""}'
+
+    def print_trace(self, t):
+        p = self.pos or (math.nan,) * 3
+        c = self.cmd or (math.nan,) * 3
+        print(f'  t {t:5.2f} | x {p[0]:+.2f} y {p[1]:+.2f} z {p[2]:+.2f}'
+              f' | nghieng {self.tilt_deg:4.1f} do'
+              f' | lenh vx {c[0]:+.2f} vy {c[1]:+.2f} vz {c[2]:+.2f} | FC {self.fc_state}')
+
     def hold(self, target, seconds):
         """Phat target 5 Hz trong seconds giay (tinh theo dong ho node - sim time neu co)."""
-        end = self.now_s() + seconds
-        next_pub = 0.0
+        start = self.now_s()
+        end = start + seconds
+        next_pub = next_trace = 0.0
         while rclpy.ok() and self.now_s() < end:
+            if self.trace and self.now_s() >= next_trace:
+                self.print_trace(self.now_s() - start)
+                next_trace = self.now_s() + 0.25
             if self.now_s() >= next_pub:
                 msg = PoseStamped()
                 msg.header.stamp = self.node.get_clock().now().to_msg()
@@ -95,13 +119,15 @@ def main(args=None):
     parser.add_argument('--duration', type=float, default=10.0, help='ghi sau buoc (s)')
     parser.add_argument('--band', type=float, default=0.1, help='dai coi la on dinh (m)')
     parser.add_argument('--back', action='store_true', help='buoc nguoc ve va do lan nua')
+    parser.add_argument('--trace', action='store_true',
+                        help='in vi tri, do nghieng, lenh van toc, trang thai FC 4 dong/s')
     opts, ros_args = parser.parse_known_args()
 
     rclpy.init(args=ros_args)
     # Thoi gian Gazebo (/clock): PC cham (real time factor < 1) thi chi so van dung giay mo phong.
     node = rclpy.create_node('step_test',
                              parameter_overrides=[Parameter('use_sim_time', value=True)])
-    test = StepTest(node)
+    test = StepTest(node, trace=opts.trace)
     try:
         deadline = time.monotonic() + 10.0
         waiting = lambda: test.pos is None or test.now_s() == 0.0  # noqa: E731

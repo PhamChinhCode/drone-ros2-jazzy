@@ -691,3 +691,32 @@ Pytest: `drone_estimation` 12, `drone_control` 14, `drone_mission` 72, `drone_sa
 Chưa kiểm: Gazebo thật trên PC (tải model X3 từ Fuel, tên topic, dấu lệnh — README mục 2 có bước kiểm dấu).
 Pytest `drone_control` 15, `drone_sim` 11.
 
+
+### 8.5 Chạy Gazebo thật trên PC — máy ảo VMware (cùng phiên)
+
+| Việc | Kết quả chính |
+|---|---|
+| Màn hình 3D Gazebo nhấp nháy liên tục trên máy ảo | Ogre2 không chạy ổn trên GPU ảo; `gz sim -r --render-engine ogre` hết nhấp nháy. Thêm tham số launch `render_engine` (mặc định `ogre`, PC có GPU tốt dùng `render_engine:=ogre2`) — commit `1af7685` |
+| Gazebo thật chạy được: model X3 tải về, có odometry, RTF ≈ 99–100 % | Hết mục "chưa kiểm" của 8.4 phần tải model/topic |
+| **Kiểm dấu trục z** — `cruise.z.kp 0.5`, `step_test --axis z --step 1.5` | **Dấu đúng** (lệnh lên → bay lên). Nhưng đáp ứng **bất thường**, chưa dùng để tune được (bảng dưới) |
+| `step_test --trace`: in 4 dòng/s vị trí, độ nghiêng, lệnh vx/vy/vz, trạng thái FC giả (`/mavros/state`) | Kiểm trên Pi bằng topic giả: in đúng (nghiêng 10° → 10,0°) |
+
+Hai lần thử bước z, `kp` 0,5 (vòng chỉ P, đầu ra vận tốc — về lý thuyết không vượt đích):
+
+| Lần | Điểm đầu | Đích | rise | Đỉnh (suy từ vượt đích) | Cuối 10 s (suy từ sai số cuối) |
+|---|---|---|---|---|---|
+| 1 | z 0,31, lệch x +0,15 y −0,15 (chạy tiếp sau lần kiểm trước) | 1,81 | 1,86 s | ≈ 3,26 m (vượt 96,9 %) | ≈ 0,28 m |
+| 2 | z 0,06 trên đất (khởi động lại) | 1,56 | 3,56 s | ≈ 2,34 m (vượt 51,7 %) | ≈ 0,26 m |
+
+Drone vọt quá đích rồi tụt về gần điểm đầu. Đã loại: máy ảo chậm (RTF ~100 %), drone nghiêng từ đầu (lần 2).
+Còn nghi: vòng vận tốc X3 trễ/chậm hơn giả định, FC giả vào KHOÁ giữa chừng, X3 mất thăng bằng, X3 không bám
+lệnh vz. Cần chạy lại với `--trace` để phân biệt.
+
+### 8.6 Việc tiếp theo
+
+1. Push commit này, máy ảo `git pull` + build, chạy `step_test --axis z --step 1.5 --trace`, đọc diễn biến
+   để tìm nguyên nhân dao động trục z. **Chưa tune `kp` khi chưa rõ nguyên nhân.**
+2. Lưu ý khi tune z (suy từ code, README chưa ghi): trần lên 0,95 m/s nên bước 2 m với `kp` ≥ 0,5 đã bão hoà
+   (`lenh ngang bao hoa` không tính z); hạ dưới laser 1,2 m bị kẹp 0,285 m/s nên `--back` về gần đất không
+   phản ánh gain; thử trục x/y phải khi drone đang ở trên không.
+3. Kiểm dấu trục x chưa làm.
