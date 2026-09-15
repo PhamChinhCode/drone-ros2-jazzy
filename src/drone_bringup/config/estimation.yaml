@@ -10,3 +10,10 @@ ekf_health_node:
     unhealthy_after_s: 2.0
     odom_timeout_s: 1.0
     publish_rate_hz: 5.0
+    # Ep EKF ve marker (/set_pose): EKF lech xa thi pose0_rejection_threshold loai ca marker dung
+    # (do 09-15: lech 20 m mat 23 s moi tu ve). Lech > reset_max_error_m lien tuc reset_after_s,
+    # hoac khong healthy, ma co pose marker moi -> ep.
+    reset_max_error_m: 1.0
+    reset_after_s: 1.0
+    reset_marker_max_age_s: 1.0
+    reset_cooldown_s: 2.0

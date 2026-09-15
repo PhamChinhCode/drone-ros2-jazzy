@@ -638,3 +638,56 @@ Pytest: `drone_mission` 64, `drone_control` 8, `drone_safety` 10.
    vẫn trả "chưa hiện thực".
 10. Nợ Phiên 6 mục 6.2 vẫn còn nguyên (ưu tiên thời gian thực, dấu optical flow, góc ảnh hiệu chỉnh, `pad_a`,
     `estimation.launch.py` tự bật MAVROS, trục z EKF).
+
+---
+
+## Phiên 8 — 15/09/2026
+
+Làm mục 1–4 trong danh sách ưu tiên sau Phiên 7.
+
+### 8.1 Đã làm
+
+| Việc | Kết quả chính |
+|---|---|
+| **EKF tự hồi phục (7.2 #1)** — `ekf_health_node` gửi pose marker lên `/set_pose` khi có pose marker mới mà EKF lệch marker > 1,0 m liên tục 1,0 s, hoặc EKF không healthy (`MarkerResetPolicy`, cách nhau ≥ 2 s) | Tái hiện trên bàn: đẩy EKF lệch 20 m → **trước:** loại marker đúng 23 s, không healthy 14 s; **sau:** về marker sau ~1 s, không lần nào báo không healthy, không ép thừa |
+| **Watchdog P6** — `position_controller_node` ngừng phát setpoint khi `/mission/state` im quá `mission_timeout_s` = 1,0 s | `SIGSTOP` `mission_manager_node` → 0 setpoint/s sau ~0,8 s; `SIGCONT` → 20 Hz lại |
+| **Chuyển nguồn setpoint mượt** — `SetpointRamp` trộn tuyến tính 0,8 s khi đổi nguồn (vận tốc mission / cruise / landing); chỉ PID nguồn đang dùng được cập nhật; vào nguồn PID thì reset kèm sai số hiện tại (không giật D) | Trên bàn: `vz` 0 → 0,5 trong 0,8 s và 0,5 → 0 trong 0,8 s sau khi lệnh quá hạn |
+| **Trạng thái nhiệm vụ** — TAKEOFF → ENROUTE (xét khoảng cách ngang) → MARKER_SEARCH (chờ `landing_target_bridge_node` xác thực đúng ID) → PRECISION_LAND; hết giờ tìm / failsafe RETRY_LOITER / mất tag khi hạ = một lần thất bại → RETRY_LOITER giữ 3 s rồi tìm lại; quá `max_retries` → EMERGENCY_LAND tại chỗ | Pytest. **Thử trên bàn có ARM** (cánh tháo, laser 0,21 m, tag 0 dưới mặt bàn ~20 cm, `takeoff_alt_m:=0.1`): ARM `ACCEPTED` → TAKEOFF → ENROUTE (cách 0,16 m) → MARKER_SEARCH → PRECISION_LAND → nhánh sát đất, `vz` ramp tới −0,28 → chạm đất 1,4 s → DISARM `ACCEPTED` → IDLE, tổng 3,6 s, 1 ARM + 1 DISARM. `mission_logger_node` ghi đủ chuỗi vào `~/drone_logs/1/` |
+| **`mission_logger_node`** — `mission_log.py`: `<log_root>/<mission_id>/events.jsonl` (MISSION_OPEN, STATE_CHANGE, FAILSAFE, MARKER_MATCH/LOST, GRIP_CONFIRMED/RELEASED) + ảnh xác nhận; chỉ subscribe camera khi ACTUATE_GRIPPER | Chạy với topic giả (remap) + camera thật: đủ sự kiện đúng thứ tự, ảnh JPEG thật có tag |
+
+Pytest: `drone_estimation` 12, `drone_control` 14, `drone_mission` 72, `drone_safety` 16.
+
+### 8.2 Thay đổi hành vi cần biết
+
+1. **Bỏ service `~/precision_land`** và nhánh tạm TAKEOFF → PRECISION_LAND (7.2 #5). Thử chuỗi trên bàn giờ đi
+   đường thật: kế hoạch → `~/start` → TAKEOFF → ENROUTE → MARKER_SEARCH → PRECISION_LAND. Laser trên bàn
+   0,15–0,21 m nên phải chạy `mission_manager_node` với `-p takeoff_alt_m:=0.1`, drone đặt trên tag.
+2. **`retry_count` tính theo từng điểm** — trước đây mọi lần chuyển trạng thái đều xoá về 0 nên giới hạn thử lại
+   không bao giờ có tác dụng.
+3. **`position_controller_node` bỏ `/mission/setpoint` cũ hơn 0,5 s** (mission phát 5 Hz khi cần bay tới điểm),
+   không bám mãi điểm đến cũ.
+4. **Chạy `control.launch.py` riêng (không có `mission_manager_node`) sẽ không phát setpoint** — do watchdog P6.
+5. Mốc "bắt/mất tag" trong log lấy từ `/landing_target/lost`, không từ `/marker/tracking_quality`
+   (`marker_quality_node` vẫn là khung). `mission_manager_node` bỏ subscribe `/marker/tracking_quality`.
+
+### 8.3 Việc còn nợ
+
+1. **Chưa thử trên phần cứng:** nhánh hết giờ tìm → RETRY_LOITER (che tag), nhánh PRECISION_LAND > 0,35 m, và
+   vòng ENROUTE phát `/mission/setpoint` (trên bàn ENROUTE / MARKER_SEARCH chỉ kéo dài một chu kỳ).
+2. Vận tốc ngang sau khi lệnh mission hết hạn giờ về 0 trong 0,5 s + 0,8 s ramp (trước: 0,5 s) — xem lại khi
+   tune trong Gazebo.
+3. `max_vel_mps` của waypoint được kiểm nhưng **chưa áp** vào `position_controller_node`.
+4. MARKER_SEARCH chỉ đứng giữ tại điểm, chưa có quỹ đạo tìm (xoắn ốc…).
+5. Ép `/set_pose` giữa chuyến bay làm vị trí EKF nhảy → sai số cruise nhảy theo; cân nhắc khi tune.
+6. Nợ Phiên 7 còn lại: ACTUATE_GRIPPER, RTH, gain = 0, `gcs_link_node`, `telemetry_aggregator_node`, nợ 6.2.
+
+### 8.4 Mô phỏng Gazebo để tune `cruise.*` (cùng phiên)
+
+| Việc | Kết quả chính |
+|---|---|
+| `position_controller_node` đổi gain khi đang chạy (`ros2 param set`, giữ tích phân, từ chối giá trị âm/nan) | Trên bàn: đặt `cruise.x.kp` áp ngay; `-1.0` bị từ chối kèm lý do |
+| Package **`drone_sim`** (chạy trên PC): `sim_fc.py` (FC giả theo giao ước), `sim_fc_bridge_node`, `step_test`, world X3 + `MulticopterVelocityControl`, `sim_tune.launch.py`, `sim_mission.launch.py`, hướng dẫn `src/drone_sim/README.md` | Tên topic, khung lệnh vận tốc (khung thân) đọc từ mã nguồn gz-sim8. Pi không có Gazebo nên kiểm bằng xe giả bậc nhất (τ 0,3 s) trên `ROS_DOMAIN_ID=77`: tune (`step_test` z/x, có trễ 0,1 s + nhiễu 3 cm) và cả nhiệm vụ `sim_tag1` ARM → ENROUTE 10 m → tìm/thử lại → hạ tại chỗ → DISARM → IDLE đạt. Hai launch chạy được với `ros_gz_*` giả |
+
+Chưa kiểm: Gazebo thật trên PC (tải model X3 từ Fuel, tên topic, dấu lệnh — README mục 2 có bước kiểm dấu).
+Pytest `drone_control` 15, `drone_sim` 11.
+

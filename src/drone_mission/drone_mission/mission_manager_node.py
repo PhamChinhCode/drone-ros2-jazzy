@@ -18,8 +18,8 @@ from sensor_msgs.msg import BatteryState, Range
 from std_msgs.msg import Bool, Int32
 from std_srvs.srv import Trigger
 
-from drone_interfaces.msg import (FailsafeEvent, GripperCommand, GripperStatus,
-                                  MarkerQuality, MissionPlan, MissionState)
+from drone_interfaces.msg import (FailsafeEvent, GripperCommand, GripperStatus, MissionPlan,
+                                  MissionState)
 from drone_interfaces.srv import Arm, FcSimpleCommand, GotoWaypoint, Takeoff
 from drone_mission import fc_link, mission_fsm
 from drone_mission.fc_command_bridge_node import NAMED_VALUE_QOS
@@ -31,6 +31,7 @@ COVARIANCE_INVALID = 1e5
 VZ_COVARIANCE_INDEX = 2 * 6 + 2
 RANGE_STALE_S = 0.5             # laser 20 Hz
 TARGET_STALE_S = 0.5            # pose tag ~25 Hz tu landing_target_bridge_node
+ODOM_STALE_S = 0.5              # EKF 30 Hz
 
 
 class MissionManagerNode(Node):
@@ -73,6 +74,8 @@ class MissionManagerNode(Node):
         self.failsafe_active = {}         # FailsafeEvent.type -> escalate_to dang bat
         self.target_offset_m = None
         self.target_stamp_s = None
+        self.position = None
+        self.position_stamp_s = None
         self.arm_future = None           # moi luc chi mot lenh ARM/DISARM dang cho ACK
         self.last_detail = ''
 
@@ -84,7 +87,6 @@ class MissionManagerNode(Node):
         # Pose tag da xac thuc ID (base_link) - FSM chi can do lech ngang de quyet dinh xuong.
         self.create_subscription(
             PoseStamped, '/landing_target/pose', self.on_landing_target_pose, SENSOR_QOS)
-        self.create_subscription(MarkerQuality, '/marker/tracking_quality', self.on_marker, EVENT_QOS)
         self.create_subscription(GripperStatus, '/gripper/status', self.on_gripper, EVENT_QOS)
         self.create_subscription(FailsafeEvent, '/failsafe_event', self.on_failsafe, EVENT_QOS)
         # Tieu chi cham dat 11.1 #12e: laser, vz cua FC, vz Pi dang ra lenh (chi doc, khong publish).
@@ -106,8 +108,6 @@ class MissionManagerNode(Node):
         # Cat canh = ARM roi leo; KHONG co lenh cat canh o FC (5.1). Ha canh xong tu DISARM thuong.
         self.create_service(Trigger, '~/start', self.on_start)
         self.create_service(Trigger, '~/land', self.on_land)
-        # Ha chinh xac xuong tag cua waypoint hien tai (khi dang TAKEOFF - thu tren ban).
-        self.create_service(Trigger, '~/precision_land', self.on_precision_land)
 
         # Moi lenh xuong FC deu di qua fc_command_bridge_node, khong goi MAVROS truc tiep.
         self.cli_arm = self.create_client(Arm, '/fc_command_bridge_node/arm')
@@ -157,14 +157,6 @@ class MissionManagerNode(Node):
         self.get_logger().info(f'~/land: {response.message}')
         return response
 
-    def on_precision_land(self, request, response):
-        del request
-        refusal = self.fsm.request_precision_land()
-        response.success = not refusal
-        response.message = refusal or 'nhan yeu cau ha chinh xac'
-        self.get_logger().info(f'~/precision_land: {response.message}')
-        return response
-
     def on_landing_target_pose(self, msg):
         self.target_offset_m = math.hypot(msg.pose.position.x, msg.pose.position.y)
         self.target_stamp_s = self.now_s()
@@ -180,8 +172,9 @@ class MissionManagerNode(Node):
         self.snapshot.battery_pct = msg.percentage * 100.0
 
     def on_odom(self, msg):
-        """TODO: tinh at_waypoint = khoang cach toi waypoint hien tai < acceptance_radius_m."""
-        del msg
+        p = msg.pose.pose.position
+        self.position = (p.x, p.y, p.z)
+        self.position_stamp_s = self.now_s()
 
     def on_fc_odom(self, msg):
         valid = msg.twist.covariance[VZ_COVARIANCE_INDEX] < COVARIANCE_INVALID
@@ -202,10 +195,6 @@ class MissionManagerNode(Node):
     def on_target_lost(self, msg):
         self.snapshot.landing_target_lost = msg.data
 
-    def on_marker(self, msg):
-        """TODO: marker_confirmed = visible va marker_id khop waypoint hien tai."""
-        del msg
-
     def on_gripper(self, msg):
         self.snapshot.gripper_sensor_confirmed = msg.sensor_confirmed
 
@@ -221,8 +210,7 @@ class MissionManagerNode(Node):
     def tick(self):
         """Gom Snapshot, goi FSM, dich Action, publish MissionState deu dan ke ca khi khong doi.
 
-        TODO: gripper_command, expected_marker_id, goto waypoint khi cac trang thai nhiem vu
-        duoc hien thuc.
+        TODO: gripper_command khi ACTUATE_GRIPPER duoc hien thuc.
         """
         now = self.now_s()
         snap = self.snapshot
@@ -236,6 +224,8 @@ class MissionManagerNode(Node):
         target_fresh = (self.target_stamp_s is not None and not snap.landing_target_lost
                         and now - self.target_stamp_s <= TARGET_STALE_S)
         snap.target_offset_m = self.target_offset_m if target_fresh else None
+        odom_fresh = self.position_stamp_s is not None and now - self.position_stamp_s <= ODOM_STALE_S
+        snap.position = self.position if odom_fresh else None
 
         prev_state = self.fsm.state
         action = self.fsm.step(snap)
@@ -254,6 +244,13 @@ class MissionManagerNode(Node):
             msg.header.frame_id = 'base_link'
             msg.twist.linear.z = float(action.velocity_up_mps)
             self.pub_velocity.publish(msg)
+        if action.position_target is not None:
+            msg = PoseStamped()
+            msg.header.stamp = self.get_clock().now().to_msg()
+            msg.header.frame_id = 'odom'
+            msg.pose.position.x, msg.pose.position.y, msg.pose.position.z = action.position_target
+            msg.pose.orientation.w = 1.0
+            self.pub_setpoint.publish(msg)
         self.publish_mission_state(action.detail, action.expected_marker_id)
 
     def send_arm(self, arm):

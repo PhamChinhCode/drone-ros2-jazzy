@@ -1,0 +1,9 @@
+# Nhiem vu mo phong: bay tu pad_home (0, 0) toi pad_a (tag 1, x = 10 m), cao 2 m.
+# Chua gia lap camera nen MARKER_SEARCH het gio sau 5 s, thu lai 1 lan roi ha canh tai cho.
+# Gui: ros2 run drone_mission send_mission_plan $(ros2 pkg prefix drone_sim)/share/drone_sim/config/missions/sim_tag1.yaml
+mission_id: 901
+plan_name: sim_tag1
+max_retries: 1
+search_timeout_s: 5.0
+waypoints:
+  - {marker_id: 1, action: none, alt_m: 2.0, acceptance_radius_m: 0.5, max_vel_mps: 1.9, loiter_s: 1.0}

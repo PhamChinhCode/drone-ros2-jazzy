@@ -30,14 +30,13 @@ FAILSAFE = 'FAILSAFE'
 # nho vay them mot nhanh moi la sua bang nay chu khong phai doc het than ham.
 TRANSITIONS = {
     IDLE:            [TAKEOFF, FAILSAFE],
-    # TAKEOFF -> PRECISION_LAND: ha chinh xac xuong tag cua waypoint hien tai khi dang treo
-    # (thu tren ban; se thay bang ENROUTE -> MARKER_SEARCH khi cac trang thai do duoc viet).
-    TAKEOFF:         [ENROUTE, FAILSAFE, EMERGENCY_LAND, PRECISION_LAND],
-    ENROUTE:         [MARKER_SEARCH, RTH, FAILSAFE],
-    MARKER_SEARCH:   [PRECISION_LAND, RETRY_LOITER, FAILSAFE],
+    TAKEOFF:         [ENROUTE, FAILSAFE, EMERGENCY_LAND],
+    ENROUTE:         [MARKER_SEARCH, RTH, FAILSAFE, EMERGENCY_LAND],
+    # MARKER_SEARCH -> EMERGENCY_LAND: het luot tim (RTH tam thoi = ha canh tai cho).
+    MARKER_SEARCH:   [PRECISION_LAND, RETRY_LOITER, FAILSAFE, EMERGENCY_LAND],
     PRECISION_LAND:  [ACTUATE_GRIPPER, MARKER_SEARCH, FAILSAFE, MISSION_COMPLETE, EMERGENCY_LAND],
     ACTUATE_GRIPPER: [TAKEOFF, ENROUTE, MISSION_COMPLETE, RETRY_LOITER, FAILSAFE],
-    RETRY_LOITER:    [MARKER_SEARCH, RTH, FAILSAFE],
+    RETRY_LOITER:    [MARKER_SEARCH, RTH, FAILSAFE, EMERGENCY_LAND],
     RTH:             [EMERGENCY_LAND, MISSION_COMPLETE, FAILSAFE],
     EMERGENCY_LAND:  [MISSION_COMPLETE, FAILSAFE],
     MISSION_COMPLETE: [IDLE],
@@ -67,6 +66,11 @@ PRECISION_ALIGN_PER_M = 0.25
 # Duoi do cao nay camera (nghieng 20 do, truoc tam 6 cm) khong con thay tag tron ven - xuong
 # tiep khong can tag. Tren muc nay mat tag la dung, KHONG ha mu.
 PRECISION_BLIND_BELOW_M = 0.35
+
+# Tim tag (MARKER_SEARCH / RETRY_LOITER).
+# RETRY_LOITER giu tai diem chung nay roi tim lai. Dai hon chu ky failsafe_monitor_node (2 Hz) de
+# su co FS_MARKER_TIMEOUT kip tat, khong bi dem them mot lan ngay khi vao lai MARKER_SEARCH.
+RETRY_LOITER_S = 3.0
 
 # Ke hoach nhiem vu. Hanh dong tai diem trung MissionWaypoint.ACTION_*.
 ACTION_NONE, ACTION_PICKUP, ACTION_DROPOFF = 0, 1, 2
@@ -134,8 +138,8 @@ class Snapshot:
     now_s: float = 0.0
     armed: bool = False
     battery_pct: float = 100.0
-    at_waypoint: bool = False
-    marker_confirmed: bool = False
+    # Vi tri EKF (x, y, z) trong odom; None = chua co / qua han.
+    position: tuple = None
     landing_target_lost: bool = True
     landed: bool = False
     gripper_sensor_confirmed: bool = False
@@ -148,6 +152,8 @@ class Snapshot:
     disarm_ready: bool = False
     range_m: float = None        # laser, None khi ngoai dai / qua han
     # Do lech ngang (m) cua tag mong doi so voi base_link; None = khong co pose tag con moi.
+    # Chi landing_target_bridge_node phat pose nay, va chi khi thay DUNG ID mong doi - day la
+    # xac thuc marker duy nhat FSM dung (nguyen tac 1).
     target_offset_m: float = None
 
 
@@ -168,6 +174,9 @@ class Action:
     gripper_command: str = ''  # '', 'open', 'close'
     expected_marker_id: int = -1
     velocity_up_mps: float = None   # lenh van toc len (FLU z); None = khong lenh van toc
+    # Diem den (x, y, z) trong odom cho vong vi tri cruise; None = khong phat /mission/setpoint.
+    # velocity_up_mps (neu co) uu tien hon trong position_controller_node.
+    position_target: tuple = None
     detail: str = ''
 
 
@@ -185,7 +194,6 @@ class MissionFsm:
     mission_id: int = 0
     max_retries: int = None           # cua ke hoach dang nap; None = dung params
     search_timeout_s: float = None
-    precision_requested: bool = False
 
     def load_plan(self, mission_id, raw_waypoints, max_retries, search_timeout_s, known_tags):
         """Nap ke hoach. Tra ly do tu choi, '' neu nhan. KHONG tu cat canh - van phai request_start.
@@ -202,6 +210,7 @@ class MissionFsm:
         self.mission_id = mission_id
         self.waypoints = waypoints
         self.current_wp_index = 0
+        self.retry_count = 0
         self.max_retries = max_retries if max_retries > 0 else self.params.max_retries
         self.search_timeout_s = (search_timeout_s if search_timeout_s > 0
                                  else self.params.search_timeout_s)
@@ -222,28 +231,21 @@ class MissionFsm:
     def request_land(self):
         self.land_requested = True
 
-    def request_precision_land(self):
-        """Ha chinh xac xuong tag cua waypoint hien tai. Tra ly do tu choi, '' neu nhan."""
-        if self.state != TAKEOFF:
-            return f'dang {self.state}, chi nhan khi TAKEOFF (dang treo)'
-        if self.current_waypoint() is None:
-            return 'chua nap ke hoach - khong biet tag nao'
-        self.precision_requested = True
-        return ''
-
     def transition(self, new_state, now_s, detail=''):
         """Chuyen trang thai co kiem tra bang TRANSITIONS - chan chuyen sai tu som."""
         if new_state not in TRANSITIONS[self.state]:
             raise ValueError(f'Chuyen trang thai khong hop le: {self.state} -> {new_state}')
         self.state = new_state
         self.state_entered_s = now_s
-        self.retry_count = 0 if new_state != RETRY_LOITER else self.retry_count
+        # retry_count tinh theo TUNG DIEM: chi xoa khi bat dau chang moi (hoac ve IDLE), de vong
+        # MARKER_SEARCH <-> RETRY_LOITER / PRECISION_LAND khong bao gio lap vo han.
+        if new_state in (IDLE, ENROUTE):
+            self.retry_count = 0
         self.last_fc_command_s = None
         if new_state != IDLE:
             self.start_requested_s = None
         if new_state in (EMERGENCY_LAND, IDLE):
             self.land_requested = False
-        self.precision_requested = False
         return Action(detail=detail)
 
     def time_in_state(self, now_s):
@@ -270,20 +272,21 @@ class MissionFsm:
         Failsafe (/failsafe_event, muc nang nhat dang bat) - uu tien ngay sau kiem quyen:
           - RTH / EMERGENCY_LAND -> EMERGENCY_LAND (RTH tam thoi = ha canh tai cho);
           - LOITER -> FAILSAFE giu vz = 0; het su co -> ha canh (khong tu tiep tuc nhiem vu);
-          - RETRY_LOITER -> de trang thai nhiem vu tu xu ly (TODO cung cac trang thai do);
+          - RETRY_LOITER -> chi MARKER_SEARCH dung (coi nhu het gio tim); trang thai khac bo qua;
           - dang bat bat ky muc nao -> IDLE khong arm.
 
-        TODO: than cac trang thai nhiem vu con lai theo dung ba nguyen tac o dau file:
-          - IDLE: co waypoints -> bat dau nhu start_requested;
-          - TAKEOFF: dat takeoff_alt_m -> ENROUTE, phat goto waypoint hien tai;
-          - ENROUTE: at_waypoint -> MARKER_SEARCH, phat expected_marker_id cua waypoint;
-          - MARKER_SEARCH: marker_confirmed -> PRECISION_LAND;
-            qua search_timeout_s -> RETRY_LOITER, retry_count += 1;
-            retry_count > max_retries -> bao failsafe (khong tu lap them);
-          - PRECISION_LAND: landing_target_lost -> quay lai MARKER_SEARCH (khong ha mu);
-            landed -> ACTUATE_GRIPPER;
-          - ACTUATE_GRIPPER: phat gripper open/close theo waypoint.action, CHO
-            gripper_sensor_confirmed moi cho roi diem; con waypoint -> TAKEOFF, het -> MISSION_COMPLETE.
+        Trang thai nhiem vu (khong GPS, vi tri diem suy tu tag):
+          - TAKEOFF: laser >= takeoff_alt_m -> ENROUTE neu da nap ke hoach, khong thi giu;
+          - ENROUTE: phat diem den; cach ngang <= acceptance_radius_m cua diem -> MARKER_SEARCH;
+          - MARKER_SEARCH: giu tai diem, phat expected_marker_id; landing_target_bridge_node xac
+            thuc dung ID -> PRECISION_LAND; qua search_timeout_s (hoac failsafe RETRY_LOITER) ->
+            mot lan that bai;
+          - PRECISION_LAND: mat tag tren PRECISION_BLIND_BELOW_M -> MARKER_SEARCH, cung la mot lan
+            that bai (khong ha mu, khong nhay qua lai vo han); landed -> ACTUATE_GRIPPER;
+          - moi lan that bai retry_count += 1; qua max_retries -> EMERGENCY_LAND tai cho (RTH
+            tam thoi); con luot -> RETRY_LOITER giu tai diem RETRY_LOITER_S roi tim lai.
+
+        TODO: ACTUATE_GRIPPER (CHO gripper_sensor_confirmed, khong dung timeout thay), RTH.
         """
         now = snap.now_s
         lost = snap.ob_auth is False or snap.ob_state == OB_STATE_KHOA
@@ -321,6 +324,14 @@ class MissionFsm:
             return self._step_idle(snap)
         if self.state == TAKEOFF:
             return self._step_takeoff(snap)
+        if self.state in (ENROUTE, MARKER_SEARCH, RETRY_LOITER) and snap.ob_auth is not True:
+            return Action(velocity_up_mps=0.0, detail='khong biet quyen - giu vz = 0')
+        if self.state == ENROUTE:
+            return self._step_enroute(snap)
+        if self.state == MARKER_SEARCH:
+            return self._step_marker_search(snap)
+        if self.state == RETRY_LOITER:
+            return self._step_retry_loiter(snap)
         if self.state == EMERGENCY_LAND:
             return self._step_land(snap)
         if self.state == PRECISION_LAND:
@@ -355,17 +366,73 @@ class MissionFsm:
         return Action(fc_command='arm', detail='gui ARM')
 
     def _step_takeoff(self, snap):
-        if self.precision_requested and snap.armed:
-            wp = self.current_waypoint()
-            return self.transition(PRECISION_LAND, snap.now_s,
-                                   f'ha chinh xac xuong tag {wp.marker_id}')
         if snap.ob_auth is not True:
             return Action(velocity_up_mps=0.0, detail='khong biet quyen - giu vz = 0')
         if snap.range_m is None:
             return Action(velocity_up_mps=0.0, detail='mat laser - giu vz = 0')
         if snap.range_m >= self.params.takeoff_alt_m:
-            return Action(velocity_up_mps=0.0, detail='du do cao - giu')
+            wp = self.current_waypoint()
+            if wp is None:
+                return Action(velocity_up_mps=0.0, detail='du do cao - giu (chua nap ke hoach)')
+            return self.transition(ENROUTE, snap.now_s,
+                                   f'du do cao - bay toi diem {self.current_wp_index} '
+                                   f'(tag {wp.marker_id})')
         return Action(velocity_up_mps=TAKEOFF_CLIMB_MPS, detail='leo')
+
+    def _step_enroute(self, snap):
+        wp = self.current_waypoint()
+        act = Action(position_target=wp.target)
+        if snap.position is None:
+            act.detail = f'bay toi tag {wp.marker_id}: chua co vi tri EKF'
+            return act
+        # Chi so khoang cach NGANG: z cua EKF chua co moc tuyet doi khi khong thay tag.
+        dist = math.hypot(snap.position[0] - wp.target[0], snap.position[1] - wp.target[1])
+        if dist <= wp.acceptance_radius_m:
+            return self._enter_search(snap.now_s, MARKER_SEARCH,
+                                      f'toi diem {self.current_wp_index} (cach {dist:.2f} m) - '
+                                      f'tim tag {wp.marker_id}')
+        act.detail = f'bay toi tag {wp.marker_id}'
+        return act
+
+    def _step_marker_search(self, snap):
+        now = snap.now_s
+        wp = self.current_waypoint()
+        if snap.target_offset_m is not None:
+            return self._enter_search(now, PRECISION_LAND,
+                                      f'thay dung tag {wp.marker_id} - ha chinh xac')
+        timeout = self.search_timeout_s or self.params.search_timeout_s
+        waited = self.time_in_state(now)
+        if waited >= timeout or snap.failsafe_escalate_to == ESCALATE_RETRY_LOITER:
+            return self._search_failed(now, RETRY_LOITER,
+                                       f'khong thay tag {wp.marker_id} sau {waited:.0f} s')
+        return Action(position_target=wp.target, expected_marker_id=wp.marker_id,
+                      detail=f'tim tag {wp.marker_id}')
+
+    def _step_retry_loiter(self, snap):
+        wp = self.current_waypoint()
+        if self.time_in_state(snap.now_s) >= RETRY_LOITER_S:
+            return self._enter_search(snap.now_s, MARKER_SEARCH,
+                                      f'tim lai tag {wp.marker_id} (lan thu lai {self.retry_count})')
+        return Action(position_target=wp.target,
+                      detail=f've diem {self.current_wp_index}, giu {RETRY_LOITER_S:.0f} s roi tim lai')
+
+    def _enter_search(self, now_s, new_state, detail):
+        """Chuyen sang trang thai can tag, GIU expected_marker_id ngay chu ky chuyen: phat -1 mot
+        chu ky la landing_target_bridge_node quen tag dang bam."""
+        act = self.transition(new_state, now_s, detail)
+        if new_state in (MARKER_SEARCH, PRECISION_LAND):
+            act.expected_marker_id = self.current_waypoint().marker_id
+        return act
+
+    def _search_failed(self, now_s, retry_state, reason):
+        """Mot lan tim/ha theo tag that bai. Qua max_retries -> ha canh tai cho, khong lap them."""
+        limit = self.max_retries if self.max_retries is not None else self.params.max_retries
+        self.retry_count += 1
+        if self.retry_count > limit:
+            return self.transition(EMERGENCY_LAND, now_s,
+                                   f'{reason} - het {limit} lan thu lai, ha canh tai cho')
+        return self._enter_search(now_s, retry_state,
+                                  f'{reason} - thu lai {self.retry_count}/{limit}')
 
     def _step_land(self, snap):
         now = snap.now_s
@@ -402,7 +469,7 @@ class MissionFsm:
             if self.time_in_state(now) < PRECISION_ACQUIRE_S:
                 act.detail = f'cho bat tag {wp.marker_id}'
                 return act
-            return self.transition(MARKER_SEARCH, now, f'mat tag {wp.marker_id} - khong ha mu')
+            return self._search_failed(now, MARKER_SEARCH, f'mat tag {wp.marker_id} - khong ha mu')
         if snap.range_m is None:
             act.detail = 'mat laser - giu vz = 0'
             return act

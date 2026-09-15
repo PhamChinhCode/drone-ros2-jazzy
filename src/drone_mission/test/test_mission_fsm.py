@@ -212,20 +212,27 @@ def fsm_dang_treo(waypoints=None):
     return fsm
 
 
-def fsm_dang_ha_chinh_xac(waypoints=None):
+def tren_tag(fsm, z=1.0):
+    x, y, _ = fsm.current_waypoint().target
+    return (x, y, z)
+
+
+def fsm_dang_tim_tag(waypoints=None):
+    """TAKEOFF -> ENROUTE (0,6) -> MARKER_SEARCH (0,7)."""
     fsm = fsm_dang_treo(waypoints)
-    assert fsm.request_precision_land() == ''
-    fsm.step(snap(1.0, armed=True, range_m=1.0))
-    assert fsm.state == m.PRECISION_LAND
+    fsm.step(snap(0.6, armed=True, range_m=1.0))
+    assert fsm.state == m.ENROUTE
+    fsm.step(snap(0.7, armed=True, range_m=1.0, position=tren_tag(fsm)))
+    assert fsm.state == m.MARKER_SEARCH
     return fsm
 
 
-def test_precision_land_can_ke_hoach_va_dang_treo():
-    fsm = m.MissionFsm()
-    assert 'TAKEOFF' in fsm.request_precision_land()
-    fsm = fsm_dang_treo()
-    fsm.waypoints = []
-    assert 'ke hoach' in fsm.request_precision_land()
+def fsm_dang_ha_chinh_xac(waypoints=None):
+    """... -> PRECISION_LAND luc 1,0."""
+    fsm = fsm_dang_tim_tag(waypoints)
+    fsm.step(snap(1.0, armed=True, range_m=1.0, target_offset_m=0.2))
+    assert fsm.state == m.PRECISION_LAND
+    return fsm
 
 
 def test_phat_expected_marker_id_va_cho_bat_tag_roi_ve_marker_search():
@@ -286,6 +293,107 @@ def test_yeu_cau_ha_canh_khan_trong_precision_land():
     fsm = fsm_dang_ha_chinh_xac()
     fsm.request_land()
     fsm.step(snap(1.2, armed=True, range_m=1.0))
+    assert fsm.state == m.EMERGENCY_LAND
+
+
+# ---- Buoc 4: bay toi diem, tim tag, thu lai ------------------------------------------------
+
+def test_cat_canh_khong_ke_hoach_thi_giu_co_ke_hoach_thi_bay_toi_diem():
+    fsm = m.MissionFsm(params=m.Params(takeoff_alt_m=1.0))
+    fsm.request_start(0.0)
+    fsm.step(snap(0.0, arm_ready=True))
+    fsm.step(snap(0.5, armed=True))
+    fsm.step(snap(1.0, armed=True, range_m=1.0))
+    assert fsm.state == m.TAKEOFF
+    fsm = fsm_dang_treo([wp(0, marker=1, alt_m=2.0)])
+    fsm.step(snap(0.6, armed=True, range_m=1.0))
+    assert fsm.state == m.ENROUTE and fsm.retry_count == 0
+    act = fsm.step(snap(0.8, armed=True, range_m=1.0, position=(0.0, 0.0, 1.0)))
+    assert act.position_target == (10.0, 0.0, 2.0) and act.velocity_up_mps is None
+    assert act.expected_marker_id == -1                 # khong bam tag khi dang bay
+
+
+def test_toi_diem_chi_xet_khoang_cach_ngang():
+    fsm = fsm_dang_treo([wp(0, marker=1, acceptance_radius_m=0.3)])
+    fsm.step(snap(0.6, armed=True, range_m=1.0))
+    fsm.step(snap(0.8, armed=True, range_m=1.0, position=None))
+    assert fsm.state == m.ENROUTE                       # chua co EKF: khong tu coi la toi
+    fsm.step(snap(1.0, armed=True, range_m=1.0, position=(9.6, 0.0, 0.5)))
+    assert fsm.state == m.ENROUTE
+    act = fsm.step(snap(1.2, armed=True, range_m=1.0, position=(9.8, 0.1, 7.0)))
+    assert fsm.state == m.MARKER_SEARCH and act.expected_marker_id == 1
+
+
+def test_tim_tag_giu_tai_diem_thay_dung_tag_thi_ha():
+    fsm = fsm_dang_tim_tag([wp(0, marker=1)])
+    act = fsm.step(snap(0.9, armed=True, range_m=1.0))
+    assert fsm.state == m.MARKER_SEARCH
+    assert act.expected_marker_id == 1 and act.position_target == fsm.current_waypoint().target
+    act = fsm.step(snap(1.0, armed=True, range_m=1.0, target_offset_m=0.5))
+    assert fsm.state == m.PRECISION_LAND and act.expected_marker_id == 1
+
+
+def test_het_gio_tim_thu_lai_roi_het_luot_thi_ha_canh_tai_cho():
+    fsm = fsm_dang_treo([wp(0)])
+    fsm.max_retries, fsm.search_timeout_s = 2, 5.0
+    fsm.step(snap(0.6, armed=True, range_m=1.0))
+    fsm.step(snap(0.7, armed=True, range_m=1.0, position=tren_tag(fsm)))
+    t = 0.7
+    for lan in (1, 2):
+        fsm.step(snap(t + 4.9, armed=True, range_m=1.0))
+        assert fsm.state == m.MARKER_SEARCH
+        t += 5.01
+        fsm.step(snap(t, armed=True, range_m=1.0))
+        assert fsm.state == m.RETRY_LOITER and fsm.retry_count == lan
+        act = fsm.step(snap(t + 1.0, armed=True, range_m=1.0))
+        assert act.position_target == fsm.current_waypoint().target
+        assert act.expected_marker_id == -1
+        t += m.RETRY_LOITER_S + 0.01
+        act = fsm.step(snap(t, armed=True, range_m=1.0))
+        assert fsm.state == m.MARKER_SEARCH and act.expected_marker_id == 0
+        assert fsm.retry_count == lan                   # khong bi xoa khi tim lai
+    act = fsm.step(snap(t + 5.01, armed=True, range_m=1.0))
+    assert fsm.state == m.EMERGENCY_LAND and 'het 2 lan' in act.detail
+
+
+def test_failsafe_retry_loiter_khi_tim_tag_la_mot_lan_that_bai():
+    fsm = fsm_dang_tim_tag()
+    fsm.step(snap(1.0, armed=True, range_m=1.0, failsafe_escalate_to=m.ESCALATE_RETRY_LOITER))
+    assert fsm.state == m.RETRY_LOITER and fsm.retry_count == 1
+
+
+def test_mat_tag_khi_ha_lap_lai_khong_vo_han():
+    fsm = fsm_dang_ha_chinh_xac()                       # max_retries = 3 (params)
+    t = 1.0
+    for _ in range(3):
+        fsm.step(snap(t + m.PRECISION_ACQUIRE_S + 0.1, armed=True, range_m=1.0))
+        assert fsm.state == m.MARKER_SEARCH
+        t += m.PRECISION_ACQUIRE_S + 0.2
+        fsm.step(snap(t, armed=True, range_m=1.0, target_offset_m=0.1))
+        assert fsm.state == m.PRECISION_LAND
+    fsm.step(snap(t + m.PRECISION_ACQUIRE_S + 0.1, armed=True, range_m=1.0))
+    assert fsm.state == m.EMERGENCY_LAND
+
+
+def test_chang_moi_xoa_retry_count():
+    fsm = fsm_dang_tim_tag()
+    fsm.step(snap(1.0, armed=True, range_m=1.0, failsafe_escalate_to=m.ESCALATE_RETRY_LOITER))
+    assert fsm.retry_count == 1
+    fsm.state = m.ACTUATE_GRIPPER                       # gia lap xong diem (trang thai chua viet)
+    fsm.transition(m.ENROUTE, 2.0)
+    assert fsm.retry_count == 0
+
+
+@pytest.mark.parametrize('trang_thai', ['dang_bay', 'dang_tim'])
+def test_yeu_cau_ha_canh_va_khong_biet_quyen_khi_bay_toi_diem(trang_thai):
+    fsm = fsm_dang_treo()
+    fsm.step(snap(0.6, armed=True, range_m=1.0))
+    if trang_thai == 'dang_tim':
+        fsm.step(snap(0.7, armed=True, range_m=1.0, position=tren_tag(fsm)))
+    act = fsm.step(snap(0.8, armed=True, ob_auth=None, range_m=1.0))
+    assert act.velocity_up_mps == 0.0 and act.position_target is None
+    fsm.request_land()
+    fsm.step(snap(0.9, armed=True, range_m=1.0))
     assert fsm.state == m.EMERGENCY_LAND
 
 

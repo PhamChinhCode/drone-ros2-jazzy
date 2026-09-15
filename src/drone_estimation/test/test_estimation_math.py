@@ -4,8 +4,9 @@ import math
 
 import pytest
 
-from drone_estimation.estimation_math import (HealthMonitor, drone_position_from_tag,
-                                              fc_velocity_validity, parse_known_tags, rotate)
+from drone_estimation.estimation_math import (HealthMonitor, MarkerResetPolicy,
+                                              drone_position_from_tag, fc_velocity_validity,
+                                              parse_known_tags, rotate)
 
 
 def cov(vx, vy, vz):
@@ -70,3 +71,42 @@ def test_health_phuong_sai_vuot_nguong_phai_lien_tuc():
     assert h.evaluate(2.0, 2.0, (1.0, 0, 0), True)[0] is True      # xuong duoi nguong: dem lai
     assert h.evaluate(3.0, 3.0, (3.0, 0, 0), True)[0] is True
     assert h.evaluate(5.0, 5.0, (3.0, 0, 0), True)[0] is False
+
+
+def reset_policy():
+    return MarkerResetPolicy(max_error_m=1.0, disagree_after_s=1.0, marker_max_age_s=0.5,
+                             cooldown_s=2.0)
+
+
+def test_reset_lech_marker_phai_lien_tuc():
+    # Tai hien 09-15: EKF bi day 20 m, marker dung o goc - van healthy vai giay dau.
+    p = reset_policy()
+    far, home = (20.0, 0.0, 0.3), (0.0, 0.0, 0.3)
+    assert p.evaluate(0.0, True, True, far, home, 0.0) == ''
+    assert p.evaluate(0.9, True, True, far, home, 0.9) == ''
+    assert p.evaluate(1.0, True, True, home, home, 1.0) == ''        # khop lai: dem lai
+    assert p.evaluate(1.5, True, True, far, home, 1.5) == ''
+    assert 'lech marker' in p.evaluate(2.5, True, True, far, home, 2.5)
+
+
+def test_reset_khi_khong_healthy_va_cooldown():
+    p = reset_policy()
+    home = (0.0, 0.0, 0.3)
+    assert p.evaluate(0.0, True, False, home, home, 0.0) == 'EKF khong healthy'
+    assert p.evaluate(1.0, True, False, home, home, 1.0) == ''       # trong cooldown
+    assert p.evaluate(2.0, True, False, home, home, 2.0) == 'EKF khong healthy'
+
+
+def test_reset_can_marker_moi_va_ekf_con_chay():
+    p = reset_policy()
+    far, home = (20.0, 0.0, 0.3), (0.0, 0.0, 0.3)
+    assert p.evaluate(5.0, True, False, far, home, 4.0) == ''        # marker cu
+    assert p.evaluate(5.0, True, False, far, home, None) == ''       # chua thay marker
+    assert p.evaluate(5.0, False, False, far, home, 5.0) == ''       # EKF im lang: ep vo ich
+
+
+def test_reset_ekf_nan():
+    p = reset_policy()
+    nan = (float('nan'), 0.0, 0.0)
+    p.evaluate(0.0, True, True, nan, (0.0, 0.0, 0.3), 0.0)
+    assert p.evaluate(1.0, True, True, nan, (0.0, 0.0, 0.3), 1.0) != ''

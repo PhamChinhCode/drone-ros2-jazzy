@@ -11,6 +11,7 @@ position_controller_node:
   ros__parameters:
     control_rate_hz: 20.0
     ramp_duration_s: 0.8
+    mission_timeout_s: 1.0       # watchdog P6: /mission/state im qua muc nay -> ngung phat setpoint
     cruise.x.kp: 0.0
     cruise.x.ki: 0.0
     cruise.x.kd: 0.0

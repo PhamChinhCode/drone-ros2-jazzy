@@ -77,3 +77,45 @@ class HealthMonitor:
             return False, (f'phuong sai vi tri {worst:.2f} m^2 > {self.max_pos_variance} '
                            f'qua {self.unhealthy_after_s:.1f} s')
         return True, ''
+
+
+class MarkerResetPolicy:
+    """Khi nao ep EKF ve vi tri marker (set_pose).
+
+    EKF da lech xa thi pose0_rejection_threshold loai ca do marker DUNG, va chi nhan lai khi
+    phuong sai tu phinh du lon - do 09-15: lech 20 m mat 23 s, qua dem 14->15/09 khong bao gio.
+    Ep khi co pose marker moi va EKF con chay (khong im lang) ma: EKF khong healthy, hoac lech
+    marker qua max_error_m lien tuc disagree_after_s. Moi lan ep cach nhau it nhat cooldown_s.
+    """
+
+    def __init__(self, max_error_m, disagree_after_s, marker_max_age_s, cooldown_s):
+        self.max_error_m = max_error_m
+        self.disagree_after_s = disagree_after_s
+        self.marker_max_age_s = marker_max_age_s
+        self.cooldown_s = cooldown_s
+        self.disagree_since_s = None
+        self.last_reset_s = None
+
+    def evaluate(self, now_s, ekf_alive, ekf_healthy, ekf_pos, marker_pos, marker_stamp_s):
+        """Tra ly do ep (chuoi khac rong) hoac '' neu khong ep. Goi deu dan moi chu ky."""
+        if not ekf_alive or marker_stamp_s is None or now_s - marker_stamp_s > self.marker_max_age_s:
+            self.disagree_since_s = None
+            return ''
+        error = math.dist(ekf_pos, marker_pos)
+        if not math.isfinite(error) or error > self.max_error_m:
+            if self.disagree_since_s is None:
+                self.disagree_since_s = now_s
+        else:
+            self.disagree_since_s = None
+        if self.last_reset_s is not None and now_s - self.last_reset_s < self.cooldown_s:
+            return ''
+        if not ekf_healthy:
+            reason = 'EKF khong healthy'
+        elif (self.disagree_since_s is not None
+              and now_s - self.disagree_since_s >= self.disagree_after_s):
+            reason = f'lech marker {error:.2f} m > {self.max_error_m} m qua {self.disagree_after_s:.1f} s'
+        else:
+            return ''
+        self.last_reset_s = now_s
+        self.disagree_since_s = None
+        return reason
