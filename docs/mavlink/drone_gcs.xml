@@ -124,6 +124,8 @@
       <field type="uint8_t" name="count">So diem, 1-16. Ngoai dai -> ERR_COUNT.</field>
       <field type="uint8_t" name="max_retries">So lan thu lai toi da moi diem. 0 = dung mission.yaml.</field>
       <field type="char[20]" name="plan_name">Ten ke hoach, chi de nguoi doc. CAT CON 20 BYTE, khong bao loi.</field>
+      <extensions/>
+      <field type="uint32_t" name="contract_ver">Phien ban hop dong cua GCS: MAJOR*10000 + MINOR*100. Pi CAN truong nay de kiem lech MAJOR truoc khi nhan ke hoach (muc 6.2) - DRONE_TELEMETRY.contract_ver chi di chieu Pi -> GCS nen Pi khong co duong nao biet phien ban cua GCS. 0 = GCS cu chua khai, Pi bo qua kiem tra va ghi STATUSTEXT WARN.</field>
     </message>
 
     <message id="42002" name="DRONE_MISSION_REQUEST">

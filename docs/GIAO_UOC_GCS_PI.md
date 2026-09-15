@@ -942,14 +942,14 @@ Việc phải làm, theo thứ tự — **đây là danh sách triển khai củ
 
 | # | Việc | Ghi chú |
 |---|---|---|
-| 1 | `docs/mavlink/drone_gcs.xml` theo mục 8 | **Chặn mọi việc khác.** Trường mới phải nằm sau `<extensions/>` ngay từ đầu (R2) |
-| 2 | Sửa `TelemetryPacket` (message ROS) | Thêm `valid_flags`, `status_flags`, `contract_ver`, `wp_total`, `retry_count`, `expected_marker_id`, `tagmap_crc`, `home_n_mm`, `home_e_mm`; **bỏ `fc_connected`**; `gcs_rssi_dbm` → `int16`. Phải xong **trước** khi hai bên sinh mã |
-| 3 | `telemetry_aggregator_node.publish_packet` | Kèm điền `valid_flags`/`status_flags` — phần dễ sai nhất (5.2) |
-| 4 | Hàm tính `tagmap_crc` từ `tags.yaml` | Mục 8.6. Viết thành hàm thuần để pytest được, giống `mission_fsm` |
-| 5 | `gcs_link_node` | Socket, vòng nhận, bắt tay mục 3, lệnh mục 4, watchdog 9.2, hàng đợi 5.3 |
-| 6 | Phát `LOCAL_POSITION_NED` + `ATTITUDE` 5 Hz có điều kiện `POS_VALID` | Mục 5.1 |
-| 7 | `tools/gcs_sim.py` (7.3) | Làm **song song**, không làm sau: không có nó thì không test được |
-| 8 | `PARAM_REQUEST_LIST`/`PARAM_VALUE` chỉ đọc | Mục 9.4 |
+| ~~1~~ | ~~`docs/mavlink/drone_gcs.xml`~~ | **XONG.** 6 bản tin + `MAV_CMD` 42100 + 7 enum. Sinh mã: `tools/sinh_dialect.py`; module sinh ra **bị gitignore** (ma dẫn xuất ~23k dòng, nguồn là XML) |
+| ~~2~~ | ~~`TelemetryPacket`~~ | **XONG.** Kèm hằng số `VALID_*`/`STATUS_*` ngay trong message. `MissionState` thêm `wp_total`, `home_valid`, `home_odom` — "nhà" của RTH trước giờ không ai phát ra được |
+| ~~3~~ | ~~`publish_packet`~~ | **XONG.** Thêm hai nguồn còn thiếu: `/odometry/filtered` và `/ekf/health`. Mỗi nguồn có đồng hồ độ tươi riêng |
+| ~~4~~ | ~~`tagmap_crc`~~ | **XONG.** `drone_comms/tagmap.py`, hàm thuần, 6 pytest. **A15(a) đạt: `0x6BDEA0A6`** |
+| ~~5~~ | ~~`gcs_link_node`~~ | **XONG.** Socket, bắt tay, lệnh, watchdog, hàng đợi ưu tiên. `/mission/plan_ack` (message mới) chở phán quyết của `mission_manager_node` lên thành `DRONE_MISSION_ACK` |
+| ~~6~~ | ~~`LOCAL_POSITION_NED` + `ATTITUDE` 5 Hz~~ | **XONG.** Đo được đúng 5,0 Hz. Phép đổi ENU→NED đã kiểm: (3 Đông, 4 Bắc, 2 cao) → (N 4,0 · E 3,0 · D −2,0); yaw ENU 90° → NED 0° = Bắc |
+| ~~7~~ | ~~`tools/gcs_sim.py`~~ | **XONG.** 1 Hz heartbeat, nạp kế hoạch, 7 lệnh, in telemetry/STATUSTEXT, đếm mất gói. Cờ thử: `--bo-diem`, `--ver`, `--raw-cmd`, `--lan` |
+| **8** | `PARAM_REQUEST_LIST`/`PARAM_VALUE` chỉ đọc | **CÒN LẠI.** Mục 9.4. Nên đọc giá trị **từ node đang giữ** (`failsafe_monitor_node`, `mission_manager_node`) qua param client, không nạp lại YAML — nạp lại YAML sẽ nói dối nếu ai đổi tham số lúc chạy |
 | ~~9~~ | ~~Thêm `bool anchored` vào `EkfHealth`~~ | **XONG** — `ekf_health_node` bật khi neo lần đầu (5.2b) |
 | ~~10~~ | ~~`_step_takeoff` chỉ chốt `home` khi đã neo~~ | **XONG** — đã kiểm Gazebo: RTH hạ tại x = 0,04 / y = −0,01 |
 | ~~11~~ | ~~Sửa chú thích `alt_m` trong `MissionWaypoint.msg`~~ | **XONG** — chú thích cũ ghi sai gốc (P22) |
@@ -1049,6 +1049,38 @@ Không cần drone, không cần 4G. Đủ để chốt phần lớn hợp đồ
 | **A15** | (a) Hàm tính `tagmap_crc` của **cả hai bên** trả `0x6BDEA0A6` với `tags.yaml` hiện tại. (b) Đổi một số trong `tags.yaml` ở một bên | (a) khớp vectơ kiểm 8.6 — **pytest, không cần lên dây**. (b) CRC lệch; GCS khoá nạp kế hoạch |
 | **A16** | `PARAM_REQUEST_LIST`, rồi thử `PARAM_SET` | đọc được 8 tham số mục 9.4; `PARAM_SET` bị bỏ qua + `STATUSTEXT` WARN |
 | **A17** | `STATUSTEXT` dài 88 byte | GCS ghép đủ, không mất phần cuối (7.5) |
+
+**Kết quả chạy 2026-09-16 (Pi, hai tiến trình trên một máy):**
+
+| Phép kiểm | Kết quả |
+|---|---|
+| A1 socket + heartbeat hai chiều | **đạt** — UDP 14551, heartbeat 1,0 Hz mỗi chiều |
+| A2 nạp kế hoạch 2 điểm hợp lệ | **đạt** — COUNT → hỏi điểm 0, 1 → `/mission/plan` → `ACCEPTED` |
+| A3 kế hoạch có tag lạ | **đạt** — `ERR_UNKNOWN_TAG`, chuỗi lý do của `mission_manager_node` chuyển nguyên văn |
+| A4 bỏ một `ITEM` | **đạt** — Pi phát lại `REQUEST` cùng `seq` |
+| A5 bỏ hẳn một `seq` | **đạt** — 5 lần hỏi rồi `ERR_TIMEOUT`, không treo |
+| A6 lệnh lạ (`MAV_CMD` 31000) | **đạt** — `UNSUPPORTED` |
+| A7 cùng lệnh 3 lần, `confirmation` 0/1/2 | **đạt** — cả 3 đều `ACCEPTED`, bất biến theo trạng thái |
+| A8 telemetry khi chưa có nguồn | **đạt** — 2,0 Hz, mọi cờ hạ, `contract_ver` 300, `tagmap_crc` `0x6BDEA0A6` |
+| A9 cắt liên kết | **đạt** — `/gcs_link/connected` = false sau ~4–5 s (ngưỡng 5 s) |
+| A10 nối lại | **đạt** — = true ngay |
+| A12 lệch `MAJOR` | **đạt** — `ERR_CONTRACT`, telemetry **vẫn phát** |
+| A13 thêm trường sau `<extensions/>` | **đạt** — `CRC_EXTRA` giữ 14. Là **pytest thường trực** |
+| A14 thêm trường trước `<extensions/>` | **đạt** — `CRC_EXTRA` 14 → 153, bên cũ loại cả gói. Là **pytest thường trực** |
+| A15(a) vectơ kiểm `tagmap_crc` | **đạt** — `0x6BDEA0A6`, pytest, không cần lên dây |
+| A11 nghẽn, A15(b), A16, A17 | **chưa chạy** |
+
+**Hai lỗi do chính phép kiểm 10.A tìm ra** — ghi lại vì cả hai đều thuộc loại "trông như chạy được":
+
+1. **`seq` MAVLink không bao giờ tăng.** `msg.pack(mav)` của pymavlink **không** tăng `seq`; việc
+   đó nằm trong `MAVLink.send()`. Hệ quả: mọi gói mang `seq = 0`, và bộ đếm mất gói của **cả hai
+   bên** thành vô nghĩa (`(0−0−1) & 0xFF = 255` mỗi gói → báo mất 4845 gói trong 14 s). Tức
+   `DRONE_LINK_STATS` — thứ mục 7.4 dựng ra để "biến đường truyền tệ thành con số" — sẽ nói dối
+   ngay từ ngày đầu. Cả hai phía đã sửa.
+2. **GCS quên phát `HEARTBEAT`.** Mục 5.1 ghi `HEARTBEAT` là **hai chiều** (↔) nhưng `gcs_sim` chỉ
+   nghe. Watchdog của Pi dựa vào gói **nhận được**, không dựa vào gói mình gửi, nên
+   `/gcs_link/connected` **không bao giờ lên true** — failsafe mất GCS sẽ bật vĩnh viễn ngay cả khi
+   liên kết hoàn hảo. Đây là bẫy mà bên nào hiện thực GCS thật cũng dễ mắc.
 
 ### 10.B — Chạy trong Gazebo
 

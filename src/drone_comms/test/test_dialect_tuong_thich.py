@@ -76,11 +76,20 @@ def test_a13_them_truong_sau_extensions_giu_nguyen_crc_extra(xml_goc):
 
 
 def test_a14_them_truong_truoc_extensions_PHA_crc_extra(xml_goc):
-    """A14: phep kiem nay PHAI thay CRC_EXTRA doi. Neu no khong doi thi R2 vo nghia."""
-    sai = xml_goc.replace(
-        '      <extensions/>',
-        '      <field type="uint16_t" name="truong_moi_thuong">kiem A14</field>\n'
-        '      <extensions/>', 1)
+    """A14: phep kiem nay PHAI thay CRC_EXTRA doi. Neu no khong doi thi R2 vo nghia.
+
+    Neo vao truong CUOI CUNG truoc <extensions/> cua DRONE_TELEMETRY, khong neo vao
+    '<extensions/>' chung: file co nhieu the do (DRONE_MISSION_COUNT cung co mot), va neo chung
+    se chen truong vao BAN TIN KHAC roi do CRC_EXTRA cua DRONE_TELEMETRY thay khong doi - phep
+    kiem se "dat" ma khong kiem gi ca. Da xay ra that ngay 2026-09-16.
+    """
+    neo = '<field type="uint8_t" name="failsafe_type"'
+    assert xml_goc.count(neo) == 1, 'moc neo phai duy nhat'
+    i = xml_goc.index(neo)
+    het_dong = xml_goc.index('\n', i) + 1
+    sai = (xml_goc[:het_dong]
+           + '      <field type="uint16_t" name="truong_moi_thuong">kiem A14</field>\n'
+           + xml_goc[het_dong:])
     assert sai != xml_goc
     assert sinh_crc_extra(sai, 'dg_a14') != sinh_crc_extra(xml_goc, 'dg_goc_a14'), \
         'CRC_EXTRA khong doi nghia la co so cua R2 sai - phai doc lai muc 6.3'

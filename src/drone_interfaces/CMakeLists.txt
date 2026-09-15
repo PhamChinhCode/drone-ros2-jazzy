@@ -9,6 +9,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/MissionWaypoint.msg"
   "msg/MissionPlan.msg"
   "msg/MissionState.msg"
+  "msg/MissionPlanAck.msg"
   "msg/FcCommand.msg"
   "msg/GripperCommand.msg"
   "msg/GripperStatus.msg"

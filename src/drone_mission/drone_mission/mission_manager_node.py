@@ -18,7 +18,7 @@ from sensor_msgs.msg import BatteryState, Range
 from std_msgs.msg import Bool, Float32, Int32
 from std_srvs.srv import Trigger
 
-from drone_interfaces.msg import (EkfHealth, FailsafeEvent, GripperCommand, GripperStatus, MissionPlan, MissionState)
+from drone_interfaces.msg import (EkfHealth, FailsafeEvent, GripperCommand, GripperStatus, MissionPlan, MissionPlanAck, MissionState)
 from drone_interfaces.srv import Arm, FcSimpleCommand, GotoWaypoint, Takeoff
 from drone_mission import fc_link, mission_fsm
 from drone_mission.fc_command_bridge_node import NAMED_VALUE_QOS
@@ -104,6 +104,9 @@ class MissionManagerNode(Node):
         # Tran toc do ngang cua waypoint dang bay toi, di kem /mission/setpoint. Tach topic
         # rieng thay vi them truong vao MissionState: MissionState nam trong giao uoc FC/GCS.
         self.pub_max_vel = self.create_publisher(Float32, '/mission/max_vel', EVENT_QOS)
+        # Phan quyet ve ke hoach, cho gcs_link_node dich thanh DRONE_MISSION_ACK (muc 3.2).
+        self.pub_plan_ack = self.create_publisher(
+            MissionPlanAck, '/mission/plan_ack', EVENT_QOS)
         self.pub_gripper = self.create_publisher(GripperCommand, '/gripper/command', EVENT_QOS)
         # Lenh van toc FLU cho position_controller_node (cat/ha canh khong can gain PID vi tri).
         self.pub_velocity = self.create_publisher(
@@ -125,14 +128,20 @@ class MissionManagerNode(Node):
     def on_plan(self, msg):
         """Kiem tra va nap ke hoach vao FSM (chi khi IDLE). KHONG tu cat canh - van can ~/start.
 
-        Ket qua bao qua /mission/state (mission_id + detail) va log.
-        TODO: ACK ve GCS khi gcs_link_node duoc hien thuc.
+        Ket qua bao qua /mission/plan_ack (cho gcs_link_node dich len GCS), /mission/state
+        (mission_id + detail) va log.
         """
         raw = [dict(seq=w.seq, marker_id=w.expected_marker_id, action=w.action, alt_m=w.alt_m,
                     acceptance_radius_m=w.acceptance_radius_m, max_vel_mps=w.max_vel_mps,
                     loiter_s=w.loiter_s) for w in msg.waypoints]
         refusal = self.fsm.load_plan(msg.mission_id, raw, msg.max_retries, msg.search_timeout_s,
                                      self.known_tags)
+        ack = MissionPlanAck()
+        ack.mission_id = msg.mission_id
+        ack.accepted = not refusal
+        ack.reason = refusal
+        ack.stamp = self.get_clock().now().to_msg()
+        self.pub_plan_ack.publish(ack)
         if refusal:
             detail = f'tu choi ke hoach {msg.mission_id}: {refusal}'
             self.get_logger().warning(detail)
