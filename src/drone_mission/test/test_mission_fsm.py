@@ -633,3 +633,18 @@ def test_yeu_cau_ha_canh_thoat_duoc_actuate_gripper():
     fsm.request_land()
     fsm.step(gap_snap(5.5))
     assert fsm.state == m.EMERGENCY_LAND
+
+
+def test_diem_khong_co_hanh_dong_khong_dinh_gripper():
+    """ACTION_NONE o diem KHONG phai diem cuoi: ghe roi di tiep, tuyet doi khong lenh gripper.
+
+    Truoc khi sua, ham chi phan hai nhanh (PICKUP / con lai) nen diem nay bi xu ly nhu DROPOFF:
+    log ghi "tha hang" cho mot diem khong tha gi. Giao uoc GCS<->Pi 3.2b cau 3.
+    """
+    fsm = fsm_dang_gap(waypoints=[wp(0, marker=1, action=m.ACTION_NONE), wp(1, marker=0)])
+    act = fsm.step(gap_snap(3.5))
+    assert act.gripper_command == '' and 'khong co hanh dong' in act.detail
+    act = fsm.step(gap_snap(5.5))
+    assert act.gripper_command == ''
+    assert 'tha' not in act.detail and 'gap' not in act.detail    # khong noi doi nua
+    assert fsm.state == m.TAKEOFF and fsm.current_wp_index == 1

@@ -510,6 +510,15 @@ class MissionFsm:
         wp = self.current_waypoint()
         if wp is None:
             return self.transition(EMERGENCY_LAND, now, 'khong con diem nao - ha canh')
+        # ACTION_NONE phai xet RIENG. Truoc day ham chi phan hai nhanh (PICKUP / con lai) nen diem
+        # khong co hanh dong bi xu ly nhu DROPOFF: log ghi "tha hang" cho mot diem khong tha gi.
+        # Khong lenh gripper nao duoc phat (dieu kien xong cua dropoff dung ngay khi khong giu gi)
+        # nen khong gay hai, nhung log noi doi. Giao uoc GCS<->Pi 3.2b cau 3.
+        if wp.action == ACTION_NONE:
+            if self.time_in_state(now) < self.params.pre_dropoff_settle_s:
+                return Action(velocity_up_mps=0.0, detail='giu on dinh (diem khong co hanh dong)')
+            return self._xong_hanh_dong(now, wp, 'ghe')
+
         dong = wp.action == ACTION_PICKUP
         xong = snap.gripper_sensor_confirmed if dong else not snap.gripper_sensor_confirmed
         viec = 'gap' if dong else 'tha'
