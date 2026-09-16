@@ -1064,3 +1064,138 @@ giãn nhịp phát lại, thử lại, hết lượt, còn điểm sau, `~/land`
 3. `send_mission_plan` văng `KeyError` thô khi `action` sai định dạng, thay vì báo lỗi rõ.
 4. Nợ 10.7 còn nguyên: failsafe pin là cấu hình chết, trôi 2,1 m sau failsafe, nợ 8.3 #5.
 5. Phần cứng gripper (pigpio, servo, công tắc, cảm biến lực) vẫn là TODO — chỉ chạy được `simulate`.
+
+---
+
+## Phiên 12 — 16/09/2026
+
+Dựng **hợp đồng GCS ↔ Pi** rồi triển khai theo nó. Người dùng nêu thêm hai ràng buộc: **FC chưa
+gửi telemetry pin** và **chưa có GPS** (khớp thiết kế không GPS sẵn có).
+
+### 12.1 Vì sao phải viết hợp đồng trước khi viết mã
+
+`gcs_link_node` nằm trong repo từ Phiên 1 nhưng **cả bốn hàm chức năng đều là thân rỗng**: không
+mở socket, không giải mã, không watchdog. Đo ngày 16/09: node lên, đăng ký đủ ba topic,
+`ss -ulnp` **không thấy cổng 14550/14551 nào**.
+
+Nguyên nhân gốc không phải thiếu thời gian viết code mà là **chưa ai định nghĩa khung gói trên
+dây**. Nợ này treo từ mục 1.8 #8, qua 11 phiên, vì mỗi lần định làm lại vướng đúng câu hỏi "gói
+tin trông như thế nào".
+
+`docs/GIAO_UOC_GCS_PI.md` trả lời câu đó trước — đúng **bước 3 trong quy trình 8 bước** của hợp
+đồng FC (mục 10.3), bước mà tài liệu đó ghi là *"hay bị bỏ nhất, và là bước đắt nhất khi bỏ"*.
+
+### 12.2 Hai vòng duyệt, sáu lỗi của Pi bị bắt
+
+Hợp đồng đi 0.1 → 0.2 → 0.3 qua hai vòng phía GCS duyệt. **Mỗi vòng bắt được ba lỗi của Pi**, và
+cả sáu đều cùng một loại: **tài liệu nói một đằng, code làm một nẻo** — chỉ lộ ra khi có người đọc
+kỹ từ phía bên kia.
+
+| Lỗi | Nội dung |
+|---|---|
+| **P3** | Quy tắc R2 lẫn *trailing-zero trimming* với `CRC_EXTRA`. Thêm một trường thường làm bên cũ **loại cả gói** vì sai CRC — không phải "bỏ qua phần thừa". Chỉ trường sau `<extensions/>` mới an toàn |
+| **P4** | Chống trùng lệnh theo `(command, confirmation)` **tự triệt tiêu**: cơ chế phát lại chuẩn tăng `confirmation` mỗi lần nên khoá không bao giờ trùng. Phép kiểm A7 lại gửi cùng một `confirmation` nên không bao giờ lộ |
+| **P6** | `HEARTBEAT` không có trường thời gian nên không đo được RTT như đã viết |
+| **P19 ý 3** | `home` của RTH chốt trong khung **chưa neo** → sau khi odom neo, con số đó trỏ sang chỗ khác. Tái hiện: cất cánh lệch `pad_home` 3 m thì **RTH bay về `pad_home` chứ không về điểm cất cánh** |
+| **P20** | "Nằm trên đất thì hai luồng tắt" là giả định không suy ra được từ định nghĩa bit nào, mà GCS lại **cần** vị trí trên đất |
+| **P22** | `alt_m` là so với **tag đích** (`tag_z + alt_m`), không phải điểm cất cánh. **Chú thích trong `MissionWaypoint.msg` cũng sai y vậy** — sai từ trước khi có hợp đồng |
+
+P19 ý 3 nặng nhất vì nó nằm trong **đường thoát hiểm**. Sửa: thêm `bool anchored` vào `EkfHealth`,
+`_step_takeoff` chỉ chốt `home` khi cờ bật. Đo trong Gazebo: neo xảy ra **1,60 s sau khi bắt đầu
+leo** (ước ban đầu ~0,6 s — **số đo thắng**), x/y không đổi tới 0,01 m trong lúc đó nên `home` vẫn
+đúng vài cm; RTH sau khi sửa hạ tại **x = 0,04 / y = −0,01**.
+
+Để kiểm được, mô phỏng phải thêm TF `odom → base_link` và chạy `marker_pose_republisher_node` —
+**node thật, không sửa gì**.
+
+### 12.3 Phía Pi phân giải: 23 đề xuất, không bác cái nào
+
+GCS nêu 17 mục ở vòng 1 và 5 mục ở vòng 2; Pi nêu P18. **Không mục nào bị bác.** Một mục phải sửa
+công thức: P2 (`tagmap_crc`) đúng mục đích nhưng GCS đề nghị đưa `yaw`/`size`/`kind` vào — Pi không
+có `yaw`/`kind`, và `size` của `pad_a` còn là **giả định chưa đo bằng thước** (nợ 6.2 #5). Đưa một
+phỏng đoán vào CRC là khoá cứng nó mãi mãi. Chốt CRC chỉ trên `(tag_id, n_mm, e_mm, d_mm)`.
+
+Câu hỏi P14 của GCS về `action = NONE` **làm lộ một lỗi trong `mission_fsm.py`**:
+`_step_actuate_gripper` chỉ phân hai nhánh nên `ACTION_NONE` bị xử lý như DROPOFF, log ghi *"xong
+**thả** tại tag 1"* cho một điểm không có hành động nào. Không gây hại nhưng **log nói dối**. Cả 8
+test gripper của Phiên 11 đều dùng PICKUP/DROPOFF tường minh nên không bắt được.
+
+Pi nêu thêm **P18** (nhà của RTH ≠ home trên bản đồ GCS) — GCS chọn phương án (a): giữ hành vi, báo
+sự thật qua `home_n_mm`/`home_e_mm`.
+
+### 12.4 Triển khai: 7/8 việc
+
+| # | Việc | Ghi chú |
+|---|---|---|
+| 1 | `docs/mavlink/drone_gcs.xml` | 6 bản tin, `MAV_CMD` 42100, 7 enum. `tools/sinh_dialect.py` sinh module; module **bị gitignore** vì là mã dẫn xuất ~23k dòng — nguồn là XML |
+| 2 | `TelemetryPacket` | kèm hằng số `VALID_*`/`STATUS_*`. `MissionState` thêm `wp_total`, `home_valid`, `home_odom` |
+| 3 | `publish_packet` | thêm `/odometry/filtered` và `/ekf/health`; mỗi nguồn có đồng hồ độ tươi riêng |
+| 4 | `tagmap_crc` | hàm thuần, 6 pytest |
+| 5 | `gcs_link_node` | socket, bắt tay, lệnh, watchdog, hàng đợi ưu tiên. `MissionPlanAck` (message mới) chở phán quyết lên |
+| 6 | `LOCAL_POSITION_NED` + `ATTITUDE` | đo đúng **5,0 Hz** |
+| 7 | `tools/gcs_sim.py` | 179 dòng, đọc chung YAML với `send_mission_plan` |
+| **8** | `PARAM_*` chỉ đọc | **CÒN LẠI** — nên đọc từ node đang giữ qua param client, không nạp lại YAML |
+
+Viết mã còn lộ thêm một lỗ hổng hợp đồng: **mã `ERR_CONTRACT` là mã chết** — nó có từ bản 0.1
+nhưng `contract_ver` chỉ đi chiều Pi→GCS nên **Pi không có đường nào biết phiên bản của GCS**. Đã
+thêm `contract_ver` vào `DRONE_MISSION_COUNT`, sau `<extensions/>`; `crc_extra` giữ nguyên 148.
+
+### 12.5 Nghiệm thu 10.A: 14 đạt, 4 chưa chạy
+
+A1–A10, A12, A13, A14, A15(a) đạt. Chưa chạy: **A11** (nghẽn), **A15(b)**, **A16**, **A17**.
+
+Vài kết quả: `ERR_UNKNOWN_TAG` mang chuỗi lý do của `mission_manager_node` — cắt 50 byte trong ACK
+nhưng **chia đoạn đầy đủ qua STATUSTEXT**. A7 cho `ACCEPTED` cả ba lần với `confirmation` 0/1/2.
+ARM trả `DENIED` không `UNSUPPORTED`. Mất liên kết → `connected = false` sau ~4–5 s, đúng ngưỡng.
+
+**Quy tắc R2 nay có bằng chứng số**, A13/A14 là pytest thường trực:
+
+```
+CRC_EXTRA gốc                    : 14
+thêm trường SAU  <extensions/>   : 14   -> giữ nguyên, bên cũ đọc được
+thêm trường TRƯỚC <extensions/>  : 153  -> bên cũ loại CẢ GÓI
+```
+
+**Ba lỗi do chính nghiệm thu tìm ra**, cả ba đều thuộc loại "trông như chạy được":
+
+1. **`seq` MAVLink không bao giờ tăng.** `msg.pack(mav)` của pymavlink **không** tăng `seq` — việc
+   đó nằm trong `MAVLink.send()`. Mọi gói mang `seq = 0` nên bộ đếm mất gói của **cả hai phía**
+   thành vô nghĩa: báo mất **4845 gói trong 14 s**. Tức `DRONE_LINK_STATS`, thứ mục 7.4 dựng ra để
+   "biến đường truyền tệ thành con số", sẽ nói dối ngay từ ngày đầu.
+2. **GCS quên phát `HEARTBEAT`.** Mục 5.1 ghi hai chiều nhưng `gcs_sim` chỉ nghe. Watchdog của Pi
+   dựa vào gói **nhận được** nên `/gcs_link/connected` **không bao giờ lên true** → failsafe mất
+   GCS bật vĩnh viễn dù liên kết hoàn hảo. Bẫy mà bên nào làm GCS thật cũng dễ mắc.
+3. **Phép kiểm A14 tự bắt lỗi của chính nó**: nó neo vào `<extensions/>` *đầu tiên* trong file, mà
+   từ lúc thêm `contract_ver` thì thẻ đó thuộc `DRONE_MISSION_COUNT`. Test đo sai bản tin và sẽ
+   "đạt" mà không kiểm gì. Đã neo lại vào chuỗi duy nhất.
+
+### 12.6 Hai bài học về công cụ
+
+**`str.replace()` không khớp thì âm thầm không làm gì.** Dòng trạng thái đầu hợp đồng vẫn ghi *"Bản
+thảo 0.2 — còn P19–P23 chờ Pi"* sau khi đã lên 0.3, vì tôi thay bằng chuỗi cũ mà GCS đã viết lại từ
+commit trước. Phía GCS phát hiện, không phải tôi. **Từ giờ `assert` mọi phép thay thế trong tài
+liệu**, kể cả chỗ tưởng chắc chắn.
+
+**Phân nhánh git là bình thường, không phải hỏng.** Sau khi push hợp đồng 0.3, GCS pull về, duyệt
+rồi push; Pi vẫn commit tiếp ở máy — thành `ahead 2, behind 1`. Xử lý: `git rebase origin/main`,
+sạch không xung đột vì hai bên sửa hai chỗ khác nhau trong cùng file. Chọn rebase chứ không merge
+vì lịch sử repo tuyến tính từ đầu, và hai commit chưa từng push nên viết lại là an toàn — **không
+cần force-push**.
+
+### 12.7 Việc còn nợ
+
+1. **Việc 8**: `PARAM_REQUEST_LIST`/`PARAM_VALUE` chỉ đọc (mục 9.4 hợp đồng).
+2. **Nghiệm thu 10.A còn 4 phép kiểm**: A11 (nghẽn), A15(b), A16, A17. **1.0 là bản đầu tiên đi qua
+   toàn bộ 10.A** — hợp đồng vẫn giữ 0.3, chưa mục nào [CHỐT].
+3. **10.B** — chạy trong Gazebo: cần thêm `gcs_link_node` và `telemetry_aggregator_node` vào
+   `sim_mission.launch.py`, rồi nạp kế hoạch **qua dây** và `MISSION_START`.
+4. **10.C** — qua 4G thật, cần modem và GCS có điểm cuối ổn định.
+5. **Chữ ký gói MAVLink 2 (mục 7.6)** chưa hiện thực. UDP thuần trên 4G công cộng nghĩa là bất cứ
+   ai biết `IP:port` đều gửi được lệnh, trong đó có `disarm`. Nợ an toàn, khác nợ tính năng ở chỗ
+   nó không gây bất tiện gì cho tới lúc gây thiệt hại.
+6. **Hai failsafe vẫn là cấu hình chết**: pin (FC chưa gửi `BATTERY_STATUS`) và mất GCS (nay đã có
+   node phát `/gcs_link/connected`, nhưng chỉ chạy khi `gcs_link_node` chạy).
+7. Nợ cũ còn nguyên: `marker_quality_node`, phần cứng gripper, đo τ vòng vận tốc FC, ưu tiên thời
+   gian thực (6.2 #1), `estimation.launch.py` tự bật MAVROS, trôi 2,1 m sau failsafe (10.7 #2).
+
+**Pytest 160/160.** Mốc các phiên: Phiên 9 **126** · Phiên 10 **133** · Phiên 11 **141** (thêm 8 test gripper) · Phiên 12 **160** (thêm 1 test `ACTION_NONE`, 2 test neo `home`, 6 test `tagmap_crc`, 2 test tương thích dialect A13/A14).
