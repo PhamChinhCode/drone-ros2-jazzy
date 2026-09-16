@@ -90,3 +90,22 @@ def marker_republisher():
                 name='marker_pose_republisher_node',
                 parameters=[os.path.join(CONFIG, 'estimation.yaml'), TAGS_YAML, SIM_TIME],
                 output='screen')
+
+
+def telemetry_aggregator():
+    """Node that. tags.yaml BAT BUOC: thieu no thi tagmap_crc = 0 va GCS khoa nap ke hoach."""
+    return Node(package='drone_comms', executable='telemetry_aggregator_node',
+                name='telemetry_aggregator_node',
+                parameters=[os.path.join(CONFIG, 'comms.yaml'), TAGS_YAML, SIM_TIME],
+                output='screen')
+
+
+def gcs_link():
+    """Node that. Mo phong chay tren cung may nen gcs_host = 127.0.0.1 (mac dinh comms.yaml)."""
+    return Node(package='drone_comms', executable='gcs_link_node', name='gcs_link_node',
+                parameters=[os.path.join(CONFIG, 'comms.yaml'),
+                            # Mo phong chay tren loopback cua CHINH may nay - mang kin theo dung
+                            # nghia den nhat, nen tat chu ky de khong bat moi nguoi tao khoa truoc
+                            # khi chay thu. Drone that lay signing_required = true tu comms.yaml.
+                            {'signing_required': False},
+                            SIM_TIME], output='screen')

@@ -64,10 +64,16 @@ def ten_co(gia_tri, bang):
 
 class GcsSim:
 
-    def __init__(self, dich, cong_nghe, ver=CONTRACT_VER):
+    def __init__(self, dich, cong_nghe, ver=CONTRACT_VER, khoa=None):
         self.ver = ver
         self.ml = d.MAVLink(None, srcSystem=SYSID_GCS, srcComponent=COMPID_GCS)
         self.ml.robust_parsing = True
+        if khoa:
+            self.ml.signing.secret_key = khoa
+            self.ml.signing.link_id = 0
+            self.ml.signing.timestamp = 0
+            self.ml.signing.sign_outgoing = True
+            self.ml.signing.allow_unsigned_callback = lambda _m, _i: False
         self.s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.s.setblocking(False)
         self.s.bind(('0.0.0.0', cong_nghe))
@@ -184,6 +190,10 @@ def main():
     ap.add_argument('--cmd', choices=sorted(LENH))
     ap.add_argument('--raw-cmd', type=int, help='gui MAV_CMD bat ky (kiem A6: lenh la)')
     ap.add_argument('--lan', type=int, default=1, help='so lan gui lenh, confirmation 0,1,2... (A7)')
+    ap.add_argument('--cmd2', choices=sorted(LENH), help='lenh thu hai, gui o giay --cmd2-luc')
+    ap.add_argument('--cmd2-luc', type=float, default=20.0, help='giay de gui --cmd2')
+    ap.add_argument('--khoa', default='~/.drone_gcs_key',
+                    help='tep khoa chu ky (muc 7.6); --khoa "" de chay khong chu ky')
     ap.add_argument('--ver', type=int, default=CONTRACT_VER,
                     help='contract_ver gui trong COUNT (kiem A12: lech MAJOR)')
     ap.add_argument('--giay', type=float, default=15.0, help='chay bao lau roi thoat')
@@ -191,11 +201,21 @@ def main():
                     help='KHONG gui diem so N (kiem A4/A5: Pi phai hoi lai roi ERR_TIMEOUT)')
     a = ap.parse_args()
 
-    g = GcsSim((a.host, a.port), a.listen, a.ver)
+    khoa = None
+    if a.khoa:
+        duong = os.path.expanduser(a.khoa)
+        if os.path.isfile(duong):
+            khoa = open(duong, 'rb').read().strip()
+            if len(khoa) != 32:
+                sys.exit(f'khoa {duong} phai dung 32 byte')
+            print(f'chu ky goi DA BAT (khoa {duong})')
+        else:
+            print(f'khong thay khoa {duong} - chay KHONG chu ky')
+    g = GcsSim((a.host, a.port), a.listen, a.ver, khoa)
     g.bo_diem = a.bo_diem
     print(f'gcs_sim: nghe :{a.listen}, gui toi {a.host}:{a.port}')
     t0 = time.monotonic()
-    da_nap = da_lenh = False
+    da_nap = da_lenh = da_lenh2 = False
     while time.monotonic() - t0 < a.giay:
         g.heartbeat()
         g.doc()
@@ -207,6 +227,9 @@ def main():
                 and (not a.plan or g.xong_nap is not None):
             g.gui_lenh(a.cmd, a.lan, a.raw_cmd)
             da_lenh = True
+        if a.cmd2 and not da_lenh2 and dt > a.cmd2_luc:
+            g.gui_lenh(a.cmd2)
+            da_lenh2 = True
         time.sleep(0.02)
     print(f'--- ket thuc: rx_ok {g.rx_ok}, rx_drop {g.rx_drop}')
 

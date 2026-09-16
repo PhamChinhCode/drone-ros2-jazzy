@@ -115,6 +115,9 @@ class MissionManagerNode(Node):
         # Cat canh = ARM roi leo; KHONG co lenh cat canh o FC (5.1). Ha canh xong tu DISARM thuong.
         self.create_service(Trigger, '~/start', self.on_start)
         self.create_service(Trigger, '~/land', self.on_land)
+        # Hai service cho gcs_link_node dich MAV_CMD 20 va 42100 (giao uoc GCS muc 4.1).
+        self.create_service(Trigger, '~/rth', self.on_rth)
+        self.create_service(Trigger, '~/abort', self.on_abort)
 
         # Moi lenh xuong FC deu di qua fc_command_bridge_node, khong goi MAVROS truc tiep.
         self.cli_arm = self.create_client(Arm, '/fc_command_bridge_node/arm')
@@ -168,6 +171,24 @@ class MissionManagerNode(Node):
         self.fsm.request_land()
         response.success, response.message = True, 'nhan yeu cau ha canh'
         self.get_logger().info(f'~/land: {response.message}')
+        return response
+
+    def on_rth(self, request, response):
+        """MAV_CMD_NAV_RETURN_TO_LAUNCH. Tu choi SOM neu chua biet nha, khong nhan roi im lang."""
+        del request
+        ly_do = self.fsm.request_rth()
+        response.success = not ly_do
+        response.message = ly_do or 'nhan yeu cau ve nha'
+        (self.get_logger().warning if ly_do else self.get_logger().info)(f'~/rth: {response.message}')
+        return response
+
+    def on_abort(self, request, response):
+        """MAV_CMD_DRONE_ABORT_MISSION. KHONG bao gio tu choi - huy phai luon di duoc."""
+        del request
+        self.fsm.request_abort()
+        response.success = True
+        response.message = 'nhan yeu cau huy nhiem vu'
+        self.get_logger().warning('~/abort: nhan yeu cau huy nhiem vu')
         return response
 
     def on_landing_target_pose(self, msg):

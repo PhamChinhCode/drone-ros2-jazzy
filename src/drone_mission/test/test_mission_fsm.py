@@ -679,3 +679,74 @@ def test_neo_muon_trong_luc_leo_van_chot_duoc_nha():
     assert fsm.home is None
     fsm.step(snap(0.9, armed=True, range_m=0.4, position=(2.0, 1.0, 0.4), pos_anchored=True))
     assert fsm.home == (2.0, 1.0, 0.4), 'neo trong luc leo thi van phai chot duoc nha'
+
+
+# ------------------------------------------------- lenh tu GCS (giao uoc GCS muc 4.1)
+
+def test_rth_tu_gcs_khi_chua_biet_nha_bi_tu_choi_SOM():
+    """Tu choi som, khong nhan roi im lang ha canh tai cho: nguoi van hanh bam "ve nha" ma drone
+    ha xuong cho la la kieu bat ngo te nhat."""
+    fsm = fsm_dang_treo([wp(0, marker=1)])
+    fsm.step(snap(0.6, armed=True, range_m=1.0, position=None))   # chua neo -> home = None
+    assert fsm.home is None
+    ly_do = fsm.request_rth()
+    assert ly_do and 'chua biet nha' in ly_do
+    assert fsm.rth_requested is False
+
+
+def test_rth_tu_gcs_khi_da_biet_nha():
+    fsm = fsm_dang_bay_toi_diem()
+    assert fsm.request_rth() == ''
+    fsm.step(snap(1.0, armed=True, range_m=2.0, position=(3.0, 0.0, 2.0)))
+    assert fsm.state == m.RTH
+
+
+def test_rth_khi_idle_bi_tu_choi():
+    fsm = m.MissionFsm()
+    assert 'IDLE' in fsm.request_rth()
+
+
+def test_abort_khi_dang_bay_thi_bo_ke_hoach_roi_ha_canh():
+    fsm = fsm_dang_bay_toi_diem()
+    fsm.request_abort()
+    fsm.step(snap(1.0, armed=True, range_m=2.0, position=(3.0, 0.0, 2.0)))
+    assert fsm.state == m.EMERGENCY_LAND
+    assert fsm.waypoints == [], 'phai bo ke hoach TRUOC khi ha, de cham dat khong di tiep diem nao'
+
+
+def test_abort_khi_da_disarm_thi_ve_idle_qua_failsafe():
+    """IDLE khong nam trong bang chuyen cua ENROUTE, va da disarm ma con o trang thai bay la
+    BAT THUONG - FAILSAFE la duong danh cho bat thuong va tu ve IDLE khi thay khong armed."""
+    fsm = fsm_dang_bay_toi_diem()
+    fsm.request_abort()
+    fsm.step(snap(1.0, armed=False, range_m=0.1, position=(3.0, 0.0, 0.1)))
+    assert fsm.state == m.FAILSAFE and fsm.waypoints == []
+    fsm.step(snap(1.2, armed=False, range_m=0.1, position=(3.0, 0.0, 0.1)))
+    assert fsm.state == m.IDLE
+
+
+def test_abort_khi_dang_idle_chi_bo_ke_hoach():
+    fsm = m.MissionFsm()
+    fsm.load_plan(1, [wp(0, marker=1)], 0, 0.0, TAGS)
+    assert len(fsm.waypoints) == 1
+    fsm.request_abort()
+    fsm.step(snap(1.0, armed=False))
+    assert fsm.state == m.IDLE and fsm.waypoints == []
+
+
+def test_abort_khong_bao_gio_bi_tu_choi():
+    """Huy phai luon di duoc, ke ca khi FSM dang o trang thai la."""
+    fsm = m.MissionFsm()
+    fsm.request_abort()
+    assert fsm.abort_requested is True
+
+
+def test_abort_xong_thi_bao_MISSION_COMPLETE_chu_khong_FAILSAFE():
+    """Lenh huy hoan thanh dung phai hien MISSION_COMPLETE. Giu abort_requested sau khi da vao
+    duong ha canh se chan duong do va bat GCS hien FAILSAFE oan."""
+    fsm = fsm_dang_bay_toi_diem()
+    fsm.request_abort()
+    fsm.step(snap(1.0, armed=True, range_m=2.0, position=(3.0, 0.0, 2.0)))
+    assert fsm.state == m.EMERGENCY_LAND and fsm.abort_requested is False
+    fsm.step(snap(2.0, armed=False, range_m=0.1, landed=True, position=(3.0, 0.0, 0.1)))
+    assert fsm.state == m.MISSION_COMPLETE

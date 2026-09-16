@@ -207,6 +207,8 @@ class MissionFsm:
     last_fc_command_s: float = None
     start_requested_s: float = None   # thoi diem nhan yeu cau cat canh; None = khong co
     land_requested: bool = False
+    rth_requested: bool = False       # GCS yeu cau ve nha (MAV_CMD 20)
+    abort_requested: bool = False     # GCS huy nhiem vu (MAV_CMD 42100)
     mission_id: int = 0
     max_retries: int = None           # cua ke hoach dang nap; None = dung params
     # Vi tri (x, y, z) trong odom luc bat dau cat canh = "nha". Khong co GPS nen day chinh la
@@ -254,6 +256,27 @@ class MissionFsm:
     def request_land(self):
         self.land_requested = True
 
+    def request_rth(self):
+        """GCS yeu cau ve nha. Tra ly do tu choi, '' neu nhan.
+
+        Tu choi SOM khi chua biet nha, thay vi nhan roi im lang ha canh tai cho: nguoi van hanh
+        bam "ve nha" ma drone ha xuong cho la la kieu bat ngo te nhat. Nha chi co khi da cat canh
+        VA odom da neo theo bang tag (giao uoc GCS 5.2b y 4).
+        """
+        if self.state == IDLE:
+            return 'dang IDLE, khong co gi de ve'
+        if self.home is None:
+            return 'chua biet nha (odom chua neo luc cat canh) - dung ~/land de ha tai cho'
+        self.rth_requested = True
+        return ''
+
+    def request_abort(self):
+        """GCS huy nhiem vu: bo ke hoach, ha canh neu dang bay, ve IDLE.
+
+        KHONG tu choi bao gio - huy phai luon di duoc, ke ca khi FSM dang o trang thai la.
+        """
+        self.abort_requested = True
+
     def transition(self, new_state, now_s, detail=''):
         """Chuyen trang thai co kiem tra bang TRANSITIONS - chan chuyen sai tu som."""
         if new_state not in TRANSITIONS[self.state]:
@@ -270,6 +293,9 @@ class MissionFsm:
             self.start_requested_s = None
         if new_state in (EMERGENCY_LAND, IDLE):
             self.land_requested = False
+            self.rth_requested = False
+        if new_state == IDLE:
+            self.abort_requested = False
         return Action(detail=detail)
 
     def time_in_state(self, now_s):
@@ -343,6 +369,32 @@ class MissionFsm:
                               detail='failsafe LOITER - giu vi tri, cho het su co')
             # Het su co hoac lay lai quyen: KHONG tu tiep tuc nhiem vu - ha canh.
             return self.transition(EMERGENCY_LAND, now, 'het su co / lay lai quyen - ha canh')
+
+        # Huy nhiem vu manh hon ha canh: bo ke hoach TRUOC roi moi ha, de khi cham dat FSM
+        # khong tu di tiep diem nao. Dat truoc land_requested vi abort bao gom ca ha canh.
+        if self.abort_requested:
+            self.waypoints = []
+            self.current_wp_index = 0
+            self.start_requested_s = None
+            if not snap.armed:
+                if self.state == IDLE:
+                    self.abort_requested = False
+                    return Action(detail='huy nhiem vu - da bo ke hoach')
+                # Da disarm ma con o trang thai bay la BAT THUONG, va FAILSAFE la duong danh cho
+                # bat thuong: no tu ve IDLE ngay chu ky sau khi thay khong armed. IDLE khong nam
+                # trong bang chuyen cua ENROUTE/TAKEOFF nen khong di thang duoc.
+                if FAILSAFE in TRANSITIONS[self.state]:
+                    return self.transition(FAILSAFE, now, 'huy nhiem vu khi da disarm')
+                return Action(detail='huy nhiem vu - da bo ke hoach')
+            if self.state != EMERGENCY_LAND and EMERGENCY_LAND in TRANSITIONS[self.state]:
+                # Xoa co NGAY khi da vao duong ha canh: ke hoach da bo nen khong con gi de huy,
+                # va giu co lai se chan duong EMERGENCY_LAND -> MISSION_COMPLETE binh thuong,
+                # bat GCS hien FAILSAFE cho mot lenh huy hoan thanh dung.
+                self.abort_requested = False
+                return self.transition(EMERGENCY_LAND, now, 'huy nhiem vu - ha canh')
+
+        if (self.rth_requested and snap.armed and self.state not in (RTH, EMERGENCY_LAND)):
+            return self._vao_rth(snap, now, 'GCS yeu cau ve nha')
 
         if (self.land_requested and snap.armed and self.state != EMERGENCY_LAND
                 and EMERGENCY_LAND in TRANSITIONS[self.state]):

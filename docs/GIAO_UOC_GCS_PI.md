@@ -718,7 +718,7 @@ trước, kèm timestamp chống phát lại). Hợp đồng đề xuất:
 
 | Hạng mục | Giá trị |
 |---|---|
-| Trạng thái | **[THOẢ THUẬN]** — hai bên đồng ý cơ chế, chưa hiện thực ở bên nào |
+| Trạng thái | **[THOẢ THUẬN]** — Pi **đã hiện thực và kiểm ba tình huống** (10.B); phía GCS chưa |
 | Khi nào bắt buộc | trước **mọi** chuyến bay ngoài mạng kín |
 | Gói không có chữ ký / sai chữ ký | **bỏ ngay**, tăng `rx_bad_sig`, **không xử lý lệnh** |
 | Khoá | không bao giờ commit vào repo; nằm ở file ngoài, quyền `600` |
@@ -1140,6 +1140,43 @@ Thêm điều kiện: `sim_mission.launch.py`. Kiểm hợp đồng trong ngữ 
 | B3 | Cắt liên kết giữa ENROUTE | sau 15 s tổng → RTH tự động (A9 + leo thang) |
 | B4 | `DRONE_ABORT_MISSION` giữa PRECISION_LAND | hạ cánh, về `IDLE`, kế hoạch bị xoá |
 | B5 | Đọc `DRONE_LINK_STATS` suốt chuyến | `rx_drop` = 0 trên loopback; `rtt_ms` < 5 ms |
+
+**Kết quả chạy 2026-09-16 (Gazebo, toàn bộ qua dây):**
+
+| Phép kiểm | Kết quả |
+|---|---|
+| B1 nạp kế hoạch qua dây rồi `MISSION_START` | **đạt** — nhiệm vụ 2 chặng chạy hết: gắp tag 1 → thả tag 0 → DISARM. `rx_drop 0` trên 888 gói |
+| B2 `NAV_RETURN_TO_LAUNCH` giữa ENROUTE | **đạt** — `ACCEPTED` → FSM vào RTH → về nhà → hạ |
+| B3 cắt liên kết giữa chuyến bay | **đạt** — `MAT KET NOI` sau 5 s, `FAILSAFE 3` sau 10 s nữa (đo 37,8 s), FSM hạ cánh |
+| B4 `DRONE_ABORT_MISSION` giữa chừng | **đạt** — `wp_total` 1 → **0** (kế hoạch bị bỏ), hạ cánh, về IDLE |
+| B5 `DRONE_LINK_STATS` | **một nửa** — `rx_drop` = 0 ✅; `rtt_ms` = `UINT32_MAX` vì **`TIMESYNC` chưa hiện thực** |
+
+**Cờ telemetry kể đúng câu chuyện trong B1**: `HOME` xuất hiện khi odom đã neo, `CARRYING` xuất hiện
+**đúng khoảng giữa gắp và thả**, `POS` xuất hiện khi đã neo.
+
+**Chữ ký gói (7.6) đã hiện thực và kiểm ba tình huống:**
+
+| Tình huống | Kết quả |
+|---|---|
+| Thiếu khoá mà `signing_required = true` | node **từ chối khởi động** kèm hướng dẫn — không tự hạ xuống chạy không chữ ký |
+| Hai bên cùng khoá | lệnh đi được, có `COMMAND_ACK` |
+| Bên gửi không ký | Pi **bỏ gói**, không `ACK`, lệnh không được thi hành (đây là C4 trên loopback) |
+
+**Hai lỗi do chính nghiệm thu 10.B tìm ra:**
+
+1. **Năm lệnh trả `ACCEPTED` nhưng không làm gì.** `gcs_link_node` chỉ ACK rồi ghi log *"chuyển cho
+   FSM chưa hiện thực"*. Người vận hành bấm "hạ cánh", GCS hiện "đã chấp nhận", drone bay tiếp —
+   **đúng kiểu lỗi hợp đồng gọi tên ở mục 4.1** (*"không bao giờ im lặng"*), chỉ khác là nó nói dối
+   thay vì im. Nay cả năm gọi service thật và ACK theo **kết quả thật**; service chưa sẵn sàng thì
+   trả `TEMPORARILY_REJECTED` để GCS phát lại, không trả `ACCEPTED`.
+2. **`tagmap_crc` sẽ bằng 0 trên drone thật.** `full_system.launch.py` không truyền `tags.yaml` cho
+   `telemetry_aggregator_node`, nên `known_tags` không khai báo và CRC = 0 — mà 8.6 quy định GCS
+   **khoá nạp kế hoạch** khi CRC lệch. Lỗi một dòng launch, chặn toàn bộ nghiệp vụ, và **không bao
+   giờ lộ trong thử nghiệm** vì thử nghiệm luôn truyền `tags.yaml` bằng tay.
+
+Ngoài ra: kênh `NAMED_VALUE_INT` ghép 8 tên vào một topic, mà `telemetry_aggregator_node` subscribe
+bằng hàng đợi **depth 1** — `OB_AUTH` là tên **đầu** trong chùm nên bị rớt gần như mọi lần, khiến bit
+`PI_HAS_AUTHORITY` hầu như không bao giờ bật. Đã sửa thành depth 20 cho khớp bên phát.
 
 ### 10.C — Qua 4G thật
 

@@ -23,11 +23,13 @@ import rclpy
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from std_msgs.msg import Bool
+from std_srvs.srv import Trigger
 
 from drone_comms.qos import EVENT_QOS, SENSOR_QOS
 from drone_comms.tagmap import to_ascii
 from drone_interfaces.msg import (MissionPlan, MissionPlanAck, MissionWaypoint,
                                   TelemetryPacket)
+from drone_interfaces.srv import EmergencyDisarm
 
 PRIORITY_EMERGENCY = 0
 PRIORITY_MISSION = 1
@@ -46,7 +48,9 @@ KHONG_DO_DUOC_16 = 0xFFFF
 CMD_NAV_RTL, CMD_NAV_LAND, CMD_MISSION_START = 20, 21, 300
 CMD_ARM_DISARM, CMD_PAUSE_CONTINUE, CMD_ABORT = 400, 193, 42100
 LENH_KHAN = (CMD_NAV_RTL, CMD_NAV_LAND, CMD_ARM_DISARM, CMD_ABORT)
-ACK_ACCEPTED, ACK_DENIED, ACK_UNSUPPORTED = 0, 2, 3
+ACK_ACCEPTED, ACK_TEMP_REJECTED, ACK_DENIED, ACK_UNSUPPORTED, ACK_FAILED = 0, 1, 2, 3, 4
+# fc_command_bridge_node tu dien param2 = 21196 (cat o moi do cao, giao uoc FC 6.2);
+# gcs_link_node chi noi LY DO de log nghiep vu truy duoc ai ra lenh.
 
 
 class GcsLinkNode(Node):
@@ -60,6 +64,10 @@ class GcsLinkNode(Node):
         self.declare_parameter('link_timeout_s', 5.0)
         self.declare_parameter('heartbeat_interval_s', 1.0)
         self.declare_parameter('contract_major', 0)
+        # Chu ky goi (muc 7.6). MAC DINH BAT: UDP thuan tren 4G cong cong nghia la bat cu ai biet
+        # IP:port deu gui duoc lenh cho drone, trong do co DISARM. Tat chi duoc phep trong mang kin.
+        self.declare_parameter('signing_required', True)
+        self.declare_parameter('signing_key_file', '~/.drone_gcs_key')
 
         try:
             from drone_comms import dialect_gcs
@@ -71,6 +79,7 @@ class GcsLinkNode(Node):
         self.ml = dialect_gcs.MAVLink(None, srcSystem=SYSID_PI, srcComponent=COMPID_PI)
         self.ml.robust_parsing = True
         self.d = dialect_gcs
+        self.co_chu_ky = self.bat_chu_ky()
 
         # PriorityQueue: so nho hon di truoc, nen lenh khan luon vuot len truoc telemetry.
         self.tx_queue = queue.PriorityQueue()
@@ -88,6 +97,17 @@ class GcsLinkNode(Node):
 
         self.odom = None
         self.pos_valid = False             # lay tu valid_flags cua goi telemetry moi nhat
+        # Moi lenh o muc 4.1 phai co duong THI HANH, khong chi tra ACK. Tra ACCEPTED ma khong
+        # lam gi la kieu loi nguy hiem nhat: nguoi van hanh bam "ha canh", GCS hien "da chap
+        # nhan", drone bay tiep.
+        self.dich_vu = {
+            CMD_MISSION_START: self.create_client(Trigger, '/mission_manager_node/start'),
+            CMD_NAV_LAND: self.create_client(Trigger, '/mission_manager_node/land'),
+            CMD_NAV_RTL: self.create_client(Trigger, '/mission_manager_node/rth'),
+            CMD_ABORT: self.create_client(Trigger, '/mission_manager_node/abort'),
+        }
+        self.cli_disarm = self.create_client(
+            EmergencyDisarm, '/fc_command_bridge_node/emergency_disarm')
         self.nap = None                    # luot nap ke hoach dang chay
         self.cho_ack = None                # mission_id dang cho mission_manager phan quyet
 
@@ -108,6 +128,40 @@ class GcsLinkNode(Node):
         self.get_logger().info(
             f"lang nghe UDP :{self.get_parameter('local_port').value}, goi ra "
             f"{self.get_parameter('gcs_host').value}:{self.get_parameter('gcs_port').value}")
+
+    def bat_chu_ky(self):
+        """Bat chu ky goi MAVLink 2 (HMAC-SHA256, khoa 32 byte chia se truoc).
+
+        Thieu khoa ma signing_required = true thi TU CHOI KHOI DONG, khong tu ha xuong khong
+        chu ky: mot kenh dieu khien mo ma van chay binh thuong la kieu hong khong ai phat hien
+        cho toi luc co nguoi loi dung. Muon chay trong mang kin thi phai TU TAY dat
+        signing_required = false - mot quyet dinh co nguoi chiu trach nhiem.
+        """
+        import os
+        bat_buoc = self.get_parameter('signing_required').value
+        duong = os.path.expanduser(self.get_parameter('signing_key_file').value)
+        if not os.path.isfile(duong):
+            if bat_buoc:
+                raise RuntimeError(
+                    f'signing_required = true nhung khong thay khoa {duong}. '
+                    'Tao bang: python3 tools/tao_khoa_gcs.py  |  '
+                    'Hoac dat signing_required:=false NEU dang chay trong mang kin.')
+            self.get_logger().warning(
+                'CHAY KHONG CHU KY - chi duoc phep trong mang kin. Bat cu ai biet IP:port deu '
+                'gui duoc lenh, ke ca DISARM (muc 7.6).')
+            return False
+        with open(duong, 'rb') as f:
+            khoa = f.read().strip()
+        if len(khoa) != 32:
+            raise RuntimeError(f'khoa {duong} phai dung 32 byte, dang co {len(khoa)}')
+        self.ml.signing.secret_key = khoa
+        self.ml.signing.link_id = 0
+        self.ml.signing.timestamp = 0
+        self.ml.signing.sign_outgoing = True
+        # Goi khong chu ky bi BO, khong xu ly - ke ca lenh (muc 7.6).
+        self.ml.signing.allow_unsigned_callback = lambda _ml, _id: False
+        self.get_logger().info(f'chu ky goi DA BAT (khoa {duong})')
+        return True
 
     # ------------------------------------------------------------------ gui
 
@@ -209,7 +263,8 @@ class GcsLinkNode(Node):
         self.enqueue(PRIORITY_TELEMETRY, self.d.MAVLink_drone_link_stats_message(
             rx_ok=self.dem['rx_ok'], rx_drop=self.dem['rx_drop'],
             rx_bad_crc=self.dem['rx_bad_crc'],
-            rx_bad_sig=KHONG_DO_DUOC_32,        # chua bat chu ky goi (muc 7.6)
+            rx_bad_sig=(self.ml.signing.badsig_count if self.co_chu_ky
+                        else KHONG_DO_DUOC_32),   # khong bat chu ky = khong do duoc
             tx_sent=self.dem['tx_sent'], tx_dropped=self.dem['tx_dropped'],
             queue_depth=self.tx_queue.qsize(),
             rtt_ms=KHONG_DO_DUOC_16))           # TIMESYNC chua hien thuc
@@ -392,8 +447,60 @@ class GcsLinkNode(Node):
         if c not in (CMD_NAV_RTL, CMD_NAV_LAND, CMD_MISSION_START, CMD_ARM_DISARM, CMD_ABORT):
             self.ack_lenh(c, ACK_UNSUPPORTED)      # lenh la -> UNSUPPORTED, khong bao gio im lang
             return
-        self.ack_lenh(c, ACK_ACCEPTED)
-        self.get_logger().info(f'nhan lenh {c} -> ACCEPTED (chuyen cho FSM chua hien thuc)')
+        if c == CMD_ARM_DISARM:
+            self.goi_disarm(c)
+            return
+        self.goi_trigger(c, self.dich_vu[c])
+
+    def goi_trigger(self, command, cli):
+        """Goi service Trigger khong chan, ACK theo ket qua THAT.
+
+        Service chua san sang -> TEMPORARILY_REJECTED chu khong ACCEPTED: GCS phat lai (muc 4.2)
+        va nguoi van hanh biet lenh chua toi dich.
+        """
+        if not cli.service_is_ready():
+            self.ack_lenh(command, ACK_TEMP_REJECTED)
+            self.statustext(4, f'lenh {command}: {cli.srv_name} chua san sang')
+            return
+        fut = cli.call_async(Trigger.Request())
+        fut.add_done_callback(lambda f: self.xong_trigger(command, f))
+
+    def xong_trigger(self, command, fut):
+        try:
+            kq = fut.result()
+        except Exception as e:
+            self.ack_lenh(command, ACK_FAILED)
+            self.statustext(3, f'lenh {command} loi: {e}')
+            return
+        self.ack_lenh(command, ACK_ACCEPTED if kq.success else ACK_DENIED)
+        if kq.success:
+            self.get_logger().info(f'lenh {command} -> ACCEPTED: {kq.message}')
+        else:
+            # Ly do tu choi la thu nguoi van hanh can nhat, chuyen nguyen van len.
+            self.statustext(4, f'lenh {command} bi tu choi: {kq.message}')
+            self.get_logger().warning(f'lenh {command} -> DENIED: {kq.message}')
+
+    def goi_disarm(self, command):
+        """DISARM khan: param2 = 21196 la cat o MOI do cao (giao uoc FC 6.2)."""
+        if not self.cli_disarm.service_is_ready():
+            self.ack_lenh(command, ACK_TEMP_REJECTED)
+            self.statustext(4, 'lenh disarm: fc_command_bridge_node chua san sang')
+            return
+        req = EmergencyDisarm.Request()
+        req.reason = 'GCS yeu cau disarm khan'
+        fut = self.cli_disarm.call_async(req)
+        fut.add_done_callback(lambda f: self.xong_disarm(command, f))
+
+    def xong_disarm(self, command, fut):
+        try:
+            kq = fut.result()
+        except Exception as e:
+            self.ack_lenh(command, ACK_FAILED)
+            self.statustext(3, f'disarm loi: {e}')
+            return
+        self.ack_lenh(command, ACK_ACCEPTED if kq.success else ACK_DENIED)
+        muc = 2 if kq.success else 4        # CRITICAL: disarm khan di o hang doi uu tien 0
+        self.statustext(muc, f'disarm: {kq.message}')
 
     # ------------------------------------------------------------------ watchdog (muc 9.2)
 

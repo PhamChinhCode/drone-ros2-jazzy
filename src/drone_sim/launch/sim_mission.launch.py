@@ -21,9 +21,9 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
-from drone_sim.sim_launch import (controller_node, gazebo, gripper_node, gz_bridge,
-                                  landing_bridge, marker_republisher, sim_fc_bridge,
-                                  sim_tag)
+from drone_sim.sim_launch import (controller_node, gazebo, gcs_link, gripper_node,
+                                  gz_bridge, landing_bridge, marker_republisher,
+                                  sim_fc_bridge, sim_tag, telemetry_aggregator)
 
 CONFIG = os.path.join(get_package_share_directory('drone_bringup'), 'config')
 SIM_TIME = {'use_sim_time': True}
@@ -48,6 +48,8 @@ def generate_launch_description():
         landing_bridge(),
         marker_republisher(),
         gripper_node(),
+        telemetry_aggregator(),
+        gcs_link(),
         Node(package='drone_mission', executable='fc_command_bridge_node',
              name='fc_command_bridge_node',
              parameters=[os.path.join(CONFIG, 'mission.yaml'), SIM_TIME], output='screen'),

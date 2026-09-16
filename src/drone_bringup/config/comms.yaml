@@ -5,6 +5,13 @@ gcs_link_node:
     local_port: 14551
     link_timeout_s: 5.0
     heartbeat_interval_s: 1.0
+    # Chu ky goi MAVLink 2 (giao uoc GCS muc 7.6). UDP thuan tren 4G cong cong nghia la bat cu
+    # ai biet IP:port deu gui duoc lenh cho drone, trong do co DISARM.
+    # BAT BUOC true truoc MOI chuyen bay ngoai mang kin. Thieu khoa ma true thi node TU CHOI
+    # KHOI DONG - co y, de khong ai vo tinh bay voi kenh mo.
+    # Tao khoa: python3 tools/tao_khoa_gcs.py   roi chep sang GCS bang duong an toan.
+    signing_required: true
+    signing_key_file: "~/.drone_gcs_key"
 
 telemetry_aggregator_node:
   ros__parameters:

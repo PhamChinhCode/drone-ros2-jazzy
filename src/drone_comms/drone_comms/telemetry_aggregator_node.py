@@ -7,11 +7,13 @@ nguon - tranh lam ngap kenh 4G/radio bang thong hep.
 """
 
 import rclpy
-from mavros_msgs.msg import State
+from mavros_msgs.msg import DebugValue, State
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from sensor_msgs.msg import BatteryState, NavSatFix
+
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 
 from drone_comms.qos import EVENT_QOS, SENSOR_QOS
 from drone_comms.tagmap import doc_known_tags, tagmap_crc
@@ -19,6 +21,11 @@ from drone_interfaces.msg import (EkfHealth, FailsafeEvent, GripperStatus, Marke
                                   MissionState, TelemetryPacket)
 
 P = TelemetryPacket
+
+# Kenh NAMED_VALUE_INT ghep NHIEU TEN vao mot topic: FC phat ca chum 8 ten trong mot
+# nhip. Hang doi depth 1 chi giu duoc ten CUOI cua chum, va OB_AUTH lai la ten DAU -
+# no bi rot gan nhu moi lan. Phai du sau cho ca chum (phat hien o nghiem thu 10.B).
+NAMED_VALUE_QOS = QoSProfile(depth=20, reliability=QoSReliabilityPolicy.BEST_EFFORT)
 
 
 class TelemetryAggregatorNode(Node):
@@ -52,6 +59,11 @@ class TelemetryAggregatorNode(Node):
         self.create_subscription(FailsafeEvent, '/failsafe_event', self.on_failsafe, EVENT_QOS)
         self.create_subscription(Odometry, '/odometry/filtered', self.on_odom, SENSOR_QOS)
         self.create_subscription(EkfHealth, '/ekf/health', self.on_ekf, EVENT_QOS)
+        # OB_AUTH: nguoi lai da trao quyen cho Pi qua ch5/ch8 chua (giao uoc FC 6.3).
+        # Thieu bit nay thi nguoi van hanh KHONG HIEU vi sao MISSION_START bi tu choi -
+        # nguyen nhan thuong gap nhat lai la thu GCS khong nhin thay duoc.
+        self.create_subscription(DebugValue, '/mavros/debug_value/named_value_int',
+                                 self.on_named_value, NAMED_VALUE_QOS)
 
         self.pub_telemetry = self.create_publisher(
             TelemetryPacket, '/telemetry/outgoing', EVENT_QOS)
@@ -100,6 +112,10 @@ class TelemetryAggregatorNode(Node):
 
     def on_ekf(self, msg):
         self.ghi('ekf', msg)
+
+    def on_named_value(self, msg):
+        if msg.name == 'OB_AUTH':
+            self.ghi('ob_auth', msg)
 
 
     def read_rssi_dbm(self):
@@ -183,9 +199,9 @@ class TelemetryAggregatorNode(Node):
             co |= P.VALID_RSSI
             m.gcs_rssi_dbm = int(rssi)
 
-        # TODO STATUS_PI_HAS_AUTHORITY: can OB_AUTH tu NAMED_VALUE_INT cua FC. Node nay chua
-        # subscribe /mavros/debug_value/named_value_int; bit giu 0 nghia la CHUA BIET, va
-        # GCS doc theo FC_LINK_VALID nen khong hieu sai thanh "mat quyen".
+        auth = self.lay('ob_auth')
+        if auth is not None and auth.value_int:
+            trang_thai |= P.STATUS_PI_HAS_AUTHORITY
         m.valid_flags = co
         m.status_flags = trang_thai
         self.pub_telemetry.publish(m)

@@ -1248,4 +1248,69 @@ về đúng `"Lay hang bai A"`. Đây chính là cái GCS cảnh báo: *"không 
 **Nhận nhánh bằng cách rebase commit CHƯA PUSH của Pi lên trên commit của GCS** — giữ nguyên mã băm
 đã publish của họ, chỉ viết lại commit của mình.
 
-**Pytest 163/163.** Mốc các phiên: Phiên 9 **126** · Phiên 10 **133** · Phiên 11 **141** (thêm 8 test gripper) · Phiên 12 **163** (thêm 1 test `ACTION_NONE`, 2 test neo `home`, 6 test `tagmap_crc`, 2 test tương thích dialect A13/A14, 3 test ASCII không dấu).
+### 12.9 Nối lệnh vào FSM và chạy nghiệm thu 10.B
+
+Rà lại trước khi nối GCS thật thì thấy **năm lệnh đều trả `ACCEPTED` nhưng không làm gì cả** —
+`gcs_link_node` chỉ ACK rồi ghi log *"chuyển cho FSM chưa hiện thực"*. Người vận hành bấm "hạ cánh",
+GCS hiện "đã chấp nhận", drone bay tiếp. **Đúng kiểu lỗi tôi đã chê ở `~/land` trong ACTUATE_GRIPPER
+hai phiên trước** — service báo thành công mà không làm gì — và tôi lại tự mắc.
+
+Ba lệnh có sẵn đường thi hành (`~/start`, `~/land`, `~/emergency_disarm`), hai lệnh **không có**:
+RTH và ABORT. Đã thêm `~/rth` và `~/abort` cho `mission_manager_node`, cùng `request_rth()` và
+`request_abort()` trong FSM:
+
+- **RTH từ chối SỚM khi chưa biết nhà**, không nhận rồi im lặng hạ tại chỗ: người vận hành bấm "về
+  nhà" mà drone hạ xuống chỗ lạ là kiểu bất ngờ tệ nhất.
+- **ABORT không bao giờ bị từ chối** — huỷ phải luôn đi được. Nó bỏ kế hoạch **trước** rồi mới hạ,
+  để khi chạm đất FSM không tự đi tiếp điểm nào.
+- `gcs_link_node` ACK theo **kết quả thật** của service; service chưa sẵn sàng thì trả
+  `TEMPORARILY_REJECTED` để GCS phát lại, không trả `ACCEPTED`.
+
+**Lỗi thứ hai, một dòng launch:** `full_system.launch.py` không truyền `tags.yaml` cho
+`telemetry_aggregator_node`, nên `known_tags` không khai báo → `tagmap_crc = 0` → theo mục 8.6 GCS
+**khoá nạp kế hoạch**. Nối GCS thật vào sẽ không nạp được kế hoạch nào, và **không bao giờ lộ trong
+thử nghiệm** vì thử nghiệm luôn truyền `tags.yaml` bằng tay.
+
+**Nghiệm thu 10.B — toàn bộ qua dây:**
+
+| | Kết quả |
+|---|---|
+| B1 nạp kế hoạch + `MISSION_START` | **đạt** — nhiệm vụ 2 chặng chạy hết, `rx_drop 0` trên 888 gói |
+| B2 `RTL` giữa ENROUTE | **đạt** — FSM vào RTH, về nhà, hạ |
+| B3 cắt liên kết | **đạt** — `MAT KET NOI` sau 5 s, `FAILSAFE 3` sau 10 s nữa (đo 37,8 s) |
+| B4 `ABORT` giữa chừng | **đạt** — `wp_total` 1 → 0, hạ cánh, về IDLE |
+| B5 `DRONE_LINK_STATS` | **một nửa** — `rx_drop` = 0 ✅, `rtt_ms` = `UINT32_MAX` vì `TIMESYNC` chưa làm |
+
+**B3 là mốc đáng ghi:** failsafe mất GCS **không còn là cấu hình chết** — nó kích hoạt thật, do
+watchdog thật của một node thật, với đúng hai tầng thời gian 5 s + 10 s đã chốt ở mục 9.2.
+
+Chính lần chạy B1 lại lộ thêm một lỗi: kênh `NAMED_VALUE_INT` ghép **8 tên vào một topic**, mà
+aggregator subscribe bằng hàng đợi **depth 1**. `OB_AUTH` là tên **đầu** trong chùm nên bị rớt gần
+như mọi lần, khiến bit `PI_HAS_AUTHORITY` hầu như không bao giờ bật. `mission_manager_node` vốn đã
+dùng đúng `NAMED_VALUE_QOS` depth 20 — tôi lệch khỏi khuôn có sẵn.
+
+### 12.10 Chữ ký gói: nợ an toàn đã trả
+
+Hiện thực mục 7.6: HMAC-SHA256, khoá 32 byte chia sẻ trước, `tools/tao_khoa_gcs.py` sinh khoá quyền
+600 và **không bao giờ commit**. Kiểm ba tình huống:
+
+| Tình huống | Kết quả |
+|---|---|
+| Thiếu khoá mà `signing_required = true` | node **từ chối khởi động** kèm hướng dẫn |
+| Hai bên cùng khoá | lệnh đi được, có ACK |
+| Bên gửi không ký | Pi **bỏ gói**, lệnh không được thi hành |
+
+Chọn "từ chối khởi động" thay vì "tự hạ xuống chạy không chữ ký" là có chủ ý: **một kênh điều khiển
+mở mà vẫn chạy bình thường là kiểu hỏng không ai phát hiện cho tới lúc có người lợi dụng.** Muốn
+chạy trong mạng kín thì phải **tự tay** đặt `signing_required: false` — một quyết định có người chịu
+trách nhiệm. Mô phỏng chạy loopback nên tắt, có ghi rõ lý do ngay tại chỗ.
+
+### 12.11 Một lỗ hổng ghi nợ, không tự sửa
+
+**FSM chỉ bắt "bị disarm ngoài ý muốn" trong `_step_precision_land`.** TAKEOFF, ENROUTE,
+MARKER_SEARCH, RETRY_LOITER, RTH, ACTUATE_GRIPPER đều không có — FC disarm giữa chừng thì FSM cứ
+chạy tiếp như đang bay, và **không bao giờ về IDLE**, nên không khởi động được nhiệm vụ mới nếu
+không restart node. Phát hiện khi viết test cho ABORT. Ngoài phạm vi 5 bước đang làm nên ghi nợ —
+sửa nó phải chạm cả máy trạng thái và cần một đợt test riêng.
+
+**Pytest 171/171.** Mốc các phiên: Phiên 9 **126** · Phiên 10 **133** · Phiên 11 **141** (thêm 8 test gripper) · Phiên 12 **171** (thêm 1 test `ACTION_NONE`, 2 test neo `home`, 6 test `tagmap_crc`, 2 test tương thích dialect A13/A14, 3 test ASCII không dấu, 8 test lệnh RTH/ABORT từ GCS).
