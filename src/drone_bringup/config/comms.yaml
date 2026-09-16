@@ -8,12 +8,20 @@ gcs_link_node:
     local_port: 14551
     link_timeout_s: 5.0
     heartbeat_interval_s: 1.0
-    # Chu ky goi MAVLink 2 (giao uoc GCS muc 7.6). UDP thuan tren 4G cong cong nghia la bat cu
-    # ai biet IP:port deu gui duoc lenh cho drone, trong do co DISARM.
-    # BAT BUOC true truoc MOI chuyen bay ngoai mang kin. Thieu khoa ma true thi node TU CHOI
-    # KHOI DONG - co y, de khong ai vo tinh bay voi kenh mo.
+    # Chu ky goi MAVLink 2 (giao uoc GCS muc 7.6).
+    #
+    # >>> DANG TAT THEO YEU CAU NGUOI VAN HANH (2026-09-16), de chay tren WiFi LAN kin <<<
+    #
+    # Tat nghia la: BAT CU AI vao duoc mang WiFi nay deu gui duoc lenh cho drone, ke ca DISARM
+    # giua luc dang bay. Trong LAN gia dinh thi chap nhan duoc; ra khoi do thi khong.
+    #
+    # PHAI DAT LAI true truoc khi: bay ngoai mang kin, dung 4G/LTE, hoac dung WiFi cong cong.
+    # Thieu khoa ma true thi node TU CHOI KHOI DONG - co y, de khong ai vo tinh bay voi kenh mo.
     # Tao khoa: python3 tools/tao_khoa_gcs.py   roi chep sang GCS bang duong an toan.
-    signing_required: true
+    #
+    # Hai ben phai BAT/TAT CUNG LUC. Lech nhau thi ben bat se bo sach goi cua ben kia va trieu
+    # chung GIONG HET MAT SONG: khong loi, khong log, chi im lang (giao uoc 7.6).
+    signing_required: false
     signing_key_file: "~/.drone_gcs_key"
 
 telemetry_aggregator_node:

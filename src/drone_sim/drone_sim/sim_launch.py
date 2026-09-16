@@ -101,11 +101,16 @@ def telemetry_aggregator():
 
 
 def gcs_link():
-    """Node that. Mo phong chay tren cung may nen gcs_host = 127.0.0.1 (mac dinh comms.yaml)."""
+    """Node that, lay nguyen comms.yaml - ke ca gcs_host, nen GCS o may khac tren LAN van nhan duoc.
+
+    Dia chi do chi la du phong: Pi uu tien dia chi HOC duoc tu goi hop le gan nhat (giao uoc 2.1).
+    """
     return Node(package='drone_comms', executable='gcs_link_node', name='gcs_link_node',
                 parameters=[os.path.join(CONFIG, 'comms.yaml'),
                             # Mo phong chay tren loopback cua CHINH may nay - mang kin theo dung
                             # nghia den nhat, nen tat chu ky de khong bat moi nguoi tao khoa truoc
-                            # khi chay thu. Drone that lay signing_required = true tu comms.yaml.
+                            # khi chay thu. Tu 2026-09-16 comms.yaml CUNG dang de false theo yeu cau
+                            # nguoi van hanh, nen dong nay tam thoi thua - giu lai de mo phong van
+                            # tat chu ky ngay khi ai do bat lai comms.yaml cho drone that.
                             {'signing_required': False},
                             SIM_TIME], output='screen')

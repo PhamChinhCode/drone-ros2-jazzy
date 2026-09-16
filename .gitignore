@@ -51,3 +51,14 @@ src/drone_comms/drone_comms/dialect_gcs.py
 
 # OS
 .DS_Store
+
+# ---------------------------------------------------------------------------
+# Khoa ky goi MAVLink kenh GCS. KHONG BAO GIO commit (giao uoc GCS <-> Pi muc 7.6:
+# "khoa khong bao gio commit vao repo; nam o file ngoai, quyen 600"). Commit mot lan
+# la lo vinh vien - xoa o commit sau khong thu hoi duoc, phai doi khoa ca hai ben.
+# Cho nay bat theo MAU TEN vi khoa hay bi dat nham vao trong repo.
+# ---------------------------------------------------------------------------
+*.key
+*_key.bin
+*key*.bin
+.drone_gcs_key

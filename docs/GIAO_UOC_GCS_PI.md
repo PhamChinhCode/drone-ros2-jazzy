@@ -733,13 +733,21 @@ trước, kèm timestamp chống phát lại). Hợp đồng đề xuất:
 > **giống hệt mất sóng**: không lỗi, không log, chỉ im lặng. Đây là cùng một cái bẫy mà Pi đã tự
 > rơi vào một lần (chữ ký tự bật lên vì có sẵn file khoá, dù `signing_required: false`). Quy tắc:
 > **bật hay tắt phải đổi ở CẢ HAI bên trong cùng một lần**, và bên nào đổi thì báo bên kia trước.
-> Hiện trạng Pi: `comms.yaml` để `signing_required: **true**` cho **drone thật**, nhưng launch
-> mô phỏng (`sim_launch.gcs_link()`) **ghi đè thành `false`** để không bắt ai tạo khoá trước khi
-> chạy thử. Nên khi GCS nối vào **bản mô phỏng** thì đặt `GCS_SIGNING=false`; khi nối vào **drone
-> thật** thì phải có khoá và đặt `GCS_SIGNING=true`. Hai hoàn cảnh khác nhau — đừng nhớ một cờ chung.
+> **Hiện trạng Pi (2026-09-16): chữ ký đang TẮT ở mọi đường** — `comms.yaml` để
+> `signing_required: false` theo yêu cầu người vận hành để chạy trên WiFi LAN kín, và launch mô
+> phỏng vốn đã ghi đè `false`. **GCS đặt `GCS_SIGNING=false`.**
 
-Giai đoạn phát triển trong mạng kín (Pi và GCS cùng LAN) thì tắt được, nhưng **cờ tắt phải nằm
-trong `comms.yaml` và mặc định là BẬT**, để không ai vô tình bay với kênh mở.
+Giai đoạn phát triển trong mạng kín (Pi và GCS cùng LAN) thì tắt được, và cờ tắt **phải nằm trong
+`comms.yaml`** chứ không rải rác trong mã.
+
+**Sửa 2026-09-16 — mặc định nay là TẮT, do người vận hành quyết định.** Bản 0.1–0.4 quy định mặc
+định phải là BẬT "để không ai vô tình bay với kênh mở". Điều khoản đó **đã được người vận hành phía
+Pi cho miễn** trong giai đoạn hiện tại: cả hai bên cùng một WiFi LAN kín, chưa dùng 4G. Ghi rõ ở đây
+thay vì lặng lẽ đổi file, vì một cờ an toàn bị tắt mà tài liệu vẫn ghi "mặc định BẬT" thì lần sau
+không ai biết là nó đang tắt.
+
+Điều kiện bật lại, **không thương lượng**: trước khi bay ngoài mạng kín, dùng 4G/LTE, hoặc dùng WiFi
+công cộng. Lúc đó cả hai bên bật cùng lúc, và `comms.yaml` cần có khoá ở `~/.drone_gcs_key`.
 
 Đây là mục tôi khuyến nghị đừng để thành nợ: nợ an toàn khác nợ tính năng ở chỗ nó không gây bất
 tiện gì cho tới lúc gây thiệt hại.
