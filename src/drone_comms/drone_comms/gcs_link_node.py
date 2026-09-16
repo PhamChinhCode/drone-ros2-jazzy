@@ -25,6 +25,7 @@ from rclpy.node import Node
 from std_msgs.msg import Bool
 
 from drone_comms.qos import EVENT_QOS, SENSOR_QOS
+from drone_comms.tagmap import to_ascii
 from drone_interfaces.msg import (MissionPlan, MissionPlanAck, MissionWaypoint,
                                   TelemetryPacket)
 
@@ -215,7 +216,7 @@ class GcsLinkNode(Node):
 
     def statustext(self, muc, text):
         """Chia doan thay vi cat: chuoi ly do thuong dai hon 50 byte (muc 7.5)."""
-        b = text.encode('utf8')[:250]
+        b = to_ascii(text, 250)
         for i in range(0, max(1, len(b)), 50):
             self.enqueue(PRIORITY_EMERGENCY if muc <= 2 else PRIORITY_TELEMETRY,
                          self.d.MAVLink_statustext_message(severity=muc, text=b[i:i + 50],
@@ -257,7 +258,7 @@ class GcsLinkNode(Node):
 
     def ack_nap(self, mission_id, ket_qua, ly_do):
         self.enqueue(PRIORITY_MISSION, self.d.MAVLink_drone_mission_ack_message(
-            mission_id=mission_id, result=ket_qua, reason=ly_do.encode('utf8')[:50]))
+            mission_id=mission_id, result=ket_qua, reason=to_ascii(ly_do, 50)))
         self.nap = None
 
     def bat_dau_nap(self, msg):
@@ -340,7 +341,7 @@ class GcsLinkNode(Node):
             return
         ma = self.doan_ma_loi(msg.reason)
         self.enqueue(PRIORITY_MISSION, self.d.MAVLink_drone_mission_ack_message(
-            mission_id=msg.mission_id, result=ma, reason=msg.reason.encode('utf8')[:50]))
+            mission_id=msg.mission_id, result=ma, reason=to_ascii(msg.reason, 50)))
         self.statustext(4, f'tu choi ke hoach {msg.mission_id}: {msg.reason}')
         self.get_logger().warning(f'ke hoach {msg.mission_id}: tu choi ({msg.reason})')
 

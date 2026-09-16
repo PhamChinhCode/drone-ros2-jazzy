@@ -25,12 +25,13 @@ sys.path.insert(0, os.path.join(GOC, 'src', 'drone_comms'))
 
 try:
     from drone_comms import dialect_gcs as d
+    from drone_comms.tagmap import to_ascii
 except ImportError:
     sys.exit('Thieu module dialect. Sinh bang: python3 tools/sinh_dialect.py')
 
 SYSID_GCS, COMPID_GCS = 255, 190
 SYSID_PI, COMPID_PI = 1, 191
-CONTRACT_VER = 300                       # ban 0.3
+CONTRACT_VER = 400                       # ban 0.4
 
 ACTIONS = {'none': 0, 'pickup': 1, 'dropoff': 2}
 LENH = {'rtl': 20, 'land': 21, 'start': 300, 'disarm': 400, 'pause': 193,
@@ -93,7 +94,9 @@ class GcsSim:
             issued_stamp_us=int(time.time() * 1e6),
             search_timeout_s=float(k.get('search_timeout_s', 0.0)),
             count=len(diem), max_retries=int(k.get('max_retries', 0)),
-            plan_name=str(k.get('plan_name', ''))[:20].encode('utf8'),
+            # Muc 8.4: char[] la ASCII khong dau, BEN GUI bo dau. Voi plan_name ben gui la
+            # GCS. Cat theo BYTE sau khi bo dau, khong cat theo ky tu roi moi ma hoa.
+            plan_name=to_ascii(str(k.get('plan_name', '')), 20),
             contract_ver=self.ver))
 
     def heartbeat(self):

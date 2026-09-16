@@ -29,7 +29,7 @@ class TelemetryAggregatorNode(Node):
         self.declare_parameter('publish_rate_hz', 2.0)
         # Qua han thi HA CO, khong giu gia tri cu: mot so cu 5 giay la mot loi noi doi (R3).
         self.declare_parameter('stale_s', 2.0)
-        self.declare_parameter('contract_ver', 300)     # ban 0.3 = 0*10000 + 3*100
+        self.declare_parameter('contract_ver', 400)     # ban 0.4 = 0*10000 + 4*100
         self.declare_parameter('known_tags', Parameter.Type.DOUBLE_ARRAY)
 
         # Moi nguon giu (ban_tin, thoi_diem_nhan) de xet do tuoi rieng tung nguon.

@@ -48,3 +48,24 @@ def test_round_chu_khong_phai_int():
 def test_known_tags_sai_dinh_dang_thi_bao_loi():
     with pytest.raises(ValueError):
         doc_known_tags([0.0, 1.0, 2.0])               # khong phai boi so cua 4
+
+
+# --------------------------------------------------- char[] ASCII (muc 8.4, ban 0.4)
+
+def test_bo_dau_truoc_khi_gui():
+    """pymavlink giai ma char[] bang ASCII: chu co dau ve toi ben kia thanh rac ma khong bao loi."""
+    from drone_comms.tagmap import to_ascii
+    assert to_ascii('Lấy hàng tại bãi A', 50) == b'Lay hang tai bai A'
+    assert to_ascii('Đường về', 50) == b'Duong ve'
+
+
+def test_cat_sau_khi_bo_dau_khong_xe_ky_tu():
+    """Cat theo byte TRUOC khi bo dau se xe doi mot ky tu nhieu byte."""
+    from drone_comms.tagmap import to_ascii
+    ra = to_ascii('ắ' * 30, 10)
+    assert ra == b'a' * 10 and len(ra) == 10
+
+
+def test_chuoi_ascii_san_khong_doi():
+    from drone_comms.tagmap import to_ascii
+    assert to_ascii('tu choi ke hoach 903', 50) == b'tu choi ke hoach 903'

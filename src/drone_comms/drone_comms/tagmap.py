@@ -44,3 +44,32 @@ def tagmap_crc(tags):
         x, y, z = tags[tag_id]
         buf += struct.pack(BAN_GHI, tag_id, round(y * 1000), round(x * 1000), round(-z * 1000))
     return zlib.crc32(buf)
+
+
+def to_ascii(chuoi, toi_da):
+    """Bo dau va cat cho truong char[] cua dialect (giao uoc muc 8.4).
+
+    pymavlink giai ma char[] bang ASCII, nen chu tieng Viet co dau ve toi ben kia thanh rac
+    ("Lay" thanh "L???y"): khong gay loi, khong ai de y, va hong dung cho nguoi van hanh can doc.
+    Ben GUI bo dau, khong de ben nhan doan lai.
+
+    Cat theo BYTE sau khi da bo dau. Cat truoc khi bo dau se xe doi mot ky tu nhieu byte.
+    """
+    thay = {'à': 'a', 'á': 'a', 'ả': 'a', 'ã': 'a', 'ạ': 'a', 'ă': 'a', 'â': 'a',
+            'è': 'e', 'é': 'e', 'ẻ': 'e', 'ẽ': 'e', 'ẹ': 'e', 'ê': 'e',
+            'ì': 'i', 'í': 'i', 'ỉ': 'i', 'ĩ': 'i', 'ị': 'i',
+            'ò': 'o', 'ó': 'o', 'ỏ': 'o', 'õ': 'o', 'ọ': 'o', 'ô': 'o', 'ơ': 'o',
+            'ù': 'u', 'ú': 'u', 'ủ': 'u', 'ũ': 'u', 'ụ': 'u', 'ư': 'u',
+            'ỳ': 'y', 'ý': 'y', 'ỷ': 'y', 'ỹ': 'y', 'ỵ': 'y', 'đ': 'd'}
+    import unicodedata
+    ra = []
+    for ch in unicodedata.normalize('NFC', chuoi):
+        thuong = ch.lower()
+        co_ban = thay.get(thuong)
+        if co_ban is None:
+            # Bo dau chung: tach to hop roi loai dau ket hop.
+            co_ban = ''.join(c for c in unicodedata.normalize('NFD', thuong)
+                             if not unicodedata.combining(c)) or '?'
+        ra.append(co_ban.upper() if ch.isupper() else co_ban)
+    b = ''.join(ra).encode('ascii', 'replace')
+    return b[:toi_da]

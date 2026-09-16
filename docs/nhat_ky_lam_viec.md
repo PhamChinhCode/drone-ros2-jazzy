@@ -1198,4 +1198,54 @@ cần force-push**.
 7. Nợ cũ còn nguyên: `marker_quality_node`, phần cứng gripper, đo τ vòng vận tốc FC, ưu tiên thời
    gian thực (6.2 #1), `estimation.launch.py` tự bật MAVROS, trôi 2,1 m sau failsafe (10.7 #2).
 
-**Pytest 160/160.** Mốc các phiên: Phiên 9 **126** · Phiên 10 **133** · Phiên 11 **141** (thêm 8 test gripper) · Phiên 12 **160** (thêm 1 test `ACTION_NONE`, 2 test neo `home`, 6 test `tagmap_crc`, 2 test tương thích dialect A13/A14).
+### 12.8 Vòng duyệt thứ ba: hợp đồng lên 0.4
+
+GCS đẩy lên một **nhánh riêng** `giao-uoc-0.4-tu-gcs` (kiểu pull request) thay vì vào `main`, sau
+khi hiện thực xong tầng liên kết và tầng dịch vụ phía họ. Bắt được **hai trường có trong
+`drone_gcs.xml` mà mục 8 của tài liệu chưa ghi** — cả hai do Pi thêm:
+
+| Trường | Vấn đề |
+|---|---|
+| `DRONE_MISSION_ITEM.mission_id` | Có trong XML, **không có** trong bảng §8.3. Nằm **trước** `<extensions/>` nên thuộc loại đổi `CRC_EXTRA` |
+| `DRONE_MISSION_COUNT.contract_ver` | Có trong XML, **không có** trong bảng §8.4 |
+
+**Lỗi quy trình của Pi:** thêm `contract_ver` vào XML là một lần **đổi dialect**, mà theo mục 6.1
+là MINOR — Pi không tăng số, để cả hai trạng thái XML cùng mang nhãn 0.3. Hệ quả: `contract_ver`
+trên dây báo "khớp" trong khi dialect đã khác. Chỗ duy nhất phát hiện được lệch dialect lại đang
+nói dối.
+
+**Một chi tiết Pi đối chiếu lại và sửa trong dòng lịch sử của GCS:** họ viết *"bên nào còn sinh mã
+từ XML trước 0.4 sẽ loại sạch mọi `ITEM`"*. Pi tra lịch sử XML: `mission_id` **có mặt từ commit đầu
+tiên** của `drone_gcs.xml` và chưa từng đổi giữa hai bản đã publish, nên không bản XML lưu hành nào
+lệch `CRC_EXTRA` của 42003. Thứ thực sự đổi mà không có số đi kèm là `contract_ver` của 42001, và
+nó nằm **sau** `<extensions/>` nên `CRC_EXTRA` giữ nguyên 148 — lành, nhưng vẫn là lỗi quy trình.
+Sửa vào bảng lịch sử vì mục 6.2 nay nói **bảng đó là chỗ duy nhất bắt được `CRC_EXTRA` đổi**, nên
+nó phải chính xác.
+
+GCS thêm ba thứ Pi nhận nguyên văn:
+
+- **R3b** — trường extension mới phải có `0` nghĩa là "không biết", hoặc đi kèm bit hiệu lực. Hệ quả
+  trực tiếp của R2: bên gửi cũ không có trường mới thì bên nhận đọc ra **0**. Hai bẫy trong chính
+  thiết kế của Pi: `expected_marker_id` = 0 là **tag 0 thật**, `tagmap_crc` = 0 **trông như CRC hợp lệ**.
+- **§7.1** — ba lý do lệnh `mavgen` trong tài liệu không chạy với `pymavlink` cài bằng pip. Pi đã
+  vấp đúng hai trong ba khi triển khai (không có `pymavlink.tools`; `<include>` tìm cạnh tệp XML);
+  lý do thứ ba là cp1252 trên Windows. Hai bên **ghim cùng 2.4.49** — Pi kiểm: đúng đang dùng 2.4.49.
+- **§8.4** — mọi `char[]` là **ASCII không dấu**, bên gửi bỏ dấu.
+
+**Quy tắc ASCII đó bắt lỗi ngay khi Pi hiện thực nó.** Pi thêm `to_ascii()` và áp vào `reason`,
+`STATUSTEXT` phía Pi, rồi chạy thử một kế hoạch tên `"Lấy hàng bãi A"`:
+
+```
+mission_manager nhan duoc: "L???y h��ng b��i A"
+```
+
+Vì với `plan_name` **bên gửi là GCS**, mà Pi chỉ áp `to_ascii` ở phía mình. Sửa `gcs_sim` xong thì
+về đúng `"Lay hang bai A"`. Đây chính là cái GCS cảnh báo: *"không gây lỗi, không ai để ý, và hỏng
+đúng chỗ người vận hành cần đọc"*.
+
+Đã cập nhật `contract_ver` 300 → **400** ở `telemetry_aggregator_node` và `gcs_sim`, kiểm trên dây.
+
+**Nhận nhánh bằng cách rebase commit CHƯA PUSH của Pi lên trên commit của GCS** — giữ nguyên mã băm
+đã publish của họ, chỉ viết lại commit của mình.
+
+**Pytest 163/163.** Mốc các phiên: Phiên 9 **126** · Phiên 10 **133** · Phiên 11 **141** (thêm 8 test gripper) · Phiên 12 **163** (thêm 1 test `ACTION_NONE`, 2 test neo `home`, 6 test `tagmap_crc`, 2 test tương thích dialect A13/A14, 3 test ASCII không dấu).
