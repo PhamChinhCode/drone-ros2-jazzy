@@ -5,8 +5,8 @@
 | | |
 |---|---|
 | Phiên bản hợp đồng | **0.4** |
-| Ngày | 2026-09-17 |
-| Trạng thái | **Bản thảo 0.4 — dialect đã có thật và sinh mã được ở cả hai phía; không còn mục mở (11.4).** Chưa mục nào [CHỐT] — điều kiện là chạy thật trên dây với **cả hai bên thật** (10.A); Pi mới chạy với `gcs_sim` |
+| Ngày | 2026-09-16 |
+| Trạng thái | **Bản thảo 0.4 — hai bên THẬT đã nói chuyện được trên dây (10.A một phần + 10.B, xem 10.D).** Một mục mở: **P30** (11.5). Chưa mục nào [CHỐT]: còn thiếu chữ ký gói, `TIMESYNC`, `PARAM_*`, và 10.C |
 | Phạm vi | Mọi thứ đi qua đường 4G/LTE giữa Pi và GCS. Kiến trúc nội bộ mỗi bên nằm ngoài phạm vi |
 | Tài liệu song sinh | `GIAO_UOC_FC_ROS2.md` (đường FC ↔ Pi) — **hai hợp đồng độc lập, xem mục 1.2** |
 
@@ -684,7 +684,12 @@ nào. Dùng `TIMESYNC` (111), vốn tồn tại đúng cho việc này: mỗi b�
 với `tc1` điền theo quy ước chuẩn. [THOẢ THUẬN]
 
 Trường bên phát **không đo được** thì điền `UINT32_MAX` (`uint16` → `0xFFFF`), không điền 0 — theo
-đúng R3. Ví dụ `pymavlink` không tách được `rx_bad_crc`. [THOẢ THUẬN]
+đúng R3. [THOẢ THUẬN]
+
+**Hiện trạng đo 2026-09-16:** `rtt_ms` của **cả hai bên** đang là "không đo được" vì `TIMESYNC` chưa bên
+nào hiện thực — GCS phát 0,2 Hz nhưng Pi không trả lời. `rx_bad_crc` thì **GCS đo được** (bật
+`robust_parsing` của `pymavlink` rồi phân loại theo chuỗi lý do), nên bên GCS điền số thật chứ không
+điền `UINT32_MAX`.
 
 ### 7.5 `STATUSTEXT` — log người đọc được, có phanh
 
@@ -718,7 +723,7 @@ trước, kèm timestamp chống phát lại). Hợp đồng đề xuất:
 
 | Hạng mục | Giá trị |
 |---|---|
-| Trạng thái | **[THOẢ THUẬN]** — hai bên đồng ý cơ chế, chưa hiện thực ở bên nào |
+| Trạng thái | **[THOẢ THUẬN]** — hai bên đồng ý cơ chế. **Đo 2026-09-16: vẫn chưa bên nào hiện thực.** GCS đã có sẵn đường (khoá 32 byte, `MAVLink_signing`, đếm `rx_bad_sig`) và **mặc định BẬT**, nên khi chạy với Pi hiện tại phải đặt `GCS_SIGNING=false`; bật lên là GCS bỏ sạch gói của Pi và triệu chứng giống hệt mất sóng |
 | Khi nào bắt buộc | trước **mọi** chuyến bay ngoài mạng kín |
 | Gói không có chữ ký / sai chữ ký | **bỏ ngay**, tăng `rx_bad_sig`, **không xử lý lệnh** |
 | Khoá | không bao giờ commit vào repo; nằm ở file ngoài, quyền `600` |
@@ -914,6 +919,10 @@ bốn, không sửa gì.**
 | 8 | `EMERGENCY_LAND` | **`gripper_state`** | |
 | 9 | `MISSION_COMPLETE` | 0 `OPEN` · 1 `CLOSED` · 2 `MOVING` · 3 `ERROR` | |
 | 10 | `FAILSAFE` | **`action`** 0 `NONE` · 1 `PICKUP` · 2 `DROPOFF` | |
+
+> **`MISSION_COMPLETE` (9) chưa từng xuất hiện trên dây — đo 2026-09-16, xem 11.5 P30.** Trong hai chuyến
+> bay Gazebo qua kênh này, telemetry chỉ mang các giá trị **0–5**: xong mục cuối thì FSM về thẳng `IDLE`.
+> Bên nào coi trạng thái 9 là dấu hiệu "nhiệm vụ đã hoàn thành" sẽ chờ mãi một thứ không bao giờ tới.
 
 **Cảnh báo về tên `EMERGENCY_LAND`:** đây là trạng thái **hạ cánh chung**, không chỉ hạ cánh khẩn
 cấp. Nó là trạng thái đích của cả `NAV_LAND` bình thường, cả "xong kế hoạch, hạ cánh", cả hạ cánh do
@@ -1155,6 +1164,29 @@ Thêm điều kiện: modem 4G, GCS có điểm cuối ổn định.
 
 ---
 
+### 10.D — Lần đầu hai bên THẬT nói chuyện (GCS đo, 2026-09-16)
+
+`gcs_link_node` trên Pi `192.168.10.138` ↔ backend GCS trên `192.168.10.120`, cùng LAN, drone chạy trong
+Gazebo. Đây là **lần đầu tiên có byte thật giữa hai bên**; trước đó mỗi bên chỉ chạy với giả lập của
+chính mình.
+
+| Phép kiểm | Kết quả |
+|---|---|
+| **A1** socket + heartbeat | **đạt** — Pi gọi ra trước, GCS học đường về `…:14551` mà không cấu hình gì |
+| **A2** nạp kế hoạch 2 mục | **đạt** — `COUNT → REQUEST(0) → ITEM(0) → REQUEST(1) → ITEM(1) → ACK ACCEPTED` |
+| **A6/A7** lệnh | **đạt** — `DRONE_ABORT_MISSION` → `ACCEPTED` và trạng thái đổi; `NAV_RETURN_TO_LAUNCH` lúc chưa bay → Pi trả **`DENIED`** (đúng: bên duy nhất được từ chối là Pi) |
+| **B1** bay hết chuỗi | **đạt** — hai chuyến. Chuyến có `PICKUP`: **53,8 s, 28,6 m, trần 2,48 m**, gripper đóng đúng ở `ACTUATE_GRIPPER` rồi giữ suốt chặng về |
+| **B5** `DRONE_LINK_STATS` | `rx_drop` = **0** trên 40.814 gói Pi→GCS; Pi báo **1** gói mất trên ~18.600 gói GCS→Pi; `queue_depth` của Pi lên tới **3** lúc bay; `rtt_ms` **chưa đo được** (không có `TIMESYNC`) |
+| **5.2b** `POS_VALID` | **đúng như dự đoán** — bằng 0 suốt lúc đậu, GCS không có vị trí để vẽ; bật lên sau khi leo và neo |
+| **11.P18** `home_*` | **đạt** — chốt `[0,0]` sau khi neo, `HOME_VALID` bật, RTH vẽ được đúng chỗ |
+| **6.2** `contract_ver` | 400 cả hai chiều |
+
+**Chưa chạy được vì chưa bên nào hiện thực:** chữ ký gói (7.6), `TIMESYNC` (7.4), `PARAM_REQUEST_LIST`
+(9.4 → A16). Chưa chạy: A11 (nghẽn), A17, B2–B4, và toàn bộ 10.C.
+
+**Một lỗi do chính lần chạy này tìm ra: P30** (11.5). Cùng loại với hai lỗi mà 10.A phía Pi đã bắt —
+mã chạy đúng với giả lập của chính mình, sai với bên kia thật. Đây là lý do mục 10 tồn tại.
+
 ## 11. Trạng thái phân giải — bản 0.2
 
 ### 11.1 Toàn bộ 17 đề xuất của GCS đã được xử lý
@@ -1256,7 +1288,7 @@ pad của chính nó khi đậu, `POS_VALID` sẽ **thường bằng 0 trước 
 `pad_home`" của GCS sẽ thường rơi vào nhánh "chưa có vị trí". GCS đã lường nhánh đó nhưng nên biết nó
 là nhánh thường gặp.
 
-### 11.4 Không còn mục mở
+### 11.4 Bảng truy vết các mục
 
 | Mã | Mức | Trạng thái |
 |---|---|---|
@@ -1267,17 +1299,53 @@ là nhánh thường gặp.
 | P21 | TB | **Pi nhận** — bit 8 `HOME_VALID` |
 | P22 | TB | **Pi nhận** — `alt_m` so với tag đích |
 | P23 | Thấp | **Pi nhận**, vectơ kiểm đã đối chiếu khớp |
+| **P30** | **Cao** | **CHỜ PI** — `MISSION_COMPLETE` không bao giờ lên dây (11.5) |
 
-**Cả 23 mục đã phân giải. Không còn câu hỏi nào chờ bên nào trả lời.**
+**23 mục của bản 0.2–0.3 đã phân giải. Mục mở duy nhất hiện nay là P30 (11.5), do lần chạy thật đầu tiên giữa hai bên tìm ra.**
 
 Điều kiện lên **1.0** vẫn không đổi: đi qua toàn bộ phép kiểm **10.A**. Hợp đồng giữ **0.x** cho tới
 lúc đó, kể cả khi còn sửa nghĩa — vì chưa byte nào chạy trên dây nên chưa có ai để mà phá tương thích.
 
 
+### 11.5 Mục GCS nêu sau lần chạy thật đầu tiên — chờ Pi
+
+**P30 · Cao — FSM không bao giờ đi qua `MISSION_COMPLETE`, nên "nhiệm vụ đã xong" không có dấu hiệu nào
+trên dây.**
+
+Đo 2026-09-16, hai chuyến bay Gazebo qua kênh này: `DRONE_TELEMETRY.mission_state` chỉ từng mang **0–5**.
+Xong hành động ở mục cuối, drone hạ cánh, DISARM, và FSM về thẳng **`IDLE`** — giá trị **9
+`MISSION_COMPLETE`** của bảng 8.5 không xuất hiện lần nào.
+
+Hệ quả phía GCS: nhiệm vụ kẹt ở trạng thái "đang chạy" **vĩnh viễn** dù drone đã đậu và tắt động cơ. Không
+có lỗi nào được báo, không có gói nào mất — chỉ là chờ một thứ không tồn tại. Đây đúng loại lỗi mà hợp
+đồng FC gọi là *"tài liệu nói một đằng, code làm một nẻo"*.
+
+Vì sao `IDLE` một mình không đủ để suy ra: `IDLE` cũng là trạng thái sau khi **huỷ** kế hoạch, sau
+`NAV_LAND`, và sau khi disarm tay. Nếu GCS khởi động lại đúng lúc đó thì nó không có cách nào biết chuyến
+vừa rồi thành công hay bị bỏ dở — vi phạm R5 (*trạng thái phải hỏi lại được*).
+
+Hai phương án, GCS nghiêng về (a):
+
+**(a) Pi giữ `MISSION_COMPLETE` ít nhất một chu kỳ phát (0,5 s).** Dùng đúng giá trị đã cấp trong 8.5,
+không đổi gì trên dây, và giữ được R5: một GCS vừa khởi động lại vẫn đọc được "chuyến trước đã xong".
+Chi phí: một trạng thái chờ ngắn trong `mission_fsm` trước khi về `IDLE`.
+
+**(b) Bỏ hẳn giá trị 9 khỏi 8.5** và định nghĩa "xong" = về `IDLE` khi `current_wp_index` đã tới mục cuối.
+Rẻ hơn với Pi nhưng suy luận này **sai sau khi GCS restart** (không biết `wp_index` cũ), và không phân biệt
+được với huỷ. Nếu chọn (b) thì theo 6.5 số 9 vẫn **vĩnh viễn không tái sử dụng**, và đây là **MAJOR** vì
+đổi nghĩa một giá trị enum đang có trong hợp đồng.
+
+**GCS đã hiện thực tạm theo hướng (b)** để dùng được ngay (xong mục cuối + `IDLE` = hoàn thành, mọi lệnh
+khẩn đều đánh dấu là gián đoạn để không nhận nhầm), **và sẽ chuyển sang (a) ngay khi Pi phát trạng thái 9** —
+nhánh xử lý `MISSION_COMPLETE` vẫn được giữ nguyên trong mã, hai đường dẫn tới cùng một kết quả.
+
+*Cần Pi trả lời:* chọn (a) hay (b)? Nếu (a) thì `mission_fsm` giữ trạng thái đó bao lâu?
+
 ## Phụ lục A — Tra cứu nhanh
 
 | Cần gì | Xem |
 |---|---|
+| Số đo thật giữa hai bên | 10.D |
 | Cổng, địa chỉ, NAT | 2.1 |
 | `sysid`/`compid` | 2.2 |
 | Nạp kế hoạch: chuỗi bắt tay | 3.2 |
@@ -1313,4 +1381,5 @@ lúc đó, kể cả khi còn sửa nghĩa — vì chưa byte nào chạy trên 
 | 0.2 | 2026-09-16 | **GCS duyệt bản 0.2, không tăng số.** Chấp nhận toàn bộ phân giải 11.1 (gồm công thức `tagmap_crc` sửa lại). Trả lời P18: chọn (a), GCS vẽ nhà RTH từ `home_*` và cảnh báo trước `MISSION_START`. Nêu P19–P23 (11.3): khung trước/sau khi odom neo và `POS_VALID`, điều kiện phát 32/30, bit `HOME_VALID`, ba cách hiểu `alt_m`, làm tròn và vectơ kiểm CRC `0x6BDEA0A6`. Sửa chữ không đổi nghĩa: câu cụt ở 2.1; "thêm vào cuối" còn sót ở 6.1, 8.3, 8.4 → "sau `<extensions/>`"; "bốn lệnh" ở 6.2, 7.3, Phụ lục A (4.1 nay có 6 lệnh; 6.2 là bốn lệnh **khẩn**); bỏ ghi chú GCS đã phân giải ở 10.A; xếp lại bảng lịch sử theo thời gian |
 | **0.3** | **2026-09-16** | **Pi phân giải 5 mục GCS nêu khi duyệt 0.2; không còn mục mở.** Ba lỗi nữa của Pi được sửa: **P19 ý 3** — `home` chốt trong khung chưa neo nên **RTH bay về `pad_home` thay vì điểm cất cánh** (Pi tái hiện đúng kịch bản GCS nêu); **P20** — "nằm trên đất" không suy ra `POS_VALID` = 0, ngân sách phải lấy xấu nhất 6,5 kbit/s; **P22** — `alt_m` là so với **tag đích**, không phải điểm cất cánh (chú thích `MissionWaypoint.msg` cũng sai y vậy). Nhận: `POS_VALID` = đã neo (5.2b), N/E là trục bản đồ tag chứ không phải Bắc/Đông địa lý, bit 8 `HOME_VALID` (P21), `round()` + vectơ kiểm `0x6BDEA0A6` **Pi đã đối chiếu khớp** (P23). Trả lời: odom **nhảy tức thì** khi neo. Pi nêu tương tác P19×P20: `POS_VALID` thường = 0 khi đậu vì drone không thấy pad của chính nó. Thêm việc 9–11 vào danh sách 9.1 |
 | **0.4** | **2026-09-17** | **Nhập vào tài liệu hai trường mà `drone_gcs.xml` đã có nhưng mục 8 chưa ghi, và tăng số cho lần đổi dialect đó.** `DRONE_MISSION_ITEM.mission_id` (8.3) — **nằm TRƯỚC `<extensions/>` nên `CRC_EXTRA` của 42003 ĐÃ ĐỔI**: bên nào còn sinh mã từ XML trước 0.4 sẽ loại sạch mọi `ITEM` mà không báo gì. `DRONE_MISSION_COUNT.contract_ver` (8.4, extension) — chiều GCS→Pi của mục 6.2, `0` = GCS cũ chưa khai. Thêm **R3b** (6.3): trường extension mới phải có `0` nghĩa là "không biết". Thêm vào 6.1 dòng cho trường thêm trước `<extensions/>`. Ghi ở 7.1 ba lý do lệnh `mavgen` không chạy được với `pymavlink` cài bằng pip và việc **ghim 2.4.49** ở cả hai bên. Ghi ở 8.4 rằng mọi `char[]` là **ASCII không dấu**, bên gửi bỏ dấu. Do GCS nêu khi hiện thực xong tầng liên kết và tầng dịch vụ |
+| 0.4 | 2026-09-16 | **Lần đầu hai bên THẬT chạy trên dây — GCS ghi số đo, không tăng số** (6.1: thêm số đo thì không tăng). Thêm mục **10.D**: A1, A2, A6, A7, B1 đạt; 40.814 gói Pi→GCS mất 0, chuyến bay có `PICKUP` 53,8 s / 28,6 m; `POS_VALID` và `home_*` cư xử đúng như 5.2b và 11.P18 mô tả. Ghi hiện trạng vào **7.4** (`rtt_ms` chưa đo được vì không bên nào làm `TIMESYNC`; GCS đo được `rx_bad_crc`) và **7.6** (chữ ký vẫn chưa bên nào hiện thực, GCS phải chạy với cờ tắt). Ghi vào **8.5** rằng `MISSION_COMPLETE` chưa từng lên dây. Nêu **P30** (11.5) — mục mở duy nhất |
 | 0.3 | 2026-09-16 | **GCS duyệt bản 0.3, không tăng số. GCS chấp nhận toàn bộ; bắt đầu triển khai phía GCS.** Sửa chữ không đổi nghĩa: dòng trạng thái đầu tài liệu còn ghi "chờ Pi P19–P23"; nhóm byte của vectơ kiểm 8.6 (bản ghi đầu là `uint16` rồi ba `int32`, giá trị không đổi); xếp lại bảng lịch sử theo thời gian |
