@@ -324,6 +324,7 @@ class MissionManagerNode(Node):
     def publish_mission_state(self, detail, expected_marker_id=-1):
         msg = MissionState()
         msg.state = getattr(MissionState, self.fsm.state)
+        msg.mission_result = self.fsm.mission_result
         msg.mission_id = self.fsm.mission_id
         msg.current_wp_index = self.fsm.current_wp_index
         msg.expected_marker_id = expected_marker_id

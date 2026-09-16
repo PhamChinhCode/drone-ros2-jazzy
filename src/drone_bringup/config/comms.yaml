@@ -1,6 +1,9 @@
 gcs_link_node:
   ros__parameters:
-    gcs_host: "127.0.0.1"        # dia chi GCS qua duong 4G/LTE
+    # Dia chi may GCS tren LAN. Chi la dia chi DU PHONG: Pi uu tien dia chi hoc duoc tu goi
+    # hop le gan nhat (muc 2.1), va quen dia chi do khi mat lien ket de khong bi mot dia chi
+    # cu chiem duong len vinh vien.
+    gcs_host: "192.168.10.120"
     gcs_port: 14550
     local_port: 14551
     link_timeout_s: 5.0
@@ -15,4 +18,5 @@ gcs_link_node:
 
 telemetry_aggregator_node:
   ros__parameters:
-    publish_rate_hz: 2.0         # tan so thap co dinh, tranh lam ngap kenh 4G bang thong hep
+    publish_rate_hz: 2.0         # tan so thap co dinh; tren WiFi thi nhe, nhung giu de con
+                                 # du dia cho lenh khan khi duong truyen xau

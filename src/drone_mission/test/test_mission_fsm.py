@@ -99,7 +99,10 @@ def test_ha_canh_disarm_khi_cham_dat_va_ob_dis_rdy_thu_lai_3_giay():
     assert act.fc_command == 'disarm' and act.velocity_up_mps == -m.LAND_DESCENT_MPS
     fsm.step(snap(5.5, armed=False))
     assert fsm.state == m.MISSION_COMPLETE
+    # Giu MISSION_COMPLETE du lau cho telemetry 2 Hz lay duoc mau (giao uoc 11.5 P30).
     fsm.step(snap(5.6))
+    assert fsm.state == m.MISSION_COMPLETE
+    fsm.step(snap(5.5 + m.MISSION_COMPLETE_HOLD_S))
     assert fsm.state == m.IDLE
 
 
@@ -750,3 +753,100 @@ def test_abort_xong_thi_bao_MISSION_COMPLETE_chu_khong_FAILSAFE():
     assert fsm.state == m.EMERGENCY_LAND and fsm.abort_requested is False
     fsm.step(snap(2.0, armed=False, range_m=0.1, landed=True, position=(3.0, 0.0, 0.1)))
     assert fsm.state == m.MISSION_COMPLETE
+
+
+# --------------------------------------------------------------------------------------------
+# P30 (giao uoc GCS 11.5): "nhiem vu da xong" phai co dau hieu doc duoc tren day.
+# --------------------------------------------------------------------------------------------
+
+def test_mission_complete_song_du_lau_cho_telemetry_2hz():
+    """Vong FSM 5 Hz ma telemetry 2 Hz: trang thai chi song mot tick thi gan nhu khong bao gio
+    len duoc day. GCS do hai chuyen bay that, khong bat duoc lan nao."""
+    assert m.MISSION_COMPLETE_HOLD_S > 0.5, 'phai dai hon mot chu ky telemetry (0,5 s)'
+    fsm = fsm_dang_bay_toi_diem()
+    fsm.request_abort()
+    fsm.step(snap(1.0, armed=True, range_m=2.0, position=(3.0, 0.0, 2.0)))
+    fsm.step(snap(2.0, armed=False, range_m=0.1, landed=True, position=(3.0, 0.0, 0.1)))
+    assert fsm.state == m.MISSION_COMPLETE
+    # Ba mau telemetry lien tiep cach nhau 0,5 s deu phai thay trang thai 9.
+    for t in (2.1, 2.6, 3.1):
+        fsm.step(snap(t, armed=False, range_m=0.1, landed=True, position=(3.0, 0.0, 0.1)))
+        assert fsm.state == m.MISSION_COMPLETE, f'mat trang thai 9 o t = {t}'
+
+
+def test_huy_va_lam_xong_deu_toi_MISSION_COMPLETE_nen_can_mission_result():
+    """Ly do ton tai cua mission_result: rieng trang thai 9 KHONG phan biet duoc hai chuyen nay."""
+    huy = fsm_dang_bay_toi_diem()
+    huy.request_abort()
+    huy.step(snap(1.0, armed=True, range_m=2.0, position=(3.0, 0.0, 2.0)))
+    huy.step(snap(2.0, armed=False, range_m=0.1, landed=True, position=(3.0, 0.0, 0.1)))
+
+    xong = fsm_dang_bay_toi_diem()
+    xong.waypoints = []          # het ke hoach
+    xong.request_land()
+    xong.step(snap(1.0, armed=True, range_m=2.0, position=(3.0, 0.0, 2.0)))
+    xong.step(snap(2.0, armed=False, range_m=0.1, landed=True, position=(3.0, 0.0, 0.1)))
+
+    assert huy.state == xong.state == m.MISSION_COMPLETE
+    assert huy.mission_result == m.RESULT_ABORTED
+    assert xong.mission_result == m.RESULT_LANDED_CMD
+    assert huy.mission_result != xong.mission_result
+
+
+def test_mission_result_chot_lai_sau_khi_da_ve_idle():
+    """R5: GCS khoi dong lai bao lau sau van phai hoi lai duoc ket qua chuyen truoc."""
+    fsm = fsm_dang_bay_toi_diem()
+    fsm.request_abort()
+    fsm.step(snap(1.0, armed=True, range_m=2.0, position=(3.0, 0.0, 2.0)))
+    fsm.step(snap(2.0, armed=False, range_m=0.1, landed=True, position=(3.0, 0.0, 0.1)))
+    fsm.step(snap(2.0 + m.MISSION_COMPLETE_HOLD_S, armed=False, landed=True))
+    assert fsm.state == m.IDLE
+    fsm.step(snap(600.0, armed=False, landed=True))       # muoi phut sau
+    assert fsm.state == m.IDLE
+    assert fsm.mission_result == m.RESULT_ABORTED, 'ket qua phai con nguyen khi dang dau'
+
+
+def test_mission_result_xoa_khi_cat_canh_chuyen_moi():
+    fsm = fsm_dang_bay_toi_diem()
+    fsm.mission_result = m.RESULT_ABORTED
+    fsm.state = m.IDLE
+    fsm.load_plan(2, [wp(0, marker=1)], 0, 0.0, TAGS)
+    fsm.transition(m.TAKEOFF, 10.0)
+    assert fsm.mission_result == m.RESULT_UNKNOWN
+
+
+def test_het_luot_thu_khong_duoc_bao_la_hoan_thanh():
+    """Ha canh vi het luot tim tag ket thuc o MISSION_COMPLETE y het chuyen thanh cong."""
+    fsm = fsm_dang_bay_toi_diem()
+    fsm.max_retries = 0
+    fsm._search_failed(1.0, m.RETRY_LOITER, 'thu')
+    assert fsm.state == m.EMERGENCY_LAND
+    fsm.step(snap(2.0, armed=False, range_m=0.1, landed=True, position=(3.0, 0.0, 0.1)))
+    assert fsm.state == m.MISSION_COMPLETE
+    assert fsm.mission_result == m.RESULT_RETRIES_EXHAUSTED
+
+
+def test_ly_do_dau_tien_thang_khong_bi_abort_ghi_de_failsafe():
+    fsm = fsm_dang_bay_toi_diem()
+    fsm.step(snap(1.0, armed=True, range_m=2.0, position=(3.0, 0.0, 2.0),
+                  failsafe_escalate_to=m.ESCALATE_EMERGENCY_LAND))
+    assert fsm.mission_result == m.RESULT_FAILSAFE
+    fsm.request_abort()
+    fsm.step(snap(1.2, armed=True, range_m=2.0, position=(3.0, 0.0, 2.0)))
+    assert fsm.mission_result == m.RESULT_FAILSAFE, 'ghi de se giau mat su co'
+
+
+def test_abort_giua_luc_giu_MISSION_COMPLETE_khong_lam_fsm_ket():
+    """TRANSITIONS[MISSION_COMPLETE] chi co IDLE - khong co nhanh FAILSAFE. Thieu duong ra rieng
+    thi abort toi trong cua so giu 1,5 s se chan _step moi tick va FSM ket lai vinh vien."""
+    fsm = fsm_dang_bay_toi_diem()
+    fsm.waypoints = []
+    fsm.request_land()
+    fsm.step(snap(1.0, armed=True, range_m=2.0, position=(3.0, 0.0, 2.0)))
+    fsm.step(snap(2.0, armed=False, range_m=0.1, landed=True, position=(3.0, 0.0, 0.1)))
+    assert fsm.state == m.MISSION_COMPLETE
+    fsm.request_abort()
+    fsm.step(snap(2.2, armed=False, landed=True))
+    assert fsm.state == m.IDLE and fsm.abort_requested is False
+    fsm.step(snap(2.4, armed=False, landed=True))
+    assert fsm.state == m.IDLE

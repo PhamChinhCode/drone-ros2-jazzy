@@ -36,7 +36,7 @@ class TelemetryAggregatorNode(Node):
         self.declare_parameter('publish_rate_hz', 2.0)
         # Qua han thi HA CO, khong giu gia tri cu: mot so cu 5 giay la mot loi noi doi (R3).
         self.declare_parameter('stale_s', 2.0)
-        self.declare_parameter('contract_ver', 400)     # ban 0.4 = 0*10000 + 4*100
+        self.declare_parameter('contract_ver', 500)     # ban 0.5 = 0*10000 + 5*100
         self.declare_parameter('known_tags', Parameter.Type.DOUBLE_ARRAY)
 
         # Moi nguon giu (ban_tin, thoi_diem_nhan) de xet do tuoi rieng tung nguon.
@@ -184,6 +184,7 @@ class TelemetryAggregatorNode(Node):
         if mis is not None:
             m.mission_id = mis.mission_id
             m.mission_state = mis.state
+            m.flight_result = mis.mission_result
             m.current_wp_index = mis.current_wp_index
             m.wp_total = mis.wp_total
             m.retry_count = mis.retry_count

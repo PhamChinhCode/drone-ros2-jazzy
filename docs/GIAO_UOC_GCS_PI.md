@@ -733,7 +733,10 @@ trước, kèm timestamp chống phát lại). Hợp đồng đề xuất:
 > **giống hệt mất sóng**: không lỗi, không log, chỉ im lặng. Đây là cùng một cái bẫy mà Pi đã tự
 > rơi vào một lần (chữ ký tự bật lên vì có sẵn file khoá, dù `signing_required: false`). Quy tắc:
 > **bật hay tắt phải đổi ở CẢ HAI bên trong cùng một lần**, và bên nào đổi thì báo bên kia trước.
-> Hiện `comms.yaml` của Pi để `signing_required: false`, nên GCS phải đặt `GCS_SIGNING=false`.
+> Hiện trạng Pi: `comms.yaml` để `signing_required: **true**` cho **drone thật**, nhưng launch
+> mô phỏng (`sim_launch.gcs_link()`) **ghi đè thành `false`** để không bắt ai tạo khoá trước khi
+> chạy thử. Nên khi GCS nối vào **bản mô phỏng** thì đặt `GCS_SIGNING=false`; khi nối vào **drone
+> thật** thì phải có khoá và đặt `GCS_SIGNING=true`. Hai hoàn cảnh khác nhau — đừng nhớ một cờ chung.
 
 Giai đoạn phát triển trong mạng kín (Pi và GCS cùng LAN) thì tắt được, nhưng **cờ tắt phải nằm
 trong `comms.yaml` và mặc định là BẬT**, để không ai vô tình bay với kênh mở.
@@ -1262,13 +1265,20 @@ chính mình.
 | **11.P18** `home_*` | **đạt** — chốt `[0,0]` sau khi neo, `HOME_VALID` bật, RTH vẽ được đúng chỗ |
 | **6.2** `contract_ver` | 400 cả hai chiều |
 
-**Chưa chạy được vì chưa bên nào hiện thực:** chữ ký gói (7.6), `TIMESYNC` (7.4), `PARAM_REQUEST_LIST`
-(9.4 → A16). Chưa chạy: A11 (nghẽn), A17, B2–B4, và toàn bộ 10.C.
+**Chưa chạy được vì chưa nối được hai đầu:** chữ ký gói (7.6 — Pi đã hiện thực, GCS chưa nối),
+`TIMESYNC` (7.4), `PARAM_REQUEST_LIST` (9.4 → A16). Chưa chạy: A11 (nghẽn), A17, B2–B4, và toàn bộ 10.C.
 
 **Một lỗi do chính lần chạy này tìm ra: P30** (11.5). Cùng loại với hai lỗi mà 10.A phía Pi đã bắt —
 mã chạy đúng với giả lập của chính mình, sai với bên kia thật. Đây là lý do mục 10 tồn tại.
 
-## 11. Trạng thái phân giải — bản 0.2
+**Điều đáng chú ý nhất ở 10.D không phải mấy con số đạt, mà là P30.** Cả hai bên đều đã chạy hết
+kịch bản của mình và đều thấy "xanh"; chỉ khi nối thật thì mới lộ ra rằng một giá trị có tên trong
+bảng 8.5 **chưa từng tồn tại trên dây**. Không phép kiểm nào trong 10.A bắt được nó, vì 10.A hỏi
+"gói có đi đúng không", còn đây là câu hỏi khác: *"giá trị mà tài liệu hứa có bao giờ xuất hiện
+không?"*. Đề nghị thêm một phép kiểm vào 10.A khi lên 1.0 — **A18: mỗi giá trị enum mà mục 8.5 liệt
+kê phải được quan sát ít nhất một lần trên dây, hoặc được ghi rõ là không đạt tới được.**
+
+## 11. Trạng thái phân giải
 
 ### 11.1 Toàn bộ 17 đề xuất của GCS đã được xử lý
 
@@ -1467,6 +1477,17 @@ viễn**. Trước 0.5 cửa sổ đó chỉ rộng 200 ms nên gần như khôn
 **Một hệ quả GCS cần biết:** trong 1,5 s giữ đó, FSM **chưa ở `IDLE`**, nên `DRONE_MISSION_COUNT`
 (nạp kế hoạch) và `MISSION_START` sẽ bị từ chối với `ERR_BUSY` / `DENIED`. GCS nào nạp kế hoạch tiếp
 theo ngay khi thấy drone đậu thì nên **đợi tới lúc `mission_state` về 0**, thay vì đợi theo đồng hồ.
+
+**Số đo sau khi sửa (Pi, 2026-09-16, chuyến hai chặng gắp-thả trong Gazebo):**
+
+| Quan sát | Kết quả |
+|---|---|
+| Số gói telemetry mang `mission_state` = 9 | **3** trên tổng 260 gói của chuyến — đúng bằng 1,5 s ÷ 0,5 s |
+| Chuỗi trạng thái thấy được | `0 → 1 → 2 → 3 → 4 → 5 → 1 → 2 → 4 → 5 → 8 → **9** → 0` |
+| `flight_result` lúc phát trạng thái 9 | `1 COMPLETED` |
+| `flight_result` sau khi đã về `IDLE` | vẫn `1 COMPLETED` — **chốt lại đúng như hứa** |
+| `flight_result` ngay khi cất cánh chuyến sau | về `0 UNKNOWN` |
+| `contract_ver` trên dây | `500` |
 
 *Kết:* P30 **đã phân giải**. GCS không phải đổi gì để tiếp tục chạy — (b) vẫn hoạt động — nhưng đọc
 `flight_result` thì phân biệt được thành công / huỷ / thất bại, điều mà cả (a) lẫn (b) đều không làm được.

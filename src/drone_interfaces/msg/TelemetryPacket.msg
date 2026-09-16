@@ -27,6 +27,9 @@ int32 home_e_mm
 uint16 valid_flags            # VALID_*
 uint16 status_flags           # STATUS_*
 uint32 contract_ver           # MAJOR*10000 + MINOR*100
+# Ket qua chuyen bay gan nhat (MissionState.RESULT_*), chot lai qua ca luc ve IDLE.
+# 0 = chua co chuyen nao ket thuc. Xem giao uoc GCS 11.5 P30.
+uint8 flight_result
 builtin_interfaces/Time stamp
 
 # --- valid_flags: hieu luc DU LIEU (giao uoc muc 5.2) ---

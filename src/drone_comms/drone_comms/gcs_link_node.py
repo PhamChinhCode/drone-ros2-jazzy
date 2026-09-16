@@ -140,16 +140,20 @@ class GcsLinkNode(Node):
         import os
         bat_buoc = self.get_parameter('signing_required').value
         duong = os.path.expanduser(self.get_parameter('signing_key_file').value)
+        if not bat_buoc:
+            # signing_required = false nghia la TAT HAN, ke ca khi co san khoa. Khong tu ky khi
+            # thay khoa: Pi ky ma GCS chua ky thi theo dac ta MAVLink 2 ben kia PHAI BO goi co co
+            # SIGNED - thanh mat lien lac mot chieu, im lang hoan toan, khong ai hieu vi sao.
+            self.get_logger().warning(
+                'CHAY KHONG CHU KY (signing_required = false) - chi duoc phep trong mang kin. '
+                'Bat cu ai vao duoc mang deu gui duoc lenh, ke ca DISARM (muc 7.6).')
+            return False
         if not os.path.isfile(duong):
             if bat_buoc:
                 raise RuntimeError(
                     f'signing_required = true nhung khong thay khoa {duong}. '
                     'Tao bang: python3 tools/tao_khoa_gcs.py  |  '
                     'Hoac dat signing_required:=false NEU dang chay trong mang kin.')
-            self.get_logger().warning(
-                'CHAY KHONG CHU KY - chi duoc phep trong mang kin. Bat cu ai biet IP:port deu '
-                'gui duoc lenh, ke ca DISARM (muc 7.6).')
-            return False
         with open(duong, 'rb') as f:
             khoa = f.read().strip()
         if len(khoa) != 32:
@@ -171,7 +175,13 @@ class GcsLinkNode(Node):
         self.tx_queue.put((priority, self.tx_counter, msg))
 
     def dich_ra(self):
-        """Dia chi gui: goi hop le gan nhat, chua co thi dia chi cau hinh (Pi goi ra truoc)."""
+        """Dia chi gui: goi hop le gan nhat, chua co thi dia chi cau hinh (Pi goi ra truoc).
+
+        Dia chi HOC DUOC bi QUEN khi lien ket coi la mat (check_watchdog). Khong co han dung thi
+        mot dia chi cu chiem duong len VINH VIEN: GCS doi IP, hoac mot phep thu tu may khac de lai
+        dia chi cua no, thi Pi gui vao cho cu mai va GCS moi khong bao gio thay drone - tru khi no
+        tu gui truoc. Quen di thi Pi ve lai gcs_host cau hinh, tuc luon co mot duong ra biet truoc.
+        """
         return self.gcs_addr or (self.get_parameter('gcs_host').value,
                                  self.get_parameter('gcs_port').value)
 
@@ -213,7 +223,8 @@ class GcsLinkNode(Node):
             current_wp_index=msg.current_wp_index, wp_total=msg.wp_total,
             retry_count=msg.retry_count, gripper_state=msg.gripper_state,
             failsafe_type=msg.failsafe_type, expected_marker_id=msg.expected_marker_id,
-            tagmap_crc=msg.tagmap_crc, home_n_mm=msg.home_n_mm, home_e_mm=msg.home_e_mm))
+            tagmap_crc=msg.tagmap_crc, home_n_mm=msg.home_n_mm, home_e_mm=msg.home_e_mm,
+            flight_result=msg.flight_result))
 
     def on_odom(self, msg):
         self.odom = msg
@@ -511,6 +522,12 @@ class GcsLinkNode(Node):
         if song != self.connected:
             self.connected = song
             self.get_logger().info(f'GCS {"co ket noi" if song else "MAT KET NOI"}')
+        if not song and self.gcs_addr is not None:
+            self.get_logger().info(
+                f'quen dia chi da hoc {self.gcs_addr[0]}:{self.gcs_addr[1]} - ve lai '
+                f'{self.get_parameter("gcs_host").value}:{self.get_parameter("gcs_port").value}')
+            self.gcs_addr = None
+            self.seq_gcs = None        # ben moi bat dau seq rieng, dung tinh la mat goi
         # Phat khi DOI trang thai VA dinh ky: failsafe_monitor_node co the restart va se lo moi
         # su kien truoc do (quy tac R5, muc 9.2).
         self.pub_connected.publish(Bool(data=bool(song)))

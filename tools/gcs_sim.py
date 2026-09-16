@@ -31,7 +31,7 @@ except ImportError:
 
 SYSID_GCS, COMPID_GCS = 255, 190
 SYSID_PI, COMPID_PI = 1, 191
-CONTRACT_VER = 400                       # ban 0.4
+CONTRACT_VER = 500                       # ban 0.5
 
 ACTIONS = {'none': 0, 'pickup': 1, 'dropoff': 2}
 LENH = {'rtl': 20, 'land': 21, 'start': 300, 'disarm': 400, 'pause': 193,

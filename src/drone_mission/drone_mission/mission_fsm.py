@@ -56,6 +56,22 @@ TAKEOFF_CLIMB_MPS = 0.5
 LAND_DESCENT_MPS = 0.5     # position_controller_node tu kep 0,285 m/s khi laser <= 1,2 m
 OB_STATE_KHOA = 0          # trung fc_link.OB_STATE_KHOA - FSM khong import ROS
 
+# Giu MISSION_COMPLETE it nhat bay nhieu lau truoc khi ve IDLE. Vong FSM 5 Hz (200 ms) ma
+# telemetry chi phat 2 Hz (500 ms), nen truoc day trang thai 9 song DUNG MOT tick va gan nhu
+# khong bao gio len duoc day: GCS do hai chuyen bay that, khong bat duoc lan nao (giao uoc 11.5
+# P30). 1,5 s = 3 goi telemetry, du ngay ca khi mat 2 goi.
+MISSION_COMPLETE_HOLD_S = 1.5
+
+# Ly do chuyen bay ket thuc - trung hang so drone_interfaces/msg/MissionState.RESULT_*.
+# Ton tai vi MISSION_COMPLETE la dich chung cua ca huy lenh, RTH, NAV_LAND va het ke hoach.
+RESULT_UNKNOWN = 0
+RESULT_COMPLETED = 1
+RESULT_ABORTED = 2
+RESULT_RTH = 3
+RESULT_LANDED_CMD = 4
+RESULT_FAILSAFE = 5
+RESULT_RETRIES_EXHAUSTED = 6
+
 # Muc leo thang failsafe - trung drone_interfaces/FailsafeEvent.ESCALATE_*.
 ESCALATE_NONE = 0
 ESCALATE_LOITER = 1
@@ -209,6 +225,8 @@ class MissionFsm:
     land_requested: bool = False
     rth_requested: bool = False       # GCS yeu cau ve nha (MAV_CMD 20)
     abort_requested: bool = False     # GCS huy nhiem vu (MAV_CMD 42100)
+    # Ket qua chuyen bay gan nhat, CHOT lai qua ca luc ve IDLE cho toi khi cat canh chuyen moi.
+    mission_result: int = RESULT_UNKNOWN
     mission_id: int = 0
     max_retries: int = None           # cua ke hoach dang nap; None = dung params
     # Vi tri (x, y, z) trong odom luc bat dau cat canh = "nha". Khong co GPS nen day chinh la
@@ -277,10 +295,27 @@ class MissionFsm:
         """
         self.abort_requested = True
 
+    def _ghi_ket_qua(self, ma):
+        """Ghi ly do chuyen bay ket thuc. LY DO DAU TIEN THANG.
+
+        Vi du: dang ha canh vi failsafe thi GCS bam huy - ket qua phai van la FAILSAFE, vi do
+        moi la thu khien chuyen bay dung. Ghi de se giau mat su co.
+        """
+        if self.mission_result == RESULT_UNKNOWN:
+            self.mission_result = ma
+
     def transition(self, new_state, now_s, detail=''):
         """Chuyen trang thai co kiem tra bang TRANSITIONS - chan chuyen sai tu som."""
         if new_state not in TRANSITIONS[self.state]:
             raise ValueError(f'Chuyen trang thai khong hop le: {self.state} -> {new_state}')
+        if self.state == IDLE and new_state == TAKEOFF:
+            # Chuyen bay moi thuc su bat dau: xoa ket qua chuyen truoc. Xoa o day chu KHONG o
+            # request_start() vi yeu cau cat canh co the bi huy truoc khi roi dat, va khi do
+            # ket qua chuyen truoc van con gia tri voi GCS.
+            self.mission_result = RESULT_UNKNOWN
+        if new_state == MISSION_COMPLETE:
+            # Chua ly do nao khac duoc ghi = khong co gi cat ngang = lam het ke hoach.
+            self._ghi_ket_qua(RESULT_COMPLETED)
         self.state = new_state
         self.state_entered_s = now_s
         # retry_count tinh theo TUNG DIEM: chi xoa khi bat dau chang moi (hoac ve IDLE), de vong
@@ -340,6 +375,7 @@ class MissionFsm:
         now = snap.now_s
         lost = snap.ob_auth is False or snap.ob_state == OB_STATE_KHOA
         if snap.armed and lost and self.state != FAILSAFE and FAILSAFE in TRANSITIONS[self.state]:
+            self._ghi_ket_qua(RESULT_FAILSAFE)
             return self.transition(FAILSAFE, now, 'Pi mat quyen/KHOA khi dang arm - '
                                    'nguoi lai cat ch5 hoac ch8 xuong-len')
 
@@ -348,11 +384,14 @@ class MissionFsm:
             # Muc 4 va muc 3 KHONG con gop chung: muc 4 (pin kiet, mat FC) thi moi giay bay them
             # deu la rui ro -> ha ngay. Muc 3 (pin yeu, mat GCS) con du bien de ve nha.
             if esc >= ESCALATE_EMERGENCY_LAND:
+                self._ghi_ket_qua(RESULT_FAILSAFE)
                 target = EMERGENCY_LAND if EMERGENCY_LAND in TRANSITIONS[self.state] else FAILSAFE
                 return self.transition(target, now, f'failsafe muc {esc} - ha canh tai cho')
             if esc == ESCALATE_RTH and self.state != RTH:
+                self._ghi_ket_qua(RESULT_FAILSAFE)
                 return self._vao_rth(snap, now, f'failsafe muc {esc}')
             if esc == ESCALATE_LOITER:
+                self._ghi_ket_qua(RESULT_FAILSAFE)
                 return self.transition(FAILSAFE, now, 'failsafe LOITER - giu vi tri')
 
         if self.state == FAILSAFE:
@@ -373,6 +412,7 @@ class MissionFsm:
         # Huy nhiem vu manh hon ha canh: bo ke hoach TRUOC roi moi ha, de khi cham dat FSM
         # khong tu di tiep diem nao. Dat truoc land_requested vi abort bao gom ca ha canh.
         if self.abort_requested:
+            self._ghi_ket_qua(RESULT_ABORTED)
             self.waypoints = []
             self.current_wp_index = 0
             self.start_requested_s = None
@@ -380,6 +420,11 @@ class MissionFsm:
                 if self.state == IDLE:
                     self.abort_requested = False
                     return Action(detail='huy nhiem vu - da bo ke hoach')
+                if self.state == MISSION_COMPLETE:
+                    # Duong ra duy nhat cua MISSION_COMPLETE la IDLE - khong co nhanh FAILSAFE.
+                    # Thieu nhanh nay thi abort toi trong lue giu 1,5 s se lam nhanh duoi tra ve
+                    # Action moi tick, khong bao gio toi duoc _step, va FSM KET LAI O DAY VINH VIEN.
+                    return self.transition(IDLE, now, 'huy nhiem vu - chuyen bay da ket thuc')
                 # Da disarm ma con o trang thai bay la BAT THUONG, va FAILSAFE la duong danh cho
                 # bat thuong: no tu ve IDLE ngay chu ky sau khi thay khong armed. IDLE khong nam
                 # trong bang chuyen cua ENROUTE/TAKEOFF nen khong di thang duoc.
@@ -394,10 +439,12 @@ class MissionFsm:
                 return self.transition(EMERGENCY_LAND, now, 'huy nhiem vu - ha canh')
 
         if (self.rth_requested and snap.armed and self.state not in (RTH, EMERGENCY_LAND)):
+            self._ghi_ket_qua(RESULT_RTH)
             return self._vao_rth(snap, now, 'GCS yeu cau ve nha')
 
         if (self.land_requested and snap.armed and self.state != EMERGENCY_LAND
                 and EMERGENCY_LAND in TRANSITIONS[self.state]):
+            self._ghi_ket_qua(RESULT_LANDED_CMD)
             return self.transition(EMERGENCY_LAND, now, 'yeu cau ha canh')
 
         if self.state == IDLE:
@@ -421,6 +468,9 @@ class MissionFsm:
         if self.state == ACTUATE_GRIPPER:
             return self._step_actuate_gripper(snap)
         if self.state == MISSION_COMPLETE:
+            if self.time_in_state(now) < MISSION_COMPLETE_HOLD_S:
+                # Khong phat lenh nao: da disarm, nam dat. Chi de telemetry 2 Hz kip lay mau.
+                return Action(detail='giu MISSION_COMPLETE cho GCS doc duoc')
             return self.transition(IDLE, now, 'xong')
         return Action(detail=f'{self.state}: chua hien thuc')
 
@@ -553,6 +603,10 @@ class MissionFsm:
         limit = self.max_retries if self.max_retries is not None else self.params.max_retries
         self.retry_count += 1
         if self.retry_count > limit:
+            # Ha canh tai cho vi KHONG lam duoc viec. Khong ghi day thi duong nay ket thuc o
+            # MISSION_COMPLETE giong het chuyen thanh cong, va GCS bao "xong" cho mot chuyen
+            # chua bao gio tim thay tag.
+            self._ghi_ket_qua(RESULT_RETRIES_EXHAUSTED)
             return self.transition(EMERGENCY_LAND, now_s,
                                    f'{reason} - het {limit} lan thu lai, ha canh tai cho')
         return self._enter_search(now_s, retry_state,
@@ -633,6 +687,7 @@ class MissionFsm:
             if final and self.last_fc_command_s is not None:
                 return self.transition(MISSION_COMPLETE, now,
                                        f'da ha xuong tag {wp.marker_id} va disarm')
+            self._ghi_ket_qua(RESULT_FAILSAFE)
             return self.transition(FAILSAFE, now, 'bi disarm khi dang ha chinh xac')
         if snap.landed and not final:
             return self.transition(ACTUATE_GRIPPER, now, f'cham dat tai tag {wp.marker_id}')

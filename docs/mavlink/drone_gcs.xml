@@ -87,6 +87,21 @@
       <entry value="10" name="DRONE_STATE_FAILSAFE"/>
     </enum>
 
+    <!-- Muc 8.5b. Ly do chuyen bay GAN NHAT ket thuc. Trung drone_interfaces/msg/MissionState.RESULT_*.
+         Ton tai vi mission_state = 9 MISSION_COMPLETE la dich chung cua CA huy lenh, RTH, NAV_LAND,
+         het luot thu VA het ke hoach - rieng no khong cho biet chuyen bay thanh cong hay khong.
+         CHOT lai: giu nguyen sau khi ve IDLE cho toi khi cat canh chuyen moi (quy tac R5). -->
+    <enum name="DRONE_FLIGHT_RESULT">
+      <description>Ket qua chuyen bay gan nhat trong DRONE_TELEMETRY.flight_result.</description>
+      <entry value="0" name="DRONE_RESULT_UNKNOWN"><description>Chua chuyen nao ket thuc ke tu khi Pi chay, HOAC goi tu Pi cu chua co truong nay (R3b).</description></entry>
+      <entry value="1" name="DRONE_RESULT_COMPLETED"><description>Lam het moi diem cua ke hoach, khong co gi cat ngang.</description></entry>
+      <entry value="2" name="DRONE_RESULT_ABORTED"><description>GCS huy nhiem vu (MAV_CMD_DRONE_ABORT_MISSION).</description></entry>
+      <entry value="3" name="DRONE_RESULT_RTH"><description>Ve nha roi ha canh.</description></entry>
+      <entry value="4" name="DRONE_RESULT_LANDED_CMD"><description>Ha canh tai cho theo lenh NAV_LAND.</description></entry>
+      <entry value="5" name="DRONE_RESULT_FAILSAFE"><description>Su co hoac Pi mat quyen dieu khien.</description></entry>
+      <entry value="6" name="DRONE_RESULT_RETRIES_EXHAUSTED"><description>Het luot thu tim/ha theo tag - ha canh tai cho. CHUA lam duoc viec, du van di qua MISSION_COMPLETE.</description></entry>
+    </enum>
+
     <enum name="DRONE_FAILSAFE_TYPE">
       <description>Trung hang so drone_interfaces/msg/FailsafeEvent.</description>
       <entry value="0" name="DRONE_FS_NONE"/>
@@ -180,6 +195,7 @@
       <field type="uint32_t" name="tagmap_crc">CRC-32 IEEE cua ban do tag, cong thuc o muc 8.6. Lech -> GCS khoa nap ke hoach.</field>
       <field type="int32_t" name="home_n_mm" units="mm">Toa do N cua "nha" RTH trong khung da neo. Hieu luc theo HOME_VALID.</field>
       <field type="int32_t" name="home_e_mm" units="mm">Toa do E cua "nha" RTH. Hieu luc theo HOME_VALID.</field>
+      <field type="uint8_t" name="flight_result" enum="DRONE_FLIGHT_RESULT">Ket qua chuyen bay GAN NHAT da ket thuc, chot lai qua ca luc ve IDLE. 0 = chua co chuyen nao xong, hoac Pi cu chua khai (R3b). Can truong nay vi mission_state = 9 khong phan biet duoc "xong" voi "bi huy" (muc 11.5 P30).</field>
     </message>
 
     <message id="42011" name="DRONE_LINK_STATS">
