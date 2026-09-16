@@ -158,7 +158,7 @@
       <description>Trang thai tong hop, 2 Hz CO DINH ke ca khi khong nguon nao cap nhat - nguon thieu thi ha co hieu luc tuong ung (quy tac R5).</description>
       <field type="uint64_t" name="stamp_us" units="us">Dong ho he thong Pi, co the lech neu chua dong bo NTP. Chi de log va sap thu tu; xet do tuoi thi dung thoi diem GCS NHAN.</field>
       <field type="uint32_t" name="mission_id">Ke hoach dang chay. 0 = chua nap.</field>
-      <field type="uint32_t" name="contract_ver">MAJOR*10000 + MINOR*100. Ban 0.3 = 300. Lech MAJOR -> muc 6.2.</field>
+      <field type="uint32_t" name="contract_ver">MAJOR*10000 + MINOR*100. Ban 0.4 = 400. Lech MAJOR -> muc 6.2.</field>
       <field type="int32_t" name="lat" units="degE7">Vi do. Hieu luc theo GLOBAL_POS_VALID (hien luon 0).</field>
       <field type="int32_t" name="lon" units="degE7">Kinh do. Hieu luc theo GLOBAL_POS_VALID (hien luon 0).</field>
       <field type="int32_t" name="marker_id_tracking">Tag dang BAM. MARKER_VALID = 0 thi BO QUA truong, dung doc -1.</field>

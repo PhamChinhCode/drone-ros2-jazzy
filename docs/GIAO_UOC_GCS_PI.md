@@ -4,9 +4,9 @@
 
 | | |
 |---|---|
-| Phiên bản hợp đồng | **0.3** |
-| Ngày | 2026-09-16 |
-| Trạng thái | **Bản thảo 0.3 — cả 23 đề xuất của hai bên đã phân giải, không còn mục mở (mục 11.4).** Chưa mục nào [CHỐT] — điều kiện là chạy thật trên dây (10.A) |
+| Phiên bản hợp đồng | **0.4** |
+| Ngày | 2026-09-17 |
+| Trạng thái | **Bản thảo 0.4 — dialect đã có thật và sinh mã được ở cả hai phía; không còn mục mở (11.4).** Chưa mục nào [CHỐT] — điều kiện là chạy thật trên dây với **cả hai bên thật** (10.A); Pi mới chạy với `gcs_sim` |
 | Phạm vi | Mọi thứ đi qua đường 4G/LTE giữa Pi và GCS. Kiến trúc nội bộ mỗi bên nằm ngoài phạm vi |
 | Tài liệu song sinh | `GIAO_UOC_FC_ROS2.md` (đường FC ↔ Pi) — **hai hợp đồng độc lập, xem mục 1.2** |
 
@@ -513,14 +513,26 @@ Trên thực tế `POS_VALID` **thường bằng 0 khi đậu** vì drone không
 |---|---|
 | Đổi nghĩa/dấu/đơn vị một trường đang dùng; bỏ một bản tin; đổi mã `MAV_CMD`; đổi ý nghĩa một bit `valid_flags` | **MAJOR** |
 | Thêm bản tin; thêm trường **sau `<extensions/>`** của bản tin cũ (R2); thêm mã lỗi; thêm bit `valid_flags` mới | **MINOR** |
+| Thêm trường **trước `<extensions/>`** của bản tin cũ — R2 cấm, chỉ chấp nhận khi **chưa bên nào chạy thật** | **MINOR**, và phải ghi rõ trong bảng lịch sử rằng `CRC_EXTRA` đã đổi |
 | Sửa chính tả, thêm giải thích, thêm số đo | không tăng |
 
 ### 6.2 Hai bên biết nhau ở phiên bản nào [THOẢ THUẬN]
 
-`DRONE_TELEMETRY.contract_ver` = `MAJOR × 10000 + MINOR × 100`. Bản 0.1 → `100`, bản 0.2 → `200`, bản **0.3 → `300`**.
+`DRONE_TELEMETRY.contract_ver` = `MAJOR × 10000 + MINOR × 100`. Bản 0.1 → `100`, bản 0.2 → `200`,
+bản 0.3 → `300`, bản **0.4 → `400`**.
 
 Nằm trong bản tin **định kỳ** chứ không phải bản tin bắt tay — đúng quy tắc R5: GCS restart thì
 vẫn biết ngay, không phải hỏi lại.
+
+**Chiều ngược lại đi trong `DRONE_MISSION_COUNT.contract_ver`** (8.4). Không có nó thì Pi không có
+đường nào biết phiên bản của GCS, mà bên phải từ chối khi lệch `MAJOR` lại chính là Pi (`ERR_CONTRACT`).
+`0` nghĩa là **GCS cũ chưa khai**, không phải "MAJOR bằng 0": Pi bỏ qua việc kiểm và ghi `STATUSTEXT`
+WARN, vì từ chối vì một trường trống là từ chối một GCS có thể vẫn đúng hợp đồng.
+
+**Đổi `CRC_EXTRA` là loại đổi nguy hiểm nhất mà số phiên bản phải bắt được.** Bên còn dùng XML cũ
+không báo lỗi gì: nó **loại sạch** mọi gói của bản tin đó, và triệu chứng giống hệt mất sóng (6.3
+R2, phép kiểm A14). Vì lệch `MINOR` không chặn gì, chỗ duy nhất phát hiện được là **người đọc bảng
+lịch sử** — nên dòng lịch sử phải nói thẳng là `CRC_EXTRA` đã đổi, đừng chỉ ghi "thêm một trường".
 
 **Quy tắc khi lệch `MAJOR`:**
 
@@ -560,6 +572,14 @@ MAVLink không có byte đệm. Nên thứ tự khai báo trong XML **chỉ quan
 
 **R3. Dữ liệu không tin cậy thì GẮN CỜ, đừng thay bằng giá trị "an toàn".** Đã áp ở mục 5.2.
 
+**R3b. Trường extension mới phải có `0` nghĩa là "không biết", hoặc đi kèm một bit hiệu lực.**
+[THOẢ THUẬN] Đây là hệ quả trực tiếp của R2: bên gửi cũ không có trường mới thì bên nhận đọc ra
+**0**, và không có cách nào phân biệt "bên kia chưa biết trường này" với "bên kia đo được đúng 0".
+Bốn trường extension của 0.3 thoát được vì hai bên cùng gửi từ đầu, nhưng hai trong số đó cho thấy
+cái bẫy: `expected_marker_id` = 0 là **tag 0 thật**, `tagmap_crc` = 0 trông như một CRC hợp lệ.
+`DRONE_MISSION_COUNT.contract_ver` (8.4) là trường đầu tiên áp R3b: `0` được định nghĩa thẳng là
+"chưa khai".
+
 **R4. Mọi lệnh đều phải có đường trả lời.** Đã áp ở mục 4.1.
 
 **R5. Trạng thái phải hỏi lại được** — mọi thứ GCS cần để quyết định phải có ở bản tin **định kỳ**.
@@ -598,6 +618,21 @@ từ đúng file đó:
 python3 -m pymavlink.tools.mavgen --lang=Python --wire-protocol=2.0 \
         -o gcs_dialect docs/mavlink/drone_gcs.xml
 ```
+
+**Lệnh trên không chạy được với `pymavlink` cài bằng `pip`** — phía GCS đo ngày 16/09, ba lý do độc
+lập nhau: [THOẢ THUẬN]
+
+1. Gói pip **không có `pymavlink.tools`**; phải gọi `from pymavlink.generator import mavgen` trong
+   Python, hoặc dùng một script bọc sẵn (`tools/sinh_dialect.py` phía Pi,
+   `gcs_backend/link_mav/gen_dialect.py` phía GCS).
+2. `<include>common.xml</include>` được tìm **cạnh tệp XML**, không phải trong gói pymavlink. Phải
+   chép `common.xml`, `standard.xml`, `minimal.xml` của **đúng bản pymavlink đang cài** sang cùng thư
+   mục với `drone_gcs.xml` trước khi sinh.
+3. `mavgen` mở XML bằng mã hoá mặc định của hệ điều hành (**cp1252 trên Windows**), nên chú thích
+   tiếng Việt trong XML làm hỏng việc sinh mã. Chạy bằng `python -X utf8`.
+
+**Hai bên ghim cùng một phiên bản `pymavlink`** — hiện cả hai dùng **2.4.49**. Nâng cấp là việc phải
+bàn, không phải việc làm lặng lẽ: bộ sinh mã là một phần của hợp đồng y như file XML.
 
 Hai bên tự viết bộ mã hoá bằng tay là **đường chắc chắn dẫn tới lệch**. Hợp đồng FC đã trả giá cho
 việc so khớp chuỗi tên bằng tay (mục 9.1: *"tên đã cấp không bao giờ đổi"*).
@@ -756,6 +791,7 @@ dùng khi nó vừa, từ chối khi phải mượn trường sai nghĩa.
 
 | Trường trên dây | Kiểu | `MissionWaypoint` | Ghi chú |
 |---|---|---|---|
+| `mission_id` | `uint32` | — | **phải trùng lượt đang nạp**; Pi bỏ `ITEM` mang `mission_id` khác. Không ánh xạ sang `MissionWaypoint` |
 | `seq` | `uint8` | `seq` | 0 trở lên, liên tục. `uint8` để khớp `MissionWaypoint.seq` |
 | `expected_marker_id` | `int32` | `expected_marker_id` | **nguồn vị trí duy nhất.** Phải có trong `tags.yaml` |
 | `action` | `uint8` | `action` | 0 `NONE`, 1 `PICKUP`, 2 `DROPOFF` |
@@ -786,10 +822,21 @@ suy từ `expected_marker_id`. Chở chúng lên dây chỉ tạo ra ảo giác 
 | `search_timeout_s` | `float` | `search_timeout_s` | s; 0 = dùng `mission.yaml` |
 | `issued_stamp_us` | `uint64` | `issued_stamp` | **micro giây UNIX UTC**. Pi chỉ ghi log, không dùng để quyết định |
 | `plan_name` | `char[20]` | `plan_name` | **cắt còn 20 byte, không báo lỗi** — chỉ để người đọc |
+| `contract_ver` | `uint32` **`ext`** | hằng số của GCS | phiên bản hợp đồng **của GCS**, cùng công thức mục 6.2. **0 = GCS cũ chưa khai** → Pi bỏ qua việc kiểm và ghi `STATUSTEXT` WARN |
+
+**Mọi trường `char[]` trên kênh này là ASCII KHÔNG DẤU** — `plan_name`, `reason`, `STATUSTEXT.text`.
+[THOẢ THUẬN] `pymavlink` giải mã `char[]` bằng ASCII, nên chữ tiếng Việt có dấu về tới bên kia thành
+rác (`Lấy` thành `L???y`): không gây lỗi, không ai để ý, và hỏng đúng chỗ người vận hành cần đọc.
+**Bên gửi bỏ dấu trước khi gửi**, không để bên nhận đoán lại. Phía GCS làm ở hàm `to_ascii`.
 
 `plan_name` cắt ngắn mà không báo lỗi là quyết định có chủ ý: tên kế hoạch không ảnh hưởng hành vi,
 nên từ chối cả kế hoạch chỉ vì tên dài là hại nhiều hơn lợi. Ghi rõ ở đây để phía GCS không ngạc
 nhiên khi thấy tên bị cắt trong log.
+
+`mission_id` trong `ITEM` có mặt vì `COUNT` mới huỷ lượt cũ (3.2) nhưng gói của lượt cũ vẫn đang
+trên đường: trên 4G, một `ITEM` của lượt trước đến trễ đúng lúc Pi đang chờ **cùng `seq`** của lượt
+mới sẽ được nhận vào kế hoạch mới, và không có gì phát hiện được. Đây là **trường trước
+`<extensions/>`** nên nó đổi `CRC_EXTRA` của 42003 — xem mục 6.2 về việc tăng số hợp đồng đi kèm.
 
 **`DRONE_MISSION_REQUEST`** (42002, Pi→GCS): `mission_id` (`uint32`), `seq` (`uint8`).
 **`DRONE_MISSION_ACK`** (42004, Pi→GCS): `mission_id` (`uint32`), `result` (`uint8`, mục 3.3),
@@ -1265,4 +1312,5 @@ lúc đó, kể cả khi còn sửa nghĩa — vì chưa byte nào chạy trên 
 | **0.2** | **2026-09-16** | **Pi phân giải toàn bộ 17 đề xuất của GCS, nhập vào thân tài liệu; mục 11 thành bảng truy vết.** Ba lỗi của bản 0.1 được sửa: **R2** (lẫn *trailing-zero trimming* với `CRC_EXTRA` — P3), **4.2** (chống trùng lệnh tự triệt tiêu vì `confirmation` tăng — P4), **7.4** (`HEARTBEAT` không có trường thời gian → `TIMESYNC` — P6). Nhận: `LOCAL_POSITION_NED`+`ATTITUDE` 5 Hz có điều kiện (P1), `tagmap_crc` **công thức sửa lại** theo dữ liệu Pi thật có (P2), lệnh khẩn phát lại vô hạn (P5), bảng enum 8.5 (P8), 193 (P7), `status_flags`+3 trường (P9), `RSSI_VALID` và bỏ `fc_connected` (P10), địa chỉ NAT theo gói hợp lệ gần nhất (P12), `PARAM_*` chỉ đọc 9.4 (P13), chia đoạn `STATUSTEXT` (P15), ngữ nghĩa `ACK`/`ARM` (P16), `UINT32_MAX` (P17). Trả lời 4 câu về cấu trúc kế hoạch (3.2b) — câu 3 làm lộ lỗi `ACTION_NONE` trong `mission_fsm.py`. Thêm phép kiểm A13–A17, C5. **Pi nêu P18** (nhà của RTH ≠ home trên bản đồ GCS) — chờ GCS |
 | 0.2 | 2026-09-16 | **GCS duyệt bản 0.2, không tăng số.** Chấp nhận toàn bộ phân giải 11.1 (gồm công thức `tagmap_crc` sửa lại). Trả lời P18: chọn (a), GCS vẽ nhà RTH từ `home_*` và cảnh báo trước `MISSION_START`. Nêu P19–P23 (11.3): khung trước/sau khi odom neo và `POS_VALID`, điều kiện phát 32/30, bit `HOME_VALID`, ba cách hiểu `alt_m`, làm tròn và vectơ kiểm CRC `0x6BDEA0A6`. Sửa chữ không đổi nghĩa: câu cụt ở 2.1; "thêm vào cuối" còn sót ở 6.1, 8.3, 8.4 → "sau `<extensions/>`"; "bốn lệnh" ở 6.2, 7.3, Phụ lục A (4.1 nay có 6 lệnh; 6.2 là bốn lệnh **khẩn**); bỏ ghi chú GCS đã phân giải ở 10.A; xếp lại bảng lịch sử theo thời gian |
 | **0.3** | **2026-09-16** | **Pi phân giải 5 mục GCS nêu khi duyệt 0.2; không còn mục mở.** Ba lỗi nữa của Pi được sửa: **P19 ý 3** — `home` chốt trong khung chưa neo nên **RTH bay về `pad_home` thay vì điểm cất cánh** (Pi tái hiện đúng kịch bản GCS nêu); **P20** — "nằm trên đất" không suy ra `POS_VALID` = 0, ngân sách phải lấy xấu nhất 6,5 kbit/s; **P22** — `alt_m` là so với **tag đích**, không phải điểm cất cánh (chú thích `MissionWaypoint.msg` cũng sai y vậy). Nhận: `POS_VALID` = đã neo (5.2b), N/E là trục bản đồ tag chứ không phải Bắc/Đông địa lý, bit 8 `HOME_VALID` (P21), `round()` + vectơ kiểm `0x6BDEA0A6` **Pi đã đối chiếu khớp** (P23). Trả lời: odom **nhảy tức thì** khi neo. Pi nêu tương tác P19×P20: `POS_VALID` thường = 0 khi đậu vì drone không thấy pad của chính nó. Thêm việc 9–11 vào danh sách 9.1 |
+| **0.4** | **2026-09-17** | **Nhập vào tài liệu hai trường mà `drone_gcs.xml` đã có nhưng mục 8 chưa ghi, và tăng số cho lần đổi dialect đó.** `DRONE_MISSION_ITEM.mission_id` (8.3) — **nằm TRƯỚC `<extensions/>` nên `CRC_EXTRA` của 42003 ĐÃ ĐỔI**: bên nào còn sinh mã từ XML trước 0.4 sẽ loại sạch mọi `ITEM` mà không báo gì. `DRONE_MISSION_COUNT.contract_ver` (8.4, extension) — chiều GCS→Pi của mục 6.2, `0` = GCS cũ chưa khai. Thêm **R3b** (6.3): trường extension mới phải có `0` nghĩa là "không biết". Thêm vào 6.1 dòng cho trường thêm trước `<extensions/>`. Ghi ở 7.1 ba lý do lệnh `mavgen` không chạy được với `pymavlink` cài bằng pip và việc **ghim 2.4.49** ở cả hai bên. Ghi ở 8.4 rằng mọi `char[]` là **ASCII không dấu**, bên gửi bỏ dấu. Do GCS nêu khi hiện thực xong tầng liên kết và tầng dịch vụ |
 | 0.3 | 2026-09-16 | **GCS duyệt bản 0.3, không tăng số. GCS chấp nhận toàn bộ; bắt đầu triển khai phía GCS.** Sửa chữ không đổi nghĩa: dòng trạng thái đầu tài liệu còn ghi "chờ Pi P19–P23"; nhóm byte của vectơ kiểm 8.6 (bản ghi đầu là `uint16` rồi ba `int32`, giá trị không đổi); xếp lại bảng lịch sử theo thời gian |
