@@ -4,7 +4,9 @@ import pytest
 
 from drone_mission import mission_fsm as m
 
-CO_QUYEN = dict(fc_connected=True, ob_auth=True, ob_state=1)
+# pos_anchored=True mac dinh: da nhat da chuyen len TAKEOFF/ENROUTE trong cac test khong noi
+# rieng ve neo. Cac test co y kiem hanh vi LUC CHUA neo tu ghi de pos_anchored=False.
+CO_QUYEN = dict(fc_connected=True, ob_auth=True, ob_state=1, pos_anchored=True)
 
 
 def snap(t, **kw):
@@ -676,31 +678,55 @@ def test_diem_khong_co_hanh_dong_khong_dinh_gripper():
     assert fsm.state == m.TAKEOFF and fsm.current_wp_index == 1
 
 
-def test_chua_neo_thi_khong_chot_nha_va_rth_ha_tai_cho():
+def test_chua_neo_khi_cham_tran_thi_lo_lung_roi_ha_khan_cap():
     """Truoc khi odom neo theo bang tag, toa do thuoc khung khac va se NHAY khi neo.
 
-    Chot nha luc do thi sau khi neo con so ay tro sang mot cho vat ly khac: da tai hien duoc
-    canh cat canh lech pad_home 3 m thi RTH ve pad_home chu khong ve diem cat canh.
-    Nay khong chot -> HOME_VALID = 0 -> RTH tu roi ve ha canh tai cho. Giao uoc GCS<->Pi 5.2b y 4.
+    Nen KHONG duoc roi TAKEOFF khi chua neo, du da cham tran takeoff_alt_m: FSM lo lung cho toi
+    da anchor_wait_s giay (mac dinh 10 s), van chua neo thi bao loi va EMERGENCY_LAND tai cho -
+    khong RTH duoc vi chua biet nha. Giao uoc GCS<->Pi 5.2b y 4.
     """
     fsm = fsm_dang_treo([wp(0, marker=1)])
-    fsm.step(snap(0.5, armed=True, range_m=0.2, position=(0.0, 0.0, 0.2)))   # pos_anchored=False
-    fsm.step(snap(0.6, armed=True, range_m=1.0, position=(0.0, 0.0, 1.0)))
-    assert fsm.state == m.ENROUTE
+    fsm.step(snap(0.5, armed=True, range_m=0.2, position=(0.0, 0.0, 0.2), pos_anchored=False))
+    act = fsm.step(snap(0.6, armed=True, range_m=1.0, position=(0.0, 0.0, 1.0), pos_anchored=False))
+    assert fsm.state == m.TAKEOFF and act.velocity_up_mps == 0.0, 'cham tran, chua neo - lo lung cho'
     assert fsm.home is None, 'khong duoc chot nha khi odom chua neo'
-    fsm.step(snap(1.0, armed=True, range_m=2.0, position=(3.0, 0.0, 2.0),
-                  failsafe_escalate_to=m.ESCALATE_RTH))
-    assert fsm.state == m.EMERGENCY_LAND          # ha tai cho, KHONG bay ve mot diem sai
+    fsm.step(snap(10.5, armed=True, range_m=1.0, position=(0.0, 0.0, 1.0), pos_anchored=False))
+    assert fsm.state == m.TAKEOFF, 'chua qua 10 s cho ke tu luc cham tran (0,6 s)'
+    fsm.step(snap(10.7, armed=True, range_m=1.0, position=(0.0, 0.0, 1.0), pos_anchored=False))
+    assert fsm.state == m.EMERGENCY_LAND, 'qua han cho ma chua neo - ha khan cap tai cho'
 
 
 def test_neo_muon_trong_luc_leo_van_chot_duoc_nha():
     """Drone khong thay pad cua chinh no luc nam dat; neo xay ra ~0,6 s sau khi roi dat, luc
     x, y van la cua diem cat canh (leo thang dung)."""
     fsm = fsm_dang_treo([wp(0, marker=1)])
-    fsm.step(snap(0.5, armed=True, range_m=0.1, position=(2.0, 1.0, 0.1)))   # chua neo
+    fsm.step(snap(0.5, armed=True, range_m=0.1, position=(2.0, 1.0, 0.1), pos_anchored=False))
     assert fsm.home is None
     fsm.step(snap(0.9, armed=True, range_m=0.4, position=(2.0, 1.0, 0.4), pos_anchored=True))
     assert fsm.home == (2.0, 1.0, 0.4), 'neo trong luc leo thi van phai chot duoc nha'
+
+
+def test_neo_som_leo_them_bien_an_toan_roi_moi_roi_takeoff():
+    """Camera goc rong: neo som (o do cao thap hon takeoff_alt_m nhieu) van phai leo them
+    anchor_margin_m truoc khi chuyen ENROUTE, khong roi TAKEOFF ngay luc vua neo."""
+    fsm = fsm_dang_treo([wp(0, marker=1)])
+    # takeoff_alt_m=1.0, anchor_margin_m mac dinh 0.5 -> neo luc 0,1 m thi muc tieu la
+    # 0,1 + 0,5 = 0,6 m (chua cham tran 1,0 m nen khong bi kep).
+    act = fsm.step(snap(0.3, armed=True, range_m=0.1, position=(0.0, 0.0, 0.1), pos_anchored=True))
+    assert fsm.state == m.TAKEOFF and act.velocity_up_mps == m.TAKEOFF_CLIMB_MPS
+    act = fsm.step(snap(0.7, armed=True, range_m=0.4, pos_anchored=True))
+    assert fsm.state == m.TAKEOFF and act.velocity_up_mps == m.TAKEOFF_CLIMB_MPS, \
+        'da neo nhung chua du bien an toan (0,4 < 0,6) - phai leo tiep'
+    act = fsm.step(snap(0.9, armed=True, range_m=0.6, pos_anchored=True))
+    assert fsm.state == m.ENROUTE, 'du muc tieu 0,6 m - roi TAKEOFF, khong can cho toi takeoff_alt_m'
+
+
+def test_neo_that_muon_gan_tran_khong_vuot_takeoff_alt_m():
+    """Neo tre, gan sat tran: muc tieu leo them van phai kep o takeoff_alt_m, khong leo qua no."""
+    fsm = fsm_dang_treo([wp(0, marker=1)])
+    fsm.step(snap(0.5, armed=True, range_m=0.9, pos_anchored=False))
+    act = fsm.step(snap(0.6, armed=True, range_m=1.0, pos_anchored=True))
+    assert fsm.state == m.ENROUTE, 'neo dung luc cham tran - 1,0 + 0,5 kep ve 1,0, roi TAKEOFF ngay'
 
 
 # ------------------------------------------------- lenh tu GCS (giao uoc GCS muc 4.1)

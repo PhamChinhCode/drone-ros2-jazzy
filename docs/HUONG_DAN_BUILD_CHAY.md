@@ -16,11 +16,26 @@ phía GCS — hai tài liệu tách riêng vì build/chạy là việc nội b�
 
 ## 1. Build
 
+**Tắt stack đang chạy trước** (mục 1b). Rồi:
+
 ```bash
 cd ~/drone-ros2-jazzy
+source /opt/ros/jazzy/setup.bash
 colcon build --symlink-install
 source install/setup.bash
 ```
+
+**Lỗi `failed to create symbolic link ... existing path cannot be removed: Is a directory`** nghĩa là
+`build/` được tạo bởi một lần build **không** có `--symlink-install` (hai chế độ không trộn được). Xoá
+thư mục sinh ra rồi build lại từ đầu — cả ba đều gitignore, không mất gì (gặp thật 2026-09-17):
+
+```bash
+rm -rf build install log
+colcon build --symlink-install
+```
+
+Kiểm đã đúng chế độ symlink: `ls -la install/drone_bringup/share/drone_bringup/config/tags.yaml` phải
+là liên kết (`->`), không phải file thường.
 
 `--symlink-install` để sửa file Python trong `src/` có hiệu lực ngay, không phải build lại mỗi lần —
 **trừ** file mới tạo hoặc thay đổi trong `package.xml`/`setup.py`, vẫn cần build lại. `ros2 launch`
@@ -32,6 +47,26 @@ Build riêng một gói khi chỉ sửa gói đó (nhanh hơn build toàn bộ):
 ```bash
 colcon build --packages-select drone_comms drone_mission --symlink-install
 ```
+
+## 1b. Tắt stack cũ trước khi build và chạy lại
+
+**Không chạy bộ mới khi bộ cũ còn sống.** ROS 2 không chặn hai node trùng tên, chỉ cảnh báo — nên bộ
+cũ vẫn chạy code cũ song song với bộ mới: `gcs_link_node` mới không mở được UDP `14551` (*Address already
+in use*) nên **GCS vẫn nói chuyện với node cũ**; hai `position_controller_node` cùng phát setpoint; hai
+nguồn `/odometry/filtered` làm vị trí nhảy; MAVROS mới tranh cổng serial với MAVROS cũ. Log chỉ báo lỗi
+ở vài node, phần còn lại trông như chạy bình thường.
+
+```bash
+# Ctrl+C trong terminal đang chạy ros2 launch, hoặc:
+pkill -INT -f "ros2 launch"
+# mô phỏng: Gazebo hay sót lại
+pkill -9 -f "gz sim"
+# kiểm đã sạch - danh sách phải TRỐNG:
+ros2 daemon stop && ros2 daemon start && ros2 node list
+```
+
+Trên drone thật dùng `-INT` (như Ctrl+C) trước, `-9` sau cùng: tắt cứng thì `ros2 bag record` không kịp
+đóng file. FC còn armed thì disarm trước khi tắt.
 
 ## 2. Sinh mã dialect MAVLink (chỉ khi `docs/mavlink/drone_gcs.xml` đổi)
 
@@ -59,6 +94,25 @@ ros2 launch drone_sim sim_tune.launch.py render_engine:=ogre2    # máy ảo/GPU
 ros2 launch drone_sim sim_mission.launch.py
 ros2 launch drone_sim sim_mission.launch.py tag_noise_m:=0.02 tag_dropout:=0.1   # nhiễu/mất khung
 ```
+
+**Kiểm `sim_mission` đã lên đủ** (terminal khác, đã `source install/setup.bash`):
+
+```bash
+ros2 node list                                  # 13 node, xem danh sách dưới
+ros2 topic hz /odometry/filtered                # ~40 Hz
+ros2 topic echo --once /telemetry/outgoing      # tagmap_crc khác 0, contract_ver = 600
+```
+
+13 node: `ekf_health_node`, `failsafe_monitor_node`, `fc_command_bridge_node`, `gcs_link_node`,
+`gripper_controller_node`, `gz_bridge`, `landing_target_bridge_node`, `marker_pose_republisher_node`,
+`mission_manager_node`, `position_controller_node`, `sim_fc_bridge_node`, `sim_tag_node`,
+`telemetry_aggregator_node`. **Không có MAVROS và `ekf_filter_node` là đúng** — trong mô phỏng
+`sim_fc_bridge_node` thay cả hai.
+
+Cảnh báo **bình thường** khi chưa có GCS nối vào và chưa nạp kế hoạch — không phải lỗi:
+`FAILSAFE 3 -> leo thang 3: mat GCS 10 s`, `CHAY KHONG CHU KY (signing_required = false)`,
+`/mission/state im qua 1.0 s - NGUNG phat setpoint`, và `EKF KHONG healthy: chua nhan /odometry/filtered`
+ở giây đầu tiên. Cái cần tìm là `ERROR`, `Traceback`, `process has died`.
 
 Gửi thử kế hoạch nội bộ ROS (không cần GCS thật):
 
@@ -113,6 +167,7 @@ source install/setup.bash
 python3 -m pytest src/drone_comms/test/ src/drone_mission/test/ src/drone_control/test/ \
                   src/drone_safety/test/ src/drone_estimation/test/ src/drone_sim/test/ \
                   src/drone_perception/test/ -q
+# 2026-09-17: 184 passed
 ```
 
 Hoặc theo cách chuẩn ROS 2 (chạy cả linter):
@@ -154,7 +209,9 @@ sudo tcpdump -i any -n udp port 14550 or udp port 14551 -w /tmp/pi.pcap
 
 | Triệu chứng | Nguyên nhân thường gặp |
 |---|---|
-| Sửa code mà chạy không thấy đổi | Quên `colcon build` — `ros2 launch` đọc `install/`, không đọc `src/` |
+| Sửa code mà chạy không thấy đổi | Quên `colcon build` — `ros2 launch` đọc `install/`, không đọc `src/`; **hoặc bộ cũ vẫn chạy song song** (mục 1b) |
+| `colcon build` báo `failed to create symbolic link ... Is a directory` | Build cũ không có `--symlink-install` — `rm -rf build install log` rồi build lại (mục 1) |
+| GCS vẫn nhận `tagmap_crc`/hành vi cũ sau khi chạy lại; log `Address already in use` | `gcs_link_node` cũ còn sống giữ cổng `14551` — tắt hết theo mục 1b |
 | Camera ra đúng nhịp nhưng ảnh toàn đen/0 | Quên chạy lại `camera_v4l2_setup.sh` sau reboot |
 | Liên kết GCS↔Pi không bao giờ lên, không lỗi | `gcs_host` sai IP, hoặc `signing_required` lệch nhau hai bên |
 | `ImportError: No module named 'drone_comms'` khi chạy pytest trực tiếp | Chưa `source install/setup.bash` (hoặc `/opt/ros/jazzy/setup.bash`) trước |

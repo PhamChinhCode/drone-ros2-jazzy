@@ -44,6 +44,10 @@ class MissionManagerNode(Node):
         # Giu on dinh truoc khi mo gripper de khong tha hang khi con dang dao dong.
         self.declare_parameter('pre_dropoff_settle_s', 2.0)
         self.declare_parameter('takeoff_alt_m', 5.0)
+        # Leo them sau khi neo (EkfHealth.anchored) truoc khi roi TAKEOFF; khong vuot takeoff_alt_m.
+        self.declare_parameter('anchor_margin_m', 0.5)
+        # Cham takeoff_alt_m ma chua neo thi lo lung cho toi da ngan nay giay roi EMERGENCY_LAND.
+        self.declare_parameter('anchor_wait_s', 10.0)
         self.declare_parameter('state_publish_rate_hz', 5.0)
         # Ban do tag dung chung (config/tags.yaml). Khong co GPS: vi tri waypoint suy tu day.
         self.declare_parameter('known_tags', Parameter.Type.DOUBLE_ARRAY)
@@ -53,7 +57,9 @@ class MissionManagerNode(Node):
             max_retries=self.get_parameter('max_retries').value,
             acceptance_radius_m=self.get_parameter('acceptance_radius_m').value,
             pre_dropoff_settle_s=self.get_parameter('pre_dropoff_settle_s').value,
-            takeoff_alt_m=self.get_parameter('takeoff_alt_m').value))
+            takeoff_alt_m=self.get_parameter('takeoff_alt_m').value,
+            anchor_margin_m=self.get_parameter('anchor_margin_m').value,
+            anchor_wait_s=self.get_parameter('anchor_wait_s').value))
 
         self.snapshot = mission_fsm.Snapshot()
         try:

@@ -193,6 +193,8 @@ class Params:
     acceptance_radius_m: float = 1.5
     pre_dropoff_settle_s: float = 2.0
     takeoff_alt_m: float = 5.0
+    anchor_margin_m: float = 0.5      # leo them sau khi neo truoc khi roi TAKEOFF, du bien an toan
+    anchor_wait_s: float = 10.0       # cho toi da o tran takeoff_alt_m ma chua neo thi ha khan cap
 
 
 @dataclass
@@ -233,6 +235,11 @@ class MissionFsm:
     # moc neo cua khung odom. None = chua tung cat canh -> khong RTH duoc.
     home: tuple = None
     rth_alt_m: float = None           # do cao giu khi bay ve, chot luc vao RTH
+    # Do cao dich sau khi neo = min(do cao luc neo + anchor_margin_m, takeoff_alt_m); None = chua
+    # neo trong chang TAKEOFF nay. Dat lai moi lan vao TAKEOFF (xem transition()).
+    anchor_climb_target_m: float = None
+    # Thoi diem bat dau lo lung o tran takeoff_alt_m ma chua neo; None = chua cham tran/da neo.
+    ceiling_wait_since_s: float = None
     # Rieng cho nhip phat lai lenh gap/tha. KHONG dung chung last_fc_command_s: truong do
     # danh cho nhip thu lai DISARM trong _descend_and_disarm.
     last_gripper_command_s: float = None
@@ -330,6 +337,12 @@ class MissionFsm:
             # request_start() vi yeu cau cat canh co the bi huy truoc khi roi dat, va khi do
             # ket qua chuyen truoc van con gia tri voi GCS.
             self.mission_result = RESULT_UNKNOWN
+        if new_state == TAKEOFF:
+            # Chang TAKEOFF moi (tu IDLE hoac tu ACTUATE_GRIPPER giua chang) - dat lai muc tieu
+            # leo them sau neo va bo dem cho tran, du da tung neo tu chang truoc (pos_anchored la
+            # latch, khong tu False lai - snap.pos_anchored van True ngay tu buoc dau chang nay).
+            self.anchor_climb_target_m = None
+            self.ceiling_wait_since_s = None
         if new_state == MISSION_COMPLETE:
             # Chua ly do nao khac duoc ghi = khong co gi cat ngang = lam het ke hoach.
             self._ghi_ket_qua(RESULT_COMPLETED)
@@ -366,7 +379,9 @@ class MissionFsm:
             nguyen, khong gui lenh FC moi;
           - FAILSAFE: da disarm -> IDLE; con arm va lay lai quyen -> EMERGENCY_LAND;
           - IDLE: request_start() -> gui ARM chi khi OB_ARM_RDY = 1, thua 2 s; armed -> TAKEOFF;
-          - TAKEOFF: leo toi laser >= takeoff_alt_m roi giu vz = 0;
+          - TAKEOFF: leo toi khi neo (EkfHealth.anchored) roi leo them anchor_margin_m (khong vuot
+            takeoff_alt_m) roi giu vz = 0; cham takeoff_alt_m ma chua neo -> lo lung cho toi
+            anchor_wait_s roi EMERGENCY_LAND;
           - EMERGENCY_LAND: xuong; landed + OB_DIS_RDY = 1 -> DISARM thuong, thu lai 3 s;
             disarm xong -> MISSION_COMPLETE -> IDLE. KHONG tu goi 21196 (11.1 #12f).
           - request_land() -> EMERGENCY_LAND tu moi trang thai co nhanh do trong TRANSITIONS.
@@ -378,7 +393,8 @@ class MissionFsm:
           - dang bat bat ky muc nao -> IDLE khong arm.
 
         Trang thai nhiem vu (khong GPS, vi tri diem suy tu tag):
-          - TAKEOFF: laser >= takeoff_alt_m -> ENROUTE neu da nap ke hoach, khong thi giu;
+          - TAKEOFF: da neo VA laser >= anchor_climb_target_m -> ENROUTE neu da nap ke hoach,
+            khong thi giu; chua neo khi cham takeoff_alt_m -> cho anchor_wait_s roi EMERGENCY_LAND;
           - ENROUTE: phat diem den; cach ngang <= acceptance_radius_m cua diem -> MARKER_SEARCH;
           - MARKER_SEARCH: giu tai diem, phat expected_marker_id; landing_target_bridge_node xac
             thuc dung ID -> PRECISION_LAND; qua search_timeout_s (hoac failsafe RETRY_LOITER) ->
@@ -561,13 +577,36 @@ class MissionFsm:
             return Action(velocity_up_mps=0.0, detail='khong biet quyen - giu vz = 0')
         if snap.range_m is None:
             return Action(velocity_up_mps=0.0, detail='mat laser - giu vz = 0')
+
+        if snap.pos_anchored and self.anchor_climb_target_m is None:
+            # Vua neo xong: leo them mot bien an toan (anchor_margin_m) roi moi roi TAKEOFF, thay
+            # vi cho het takeoff_alt_m nhu truoc - neo som (vd camera goc rong) thi roi som theo,
+            # khong vuot tran takeoff_alt_m du neo tre.
+            self.anchor_climb_target_m = min(snap.range_m + self.params.anchor_margin_m,
+                                             self.params.takeoff_alt_m)
+
+        if self.anchor_climb_target_m is not None:
+            if snap.range_m >= self.anchor_climb_target_m:
+                wp = self.current_waypoint()
+                if wp is None:
+                    return Action(velocity_up_mps=0.0, detail='du do cao - giu (chua nap ke hoach)')
+                return self.transition(ENROUTE, snap.now_s,
+                                       f'du do cao sau khi neo - bay toi diem {self.current_wp_index} '
+                                       f'(tag {wp.marker_id})')
+            return Action(velocity_up_mps=TAKEOFF_CLIMB_MPS, detail='leo them sau khi neo')
+
+        # Chua neo. Cham tran takeoff_alt_m ma van chua neo thi lo lung cho toi han anchor_wait_s
+        # roi ha khan cap - KHONG duoc bay tiep bang vi tri EKF chua dang tin (xem module docstring
+        # ve pos_anchored: truoc khi neo, vi tri thuoc mot khung khac va se NHAY khi neo xong).
         if snap.range_m >= self.params.takeoff_alt_m:
-            wp = self.current_waypoint()
-            if wp is None:
-                return Action(velocity_up_mps=0.0, detail='du do cao - giu (chua nap ke hoach)')
-            return self.transition(ENROUTE, snap.now_s,
-                                   f'du do cao - bay toi diem {self.current_wp_index} '
-                                   f'(tag {wp.marker_id})')
+            if self.ceiling_wait_since_s is None:
+                self.ceiling_wait_since_s = snap.now_s
+            elif snap.now_s - self.ceiling_wait_since_s >= self.params.anchor_wait_s:
+                return self.transition(
+                    EMERGENCY_LAND, snap.now_s,
+                    f'chua neo sau {self.params.anchor_wait_s:g} s cho o tran '
+                    f'{self.params.takeoff_alt_m:g} m - ha khan cap')
+            return Action(velocity_up_mps=0.0, detail='cham tran, chua neo - lo lung cho')
         return Action(velocity_up_mps=TAKEOFF_CLIMB_MPS, detail='leo')
 
     def _step_enroute(self, snap):

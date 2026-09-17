@@ -4,7 +4,9 @@ mission_manager_node:
     max_retries: 3
     acceptance_radius_m: 1.5
     pre_dropoff_settle_s: 2.0    # giu on dinh truoc khi mo gripper, tranh tha khi con dao dong
-    takeoff_alt_m: 5.0
+    takeoff_alt_m: 5.0            # tran cung - ToF toi da 8 m, 5 m con bien an toan
+    anchor_margin_m: 0.5          # leo them sau khi neo (EkfHealth.anchored) truoc khi roi TAKEOFF
+    anchor_wait_s: 10.0           # cham tran ma chua neo thi lo lung cho ngan nay giay roi EMERGENCY_LAND
     state_publish_rate_hz: 5.0
 
 gripper_controller_node:
