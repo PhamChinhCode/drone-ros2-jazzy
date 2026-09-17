@@ -21,7 +21,7 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
-from drone_sim.sim_launch import (controller_node, gazebo, gcs_link, gripper_node,
+from drone_sim.sim_launch import (TAGS_YAML, controller_node, gazebo, gcs_link, gripper_node,
                                   gz_bridge, landing_bridge, marker_republisher,
                                   sim_fc_bridge, sim_tag, telemetry_aggregator)
 
@@ -55,7 +55,7 @@ def generate_launch_description():
              parameters=[os.path.join(CONFIG, 'mission.yaml'), SIM_TIME], output='screen'),
         Node(package='drone_mission', executable='mission_manager_node',
              name='mission_manager_node',
-             parameters=[os.path.join(CONFIG, 'mission.yaml'), os.path.join(CONFIG, 'tags.yaml'),
+             parameters=[os.path.join(CONFIG, 'mission.yaml'), TAGS_YAML,
                          {'takeoff_alt_m': ParameterValue(LaunchConfiguration('takeoff_alt_m'),
                                                           value_type=float)},
                          SIM_TIME],

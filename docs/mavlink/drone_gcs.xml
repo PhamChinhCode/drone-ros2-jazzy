@@ -127,6 +127,18 @@
       <entry value="1" name="DRONE_ACTION_PICKUP"><description>Gap. Xong = sensor_confirmed True.</description></entry>
       <entry value="2" name="DRONE_ACTION_DROPOFF"><description>Tha. Xong = sensor_confirmed False - dieu kien NGUOC voi PICKUP.</description></entry>
     </enum>
+
+    <!-- Muc 8.7, P31. -->
+    <enum name="DRONE_TAGMAP_RESULT">
+      <description>Ket qua nap ban do tag, tra trong DRONE_TAGMAP_ACK.</description>
+      <entry value="0" name="DRONE_TAGMAP_ACCEPTED"><description>Da kiem va ghi xong; CAN khoi dong lai stack moi co hieu luc - khac DRONE_MISSION_ACCEPTED. GCS xac nhan hieu luc bang DRONE_TELEMETRY.tagmap_crc, khong phai bang ma nay (muc 11.6).</description></entry>
+      <entry value="1" name="DRONE_TAGMAP_ERR_TIMEOUT"><description>Thieu DRONE_TAGMAP_ITEM sau 5 lan hoi.</description></entry>
+      <entry value="2" name="DRONE_TAGMAP_ERR_COUNT"><description>count = 0 hoac > 32.</description></entry>
+      <entry value="3" name="DRONE_TAGMAP_ERR_CRC"><description>Nhan du tag nhung CRC tinh lai tu cac ban ghi nhan duoc khong khop tagmap_crc da khai o DRONE_TAGMAP_COUNT.</description></entry>
+      <entry value="4" name="DRONE_TAGMAP_ERR_BUSY"><description>Pi khong o IDLE. Doi ban do giua chuyen bay la nguy hiem.</description></entry>
+      <entry value="5" name="DRONE_TAGMAP_ERR_UNSUPPORTED"><description>Pi chua hien thuc tinh nang nay.</description></entry>
+      <entry value="6" name="DRONE_TAGMAP_ERR_UNDECLARED_TAG"><description>Co tag_id khong nam trong tag.ids cua apriltag.yaml - Pi tu choi CA luot, reason ghi id dau tien bi thieu. Nap qua day chi doi duoc toa do tag DA KHAI, khong them tag moi (muc 11.6, Pi tra loi cau 2).</description></entry>
+    </enum>
   </enums>
 
   <messages>
@@ -166,6 +178,36 @@
       <field type="uint32_t" name="mission_id">ID ke hoach vua nap.</field>
       <field type="uint8_t" name="result" enum="DRONE_MISSION_RESULT">Ma ket qua.</field>
       <field type="char[50]" name="reason">Chuoi ly do do mission_manager_node sinh ra, chuyen thang khong sua. CAT CON 50 BYTE.</field>
+    </message>
+
+    <!-- ================= GCS -> Pi: nap ban do tag qua day (muc 8.7, P31) ================= -->
+    <message id="42005" name="DRONE_TAGMAP_COUNT">
+      <description>GCS mo mot luot nap ban do tag. Pi tra loi bang DRONE_TAGMAP_REQUEST(0). CHI nhan khi Pi o IDLE.</description>
+      <field type="uint32_t" name="tagmap_crc">CRC-32 cua ban do SAP gui, tinh theo muc 8.6. Dong thoi la khoa tuong quan cac goi cua luot nay - ban do sap gui tu no da co mot CRC duy nhat, khong can cap ID rieng.</field>
+      <field type="uint8_t" name="count">So tag, 1-32. Ngoai dai -> ERR_COUNT.</field>
+    </message>
+
+    <message id="42006" name="DRONE_TAGMAP_REQUEST">
+      <description>Pi hoi mot tag. Cung nhip va quy tac phat lai voi DRONE_MISSION_REQUEST (muc 3.2): het 1,0 s thi hoi lai cung seq, toi da 5 lan roi ACK ERR_TIMEOUT.</description>
+      <field type="uint32_t" name="tagmap_crc">Phai trung tagmap_crc cua luot dang nap.</field>
+      <field type="uint8_t" name="seq">Thu tu tag dang hoi, tu 0.</field>
+    </message>
+
+    <message id="42007" name="DRONE_TAGMAP_ITEM">
+      <description>Mot tag. KHONG mang ten khung TF: Pi tu tra theo tag_id trong apriltag.yaml (nguon duy nhat) - GCS gui thi chi them mot cho co the lech ma khong nam trong CRC (muc 11.6, Pi tra loi cau 2).</description>
+      <field type="uint32_t" name="tagmap_crc">Phai trung luot dang nap - chan goi cua luot cu den tre.</field>
+      <field type="int32_t" name="n_mm" units="mm">Toa do N, NED milimet, cung he va cung phep lam tron voi muc 8.6.</field>
+      <field type="int32_t" name="e_mm" units="mm">Toa do E, NED milimet.</field>
+      <field type="int32_t" name="d_mm" units="mm">Toa do D, NED milimet.</field>
+      <field type="uint8_t" name="seq">Thu tu tag, tu 0, lien tuc.</field>
+      <field type="uint16_t" name="tag_id">Phai co trong tag.ids cua apriltag.yaml, khong thi ACK ERR_UNDECLARED_TAG cho CA luot. Nap qua day CHI doi duoc toa do tag DA KHAI, khong them duoc tag moi.</field>
+    </message>
+
+    <message id="42008" name="DRONE_TAGMAP_ACK">
+      <description>Ket qua nap ban do. ACCEPTED nghia la Pi da kiem va GHI xong, CHUA phai da co hieu luc - can khoi dong lai stack. GCS xac nhan hieu luc bang DRONE_TELEMETRY.tagmap_crc doi dung gia tri da khai o DRONE_TAGMAP_COUNT (muc 11.6, Pi tra loi cau 1).</description>
+      <field type="uint32_t" name="tagmap_crc">CRC cua luot vua nap.</field>
+      <field type="uint8_t" name="result" enum="DRONE_TAGMAP_RESULT">Ma ket qua.</field>
+      <field type="char[50]" name="reason">Chuoi ly do, chuyen thang khong sua. CAT CON 50 BYTE.</field>
     </message>
 
     <!-- ================= Pi -> GCS: telemetry (muc 5) ================= -->

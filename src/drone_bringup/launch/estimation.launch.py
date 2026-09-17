@@ -14,6 +14,9 @@ from launch_ros.actions import Node
 
 BRINGUP = get_package_share_directory('drone_bringup')
 CONFIG = os.path.join(BRINGUP, 'config')
+# Uu tien ban da nap qua day (giao uoc GCS 8.7, P31) neu co, khong thi dung ban dong bo trong repo.
+_TAGS_OVERRIDE = os.path.expanduser('~/.config/drone_ros2_jazzy/tags_override.yaml')
+TAGS_YAML = _TAGS_OVERRIDE if os.path.isfile(_TAGS_OVERRIDE) else os.path.join(CONFIG, 'tags.yaml')
 
 
 def generate_launch_description():
@@ -49,7 +52,7 @@ def generate_launch_description():
 
         Node(package='drone_estimation', executable='marker_pose_republisher_node',
              name='marker_pose_republisher_node',
-             parameters=[os.path.join(CONFIG, 'estimation.yaml'), os.path.join(CONFIG, 'tags.yaml')],
+             parameters=[os.path.join(CONFIG, 'estimation.yaml'), TAGS_YAML],
              output='screen'),
 
         # Van toc FC da loc mau khong hop le -> /fc/velocity_xy, /fc/velocity_z cho EKF.

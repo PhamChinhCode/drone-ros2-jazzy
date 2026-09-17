@@ -4,9 +4,9 @@
 
 | | |
 |---|---|
-| Phiên bản hợp đồng | **0.5** |
+| Phiên bản hợp đồng | **0.6** |
 | Ngày | 2026-09-16 |
-| Trạng thái | **Bản thảo 0.5 — hai bên THẬT đã nói chuyện được trên dây (10.A một phần + 10.B, xem 10.D).** P30 **đã phân giải** (11.5): Pi chọn (a) **và** thêm `DRONE_TELEMETRY.flight_result`. Mục mở: **P31** (11.6, GCS nêu — nạp bản đồ tag qua dây; Pi đã trả lời, chờ GCS sửa 8.7). Chưa mục nào [CHỐT]: còn thiếu chữ ký gói nối hai đầu, `TIMESYNC`, `PARAM_*`, và 10.C |
+| Trạng thái | **Bản thảo 0.6 — hai bên THẬT đã nói chuyện được trên dây (10.A một phần + 10.B, xem 10.D).** P30 **đã phân giải** (11.5): Pi chọn (a) **và** thêm `DRONE_TELEMETRY.flight_result`. **P31 đã phân giải** (11.6, 8.7): bốn bản tin `42005–42008` hiện thực xong cả hai bên, đã chạy thật qua Tailscale UDP. Không còn mục mở. Chưa mục nào [CHỐT]: còn thiếu chữ ký gói nối hai đầu, `TIMESYNC`, `PARAM_*`, và 10.C |
 | Phạm vi | Mọi thứ đi qua đường 4G/LTE giữa Pi và GCS. Kiến trúc nội bộ mỗi bên nằm ngoài phạm vi |
 | Tài liệu song sinh | `GIAO_UOC_FC_ROS2.md` (đường FC ↔ Pi) — **hai hợp đồng độc lập, xem mục 1.2** |
 
@@ -1034,17 +1034,19 @@ Quy trình vận hành [THOẢ THUẬN]: **GCS xuất `tags.yaml`** từ trang t
 lên Pi; GCS **khoá chức năng nạp kế hoạch** khi CRC lệch. Nạp bản đồ qua dây để MINOR sau nếu cần.
 
 
-### 8.7 Nạp bản đồ tag qua dây — [ĐỀ XUẤT, GCS nêu, Pi đã trả lời] {#87}
+### 8.7 Nạp bản đồ tag qua dây — [THOẢ THUẬN, hiện thực xong cả hai bên, đã chạy thật trên dây] {#87}
 
-Xem lý do và câu hỏi ở **11.6 P31**. **Pi đề nghị sửa ba chỗ trước khi chốt** (xem "Pi trả lời" cuối
-11.6): viết lại quy tắc 2, bỏ `frame_name`, thêm mã `6 ERR_UNDECLARED_TAG`. Dưới đây là cách điền từng trường, chốt trước khi viết code
-theo đúng 6.4 bước 3.
+Xem lý do và câu hỏi ở **11.6 P31**. Bản dưới đây đã áp ba sửa đổi Pi nêu ở "Pi trả lời" cuối 11.6:
+viết lại quy tắc 2, bỏ `frame_name`, thêm mã `6 ERR_UNDECLARED_TAG`. **Đã hiện thực ở cả hai bên và
+đã chạy thật qua Tailscale UDP 2026-09-16**: nạp 3 tag (đổi toạ độ tag `pad_a`), `ACCEPTED`, khởi
+động lại `telemetry_aggregator_node`, `tagmap_crc` trong telemetry đổi đúng giá trị đã khai trong
+`DRONE_TAGMAP_COUNT` (`0x4E7ECD6B`) — khớp quy tắc 2 dưới đây.
 
 **`DRONE_TAGMAP_COUNT`** (42005, GCS→Pi) — mở một lượt nạp:
 
 | Trường | Kiểu | Ghi chú |
 |---|---|---|
-| `tagmap_crc` | `uint32` | CRC của bản đồ **sắp gửi**, tính theo 8.6. Pi đối chiếu sau khi nhận đủ; lệch thì `ERR_CRC` |
+| `tagmap_crc` | `uint32` | CRC của bản đồ **sắp gửi**, tính theo 8.6. Đồng thời là khoá tương quan của lượt — bản đồ sắp gửi tự có một CRC duy nhất, không cần cấp ID riêng |
 | `count` | `uint8` | số tag, **1–32**. 0 hoặc quá 32 → `ERR_COUNT` |
 
 **`DRONE_TAGMAP_REQUEST`** (42006, Pi→GCS): `tagmap_crc` (`uint32`), `seq` (`uint8`).
@@ -1057,30 +1059,46 @@ Cùng nhịp và cùng quy tắc phát lại với mục 3.2 — hết 1,0 s th�
 | `tagmap_crc` | `uint32` | phải trùng lượt đang nạp — chặn gói của lượt cũ đến trễ, đúng bài học P24 |
 | `n_mm` / `e_mm` / `d_mm` | `int32` | **NED milimét**, cùng hệ và cùng phép làm tròn với 8.6 |
 | `seq` | `uint8` | 0 trở lên, liên tục |
-| `tag_id` | `uint16` | trùng `tag_id` của `tags.yaml` |
-| `frame_name` | `char[16]` | tên khung TF, ASCII không dấu. Rỗng = Pi tự đặt tên |
+| `tag_id` | `uint16` | phải có trong `tag.ids` của `apriltag.yaml`, không thì `ERR_UNDECLARED_TAG` cho **cả lượt** |
+
+Không còn `frame_name`: Pi tự tra tên khung TF theo `tag_id` trong `apriltag.yaml` — nguồn duy nhất,
+vì `apriltag_ros` bỏ qua tag không nằm trong `tag.frames` và trường này không nằm trong CRC 8.6nên
+GCS gửi thì chỉ thêm một chỗ có thể lệch mà không ai thấy (11.6, Pi trả lời câu 2).
 
 **`DRONE_TAGMAP_ACK`** (42008, Pi→GCS): `tagmap_crc` (`uint32`), `result` (`uint8`),
 `reason` (`char[50]`).
 
 | Mã | Tên | Nghĩa |
 |---|---|---|
-| 0 | `ACCEPTED` | Pi đã ghi `tags.yaml` và nạp lại; `tagmap_crc` trong telemetry đổi theo |
+| 0 | `ACCEPTED` | Pi đã kiểm và **ghi xong** — **CHƯA phải đã có hiệu lực**, xem quy tắc 2 |
 | 1 | `ERR_TIMEOUT` | thiếu `ITEM` sau 5 lần hỏi |
 | 2 | `ERR_COUNT` | `count` = 0 hoặc > 32 |
 | 3 | `ERR_CRC` | nhận đủ nhưng CRC tính lại không khớp `tagmap_crc` đã khai |
-| 4 | `ERR_BUSY` | **Pi không ở `IDLE`** — xem quy tắc dưới |
-| 5 | `ERR_UNSUPPORTED` | Pi chưa hiện thực (để GCS cũ nói chuyện được với Pi chưa làm tính năng này) |
+| 4 | `ERR_BUSY` | **Pi không ở `IDLE`** — xem quy tắc 1 |
+| 5 | `ERR_UNSUPPORTED` | Pi chưa hiện thực (dự phòng tương thích ngược; không còn đường nào phát ra mã này kể từ khi cả hai bên đã hiện thực) |
+| 6 | `ERR_UNDECLARED_TAG` | có `tag_id` không nằm trong `tag.ids` của `apriltag.yaml` — Pi từ chối **cả lượt**, `reason` ghi id đầu tiên bị thiếu |
 
 **Ba quy tắc, và chúng quan trọng hơn khung gói:**
 
 1. **Chỉ nạp khi Pi ở `IDLE`.** Đổi bản đồ giữa chuyến bay nghĩa là mọi waypoint của kế hoạch đang
    chạy lặng lẽ trỏ sang chỗ khác — drone đang bay tới một toạ độ, và toạ độ đó đổi dưới chân nó.
-   Pi từ chối bằng `ERR_BUSY`, không "nạp rồi áp dụng sau".
-2. **`tagmap_crc` trong telemetry phải đổi ngay sau `ACCEPTED`**, nếu không GCS không có cách nào
-   xác nhận việc nạp đã có tác dụng — và đó chính là thứ duy nhất nó kiểm được.
+   Pi từ chối bằng `ERR_BUSY`, không "nạp rồi áp dụng sau". FSM vốn đã chỉ nhận kế hoạch khi `IDLE`
+   nên dùng lại đúng điều kiện đó; trong 1,5 s giữ `MISSION_COMPLETE` (11.5) cũng trả `ERR_BUSY`.
+2. **`ACCEPTED` nghĩa là "Pi đã kiểm và ghi xong", KHÔNG phải "đã có hiệu lực".** Cả bốn node đọc
+   bản đồ (`marker_pose_republisher_node`, `landing_target_bridge_node`, `mission_manager_node`,
+   `telemetry_aggregator_node`) chỉ đọc **đúng một lần lúc khởi động**, không node nào có callback
+   đổi tham số — nạp qua dây cần **khởi động lại stack** mới có hiệu lực thật (Pi ghi ra một file
+   riêng ngoài cây build, launch ưu tiên đọc file đó nếu có). **GCS xác nhận hiệu lực bằng MỘT cách
+   duy nhất: so `DRONE_TELEMETRY.tagmap_crc` với `tagmap_crc` đã khai ở `DRONE_TAGMAP_COUNT`.**
+   Giữa hai mốc, GCS hiện "đã gửi, chờ khởi động lại" và vẫn khoá nạp kế hoạch như 8.6.
 3. **Kế hoạch đã nạp bị huỷ khi bản đồ đổi.** Kế hoạch cũ suy vị trí từ bản đồ cũ; giữ lại là giữ
-   một kế hoạch có nghĩa khác với lúc người ta soạn nó. Pi xoá và báo bằng `STATUSTEXT`.
+   một kế hoạch có nghĩa khác với lúc người ta soạn nó. Pi xoá **ngay khi `ACCEPTED`**, không đợi
+   khởi động lại (dịch vụ ROS `~/clear_plan` trên `mission_manager_node`), và báo bằng `STATUSTEXT`.
+
+**Giới hạn đã biết, không phải lỗi:** nạp qua dây chỉ đổi được toạ độ của tag **đã khai** trong
+`apriltag.yaml`. Thêm tag mới vẫn phải sửa `apriltag.yaml` trên Pi bằng tay và khởi động lại — vì
+`apriltag_ros` không phát hiện tag ngoài `tag.frames`, và kích thước tag (`tag.sizes`) không đi qua
+kênh này.
 
 ---
 
@@ -1452,9 +1470,9 @@ là nhánh thường gặp.
 | P22 | TB | **Pi nhận** — `alt_m` so với tag đích |
 | P23 | Thấp | **Pi nhận**, vectơ kiểm đã đối chiếu khớp |
 | **P30** | **Cao** | **Pi nhận và sửa ở 0.5** — giữ `MISSION_COMPLETE` 1,5 s, **và** thêm `flight_result` (8.5b) vì riêng trạng thái 9 không phân biệt được xong / bị huỷ (11.5) |
-| **P31** | **TB** | **Pi đã trả lời, CHỜ GCS sửa 8.7** — nạp bản đồ tag qua dây thay cho chép `tags.yaml` bằng tay; cần khởi động lại stack, không thêm được tag mới, bỏ `frame_name` (8.7, 11.6) |
+| **P31** | **TB** | **Đã phân giải, hiện thực xong cả hai bên** — nạp bản đồ tag qua dây thay cho chép `tags.yaml` bằng tay; cần khởi động lại stack, không thêm được tag mới, bỏ `frame_name` (8.7, 11.6) |
 
-**Cả 24 mục của 0.2–0.4 đã phân giải, gồm P30 — mục duy nhất do lần chạy thật đầu tiên giữa hai bên tìm ra, Pi sửa ở 0.5. Mục đang chờ: P31 (11.6), GCS nêu.**
+**Cả 25 mục của 0.2–0.6 đã phân giải. Không còn mục mở.**
 
 Điều kiện lên **1.0** vẫn không đổi: đi qua toàn bộ phép kiểm **10.A** (còn A11, A15b, A16, A17).
 
@@ -1690,6 +1708,7 @@ bản tin vào `drone_gcs.xml`, tăng số, rồi mới viết code. **Pi chưa 
 | **0.3** | **2026-09-16** | **Pi phân giải 5 mục GCS nêu khi duyệt 0.2; không còn mục mở.** Ba lỗi nữa của Pi được sửa: **P19 ý 3** — `home` chốt trong khung chưa neo nên **RTH bay về `pad_home` thay vì điểm cất cánh** (Pi tái hiện đúng kịch bản GCS nêu); **P20** — "nằm trên đất" không suy ra `POS_VALID` = 0, ngân sách phải lấy xấu nhất 6,5 kbit/s; **P22** — `alt_m` là so với **tag đích**, không phải điểm cất cánh (chú thích `MissionWaypoint.msg` cũng sai y vậy). Nhận: `POS_VALID` = đã neo (5.2b), N/E là trục bản đồ tag chứ không phải Bắc/Đông địa lý, bit 8 `HOME_VALID` (P21), `round()` + vectơ kiểm `0x6BDEA0A6` **Pi đã đối chiếu khớp** (P23). Trả lời: odom **nhảy tức thì** khi neo. Pi nêu tương tác P19×P20: `POS_VALID` thường = 0 khi đậu vì drone không thấy pad của chính nó. Thêm việc 9–11 vào danh sách 9.1 |
 | **0.4** | **2026-09-17** | **Nhập vào tài liệu hai trường mà `drone_gcs.xml` đã có nhưng mục 8 chưa ghi, và tăng số cho lần đổi dialect đó.** `DRONE_MISSION_ITEM.mission_id` (8.3) — trường này **nằm TRƯỚC `<extensions/>`**, tức thuộc loại đổi `CRC_EXTRA`; **Pi đối chiếu lịch sử XML: nó có mặt từ commit ĐẦU TIÊN của `drone_gcs.xml` và chưa từng đổi giữa hai bản đã publish**, nên không bản XML nào đang lưu hành bị lệch `CRC_EXTRA` của 42003. Cái thực sự đổi mà không tăng số là `DRONE_MISSION_COUNT.contract_ver`, và nó nằm **sau** `<extensions/>` nên `CRC_EXTRA` của 42001 giữ nguyên 148 — lành, nhưng vẫn là một lần đổi dialect không có số đi kèm, đúng thứ mục 6.2 nói là nguy hiểm. `DRONE_MISSION_COUNT.contract_ver` (8.4, extension) — chiều GCS→Pi của mục 6.2, `0` = GCS cũ chưa khai. Thêm **R3b** (6.3): trường extension mới phải có `0` nghĩa là "không biết". Thêm vào 6.1 dòng cho trường thêm trước `<extensions/>`. Ghi ở 7.1 ba lý do lệnh `mavgen` không chạy được với `pymavlink` cài bằng pip và việc **ghim 2.4.49** ở cả hai bên. Ghi ở 8.4 rằng mọi `char[]` là **ASCII không dấu**, bên gửi bỏ dấu. Do GCS nêu khi hiện thực xong tầng liên kết và tầng dịch vụ |
 | **0.5** | **2026-09-16** | **Pi phân giải P30 — mục duy nhất mà lần chạy thật đầu tiên tìm ra.** Làm (a) như GCS đề nghị: giữ `MISSION_COMPLETE` **1,5 s** (`MISSION_COMPLETE_HOLD_S`), vì vòng FSM 5 Hz so với telemetry 2 Hz khiến trạng thái 9 chỉ sống **một tick 200 ms**. **Nhưng (a) một mình chưa đủ, và trần (a) là bước lùi:** `MISSION_COMPLETE` là đích chung của cả huỷ lệnh, RTH, `NAV_LAND`, hết lượt thử và hết kế hoạch, nên đọc giá trị 9 là "thành công" sẽ **báo mọi lệnh huỷ là thành công**; và cửa sổ 1,5 s không cứu được GCS khởi động lại muộn hơn, tức vẫn hở R5. Nên thêm **`DRONE_TELEMETRY.flight_result`** (8.5b, enum `DRONE_FLIGHT_RESULT` 7 giá trị): trường extension nên **cả sáu `CRC_EXTRA` 42001–42011 giữ nguyên** (đã sinh mã từ hai bản XML và đối chiếu), `0` = không biết theo R3b, và **chốt lại tới lần cất cánh sau** nên hỏi lại được bất cứ lúc nào. Sửa kèm một lỗi kẹt mà việc giữ trạng thái phơi ra: `TRANSITIONS[MISSION_COMPLETE]` không có nhánh `FAILSAFE` nên lệnh huỷ đến trong cửa sổ giữ làm **FSM kẹt vĩnh viễn**. Thêm cảnh báo **bất đối xứng mặc định chữ ký** ở 7.6 (GCS mặc định BẬT, Pi mặc định TẮT — lệch nhau là im lặng hoàn toàn). Sửa 5.4 (+1 byte/gói), và câu "chưa byte nào chạy trên dây" ở 11.4 nay đã hết hiệu lực |
+| **0.6** | **2026-09-16** | **P31 hiện thực xong cả hai bên và đã chạy thật trên dây — không còn mục mở.** Thêm bốn bản tin `42005–42008` (`DRONE_TAGMAP_COUNT/REQUEST/ITEM/ACK`) và enum `DRONE_TAGMAP_RESULT` vào `drone_gcs.xml` — **MINOR** theo 6.1 (thêm bản tin), sáu `CRC_EXTRA` 42001–42011 cũ giữ nguyên (chỉ thêm bản tin mới, không sửa bản tin cũ). `contract_ver` 0.5 → 0.6 (`500` → `600`) cả hai bên. Mục 8.7 áp đúng ba sửa Pi nêu ở 0.5: quy tắc 2 viết lại (`ACCEPTED` = đã ghi, không phải đã có hiệu lực — xác nhận bằng `tagmap_crc` telemetry), bỏ `frame_name` (Pi tự tra theo `apriltag.yaml`), thêm mã `6 ERR_UNDECLARED_TAG`. Phía Pi: `gcs_link_node` xử lý bắt tay (mirror `DRONE_MISSION_*`), ghi bản đồ ra `~/.config/drone_ros2_jazzy/tags_override.yaml` (ngoài cây build), bốn launch file (`control`/`estimation`/`full_system`/`sim_launch`) ưu tiên đọc file đó nếu có; thêm dịch vụ `mission_manager_node ~/clear_plan` (quy tắc 3). Phía GCS: `tagmap_client.py` (mirror `mission_client.py`), `Runtime.upload_tagmap()`, `POST /tags/upload`. **Đã chạy thật 2026-09-16 qua Tailscale UDP** (không cùng LAN, xem hạ tầng mạng ngoài phạm vi tài liệu): nạp 3 tag đổi toạ độ `pad_a`, `ACCEPTED`, khởi động lại `telemetry_aggregator_node`, `tagmap_crc` telemetry đổi khớp chính xác `0x4E7ECD6B` đã khai — xác nhận quy tắc 2 đúng như thiết kế. Test đơn vị cả hai bên xanh (122 Pi, 67 GCS) |
 | 0.5 | 2026-09-16 | **Pi trả lời P31, không tăng số** (chưa sửa dialect). Nhận hướng đi và số hiệu `42005–42008`, nhưng đề nghị GCS sửa 8.7 ba chỗ trước khi chốt: `tags.yaml` được **bốn** node đọc (sót `telemetry_aggregator_node`, node tính `tagmap_crc`) và cả bốn chỉ đọc lúc khởi động, nên **quy tắc 2 viết lại** — `ACCEPTED` = đã ghi, hiệu lực sau khi khởi động lại stack, GCS xác nhận bằng `tagmap_crc` trong telemetry; `apriltag_ros` bỏ qua tag không khai trong `tag.frames` nên **không thêm được tag mới qua dây** và **bỏ `frame_name`** (không nằm trong CRC); thêm mã **`6 ERR_UNDECLARED_TAG`**. Giữ giới hạn 32 tag (11.6) |
 | 0.5 | 2026-09-16 | **GCS nêu P31, không tăng số** (mới là [ĐỀ XUẤT], chưa sửa dialect). Đề nghị nạp bản đồ tag qua dây thay cho chép `tags.yaml` bằng tay — bốn bản tin `42005–42008` giữ nguyên hình dạng bắt tay của mục 3, đặc tả trường ở **8.7**, lý do và ba câu hỏi cho Pi ở **11.6**. Kèm ghi chú rằng GCS sẽ vẽ vị trí giả định khi `POS_VALID` = 0 nhưng **không** xin đường ép pose xuống EKF, vì làm vậy là tái tạo lỗi P19 |
 | 0.4 | 2026-09-16 | **Lần đầu hai bên THẬT chạy trên dây — GCS ghi số đo, không tăng số** (6.1: thêm số đo thì không tăng). Thêm mục **10.D**: A1, A2, A6, A7, B1 đạt; 40.814 gói Pi→GCS mất 0, chuyến bay có `PICKUP` 53,8 s / 28,6 m; `POS_VALID` và `home_*` cư xử đúng như 5.2b và 11.P18 mô tả. Ghi hiện trạng vào **7.4** (`rtt_ms` chưa đo được vì không bên nào làm `TIMESYNC`; GCS đo được `rx_bad_crc`) và **7.6** (chữ ký vẫn chưa bên nào hiện thực, GCS phải chạy với cờ tắt). Ghi vào **8.5** rằng `MISSION_COMPLETE` chưa từng lên dây. Nêu **P30** (11.5) — mục mở duy nhất |

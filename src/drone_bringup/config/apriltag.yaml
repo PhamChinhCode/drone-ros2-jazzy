@@ -20,6 +20,6 @@
       debug: false
     pose_estimation_method: "pnp"
     tag:
-      ids: [0, 1]
-      frames: [pad_home, pad_a]
-      sizes: [0.122, 0.122]   # pad_a chua do - gia dinh cung ban in voi pad_home
+      ids: [0, 1,2]
+      frames: [pad_home, pad_a, pad_b]
+      sizes: [0.122, 0.122, 0.122]   # pad_a chua do - gia dinh cung ban in voi pad_home

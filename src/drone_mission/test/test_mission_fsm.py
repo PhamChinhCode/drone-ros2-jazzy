@@ -197,6 +197,25 @@ def test_chi_nhan_ke_hoach_khi_idle_va_chua_cho_cat_canh():
     assert 'IDLE' in fsm_dang_ha_canh().load_plan(1, [wp(0)], 0, 0.0, TAGS)
 
 
+def test_clear_plan_xoa_ke_hoach_dang_nap():
+    """Giao uoc GCS 8.7 quy tac 3: ban do tag doi thi ke hoach cu (suy tu ban do cu) phai mat."""
+    fsm = m.MissionFsm()
+    fsm.load_plan(7, [wp(0, 1), wp(1, 0)], 0, 0.0, TAGS)
+    assert fsm.clear_plan() == ''
+    assert fsm.mission_id == 0 and fsm.waypoints == [] and fsm.current_wp_index == 0
+
+
+def test_clear_plan_khong_co_ke_hoach_cung_vo_hai():
+    assert m.MissionFsm().clear_plan() == ''
+
+
+def test_clear_plan_chi_khi_idle_va_chua_cho_cat_canh():
+    fsm = m.MissionFsm()
+    fsm.request_start(0.0)
+    assert 'cho cat canh' in fsm.clear_plan()
+    assert 'IDLE' in fsm_dang_ha_canh().clear_plan()
+
+
 def test_parse_known_tags():
     assert m.parse_known_tags([0.0, 1.0, 2.0, 3.0]) == {0: (1.0, 2.0, 3.0)}
     with pytest.raises(ValueError):

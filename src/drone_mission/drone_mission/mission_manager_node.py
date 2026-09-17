@@ -118,6 +118,8 @@ class MissionManagerNode(Node):
         # Hai service cho gcs_link_node dich MAV_CMD 20 va 42100 (giao uoc GCS muc 4.1).
         self.create_service(Trigger, '~/rth', self.on_rth)
         self.create_service(Trigger, '~/abort', self.on_abort)
+        # gcs_link_node goi ngay sau khi chap nhan ban do tag moi (giao uoc GCS 8.7 quy tac 3).
+        self.create_service(Trigger, '~/clear_plan', self.on_clear_plan)
 
         # Moi lenh xuong FC deu di qua fc_command_bridge_node, khong goi MAVROS truc tiep.
         self.cli_arm = self.create_client(Arm, '/fc_command_bridge_node/arm')
@@ -189,6 +191,15 @@ class MissionManagerNode(Node):
         response.success = True
         response.message = 'nhan yeu cau huy nhiem vu'
         self.get_logger().warning('~/abort: nhan yeu cau huy nhiem vu')
+        return response
+
+    def on_clear_plan(self, request, response):
+        del request
+        refusal = self.fsm.clear_plan()
+        response.success = not refusal
+        response.message = refusal or 'da xoa ke hoach dang nap'
+        (self.get_logger().warning if refusal else self.get_logger().info)(
+            f'~/clear_plan: {response.message}')
         return response
 
     def on_landing_target_pose(self, msg):

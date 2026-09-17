@@ -14,6 +14,9 @@ from launch_ros.actions import Node
 
 BRINGUP = get_package_share_directory('drone_bringup')
 CONFIG = os.path.join(BRINGUP, 'config')
+# Uu tien ban da nap qua day (giao uoc GCS 8.7, P31) neu co, khong thi dung ban dong bo trong repo.
+_TAGS_OVERRIDE = os.path.expanduser('~/.config/drone_ros2_jazzy/tags_override.yaml')
+TAGS_YAML = _TAGS_OVERRIDE if os.path.isfile(_TAGS_OVERRIDE) else os.path.join(CONFIG, 'tags.yaml')
 
 BAG_TOPICS = [
     '/camera/image_raw', '/apriltag/detections', '/optical_flow/velocity',
@@ -33,7 +36,7 @@ def generate_launch_description():
 
         Node(package='drone_mission', executable='mission_manager_node',
              name='mission_manager_node',
-             parameters=[os.path.join(CONFIG, 'mission.yaml'), os.path.join(CONFIG, 'tags.yaml')],
+             parameters=[os.path.join(CONFIG, 'mission.yaml'), TAGS_YAML],
              output='screen'),
 
         Node(package='drone_mission', executable='gripper_controller_node',
@@ -44,8 +47,7 @@ def generate_launch_description():
         # KHOA chuc nang nap ke hoach (giao uoc GCS muc 8.6). Loi nay chi lo ra tren drone that.
         Node(package='drone_comms', executable='telemetry_aggregator_node',
              name='telemetry_aggregator_node',
-             parameters=[os.path.join(CONFIG, 'comms.yaml'),
-                         os.path.join(CONFIG, 'tags.yaml')], output='screen'),
+             parameters=[os.path.join(CONFIG, 'comms.yaml'), TAGS_YAML], output='screen'),
 
         Node(package='drone_comms', executable='gcs_link_node', name='gcs_link_node',
              parameters=[os.path.join(CONFIG, 'comms.yaml')], output='screen'),

@@ -12,7 +12,9 @@ from launch_ros.parameter_descriptions import ParameterValue
 WORLD = os.path.join(get_package_share_directory('drone_sim'), 'worlds', 'drone_tune.sdf')
 CONFIG = os.path.join(get_package_share_directory('drone_bringup'), 'config')
 CONTROL_YAML = os.path.join(CONFIG, 'control.yaml')
-TAGS_YAML = os.path.join(CONFIG, 'tags.yaml')
+# Uu tien ban da nap qua day (giao uoc GCS 8.7, P31) neu co, khong thi dung ban dong bo trong repo.
+_TAGS_OVERRIDE = os.path.expanduser('~/.config/drone_ros2_jazzy/tags_override.yaml')
+TAGS_YAML = _TAGS_OVERRIDE if os.path.isfile(_TAGS_OVERRIDE) else os.path.join(CONFIG, 'tags.yaml')
 GZ_LAUNCH = os.path.join(get_package_share_directory('ros_gz_sim'), 'launch', 'gz_sim.launch.py')
 SIM_TIME = {'use_sim_time': True}
 

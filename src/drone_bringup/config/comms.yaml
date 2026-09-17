@@ -3,7 +3,7 @@ gcs_link_node:
     # Dia chi may GCS tren LAN. Chi la dia chi DU PHONG: Pi uu tien dia chi hoc duoc tu goi
     # hop le gan nhat (muc 2.1), va quen dia chi do khi mat lien ket de khong bi mot dia chi
     # cu chiem duong len vinh vien.
-    gcs_host: "192.168.10.120"
+    gcs_host: "100.87.86.100"
     gcs_port: 14550
     local_port: 14551
     link_timeout_s: 5.0

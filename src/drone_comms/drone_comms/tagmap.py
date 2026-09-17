@@ -46,6 +46,41 @@ def tagmap_crc(tags):
     return zlib.crc32(buf)
 
 
+def doc_apriltag_declared(duong):
+    """apriltag.yaml -> {tag_id: frame_name} (giao ước 11.6, Pi trả lời câu 2).
+
+    Đây là NGUỒN DUY NHẤT cho tên khung TF: apriltag_ros bỏ qua tag không nằm trong tag.frames, và
+    tag.ids/tag.frames/tag.sizes chỉ đổi được khi khởi động lại node — nạp bản đồ qua dây do đó CHỈ
+    đổi được toạ độ của tag ĐÃ KHAI, không thêm được tag mới.
+    """
+    import yaml
+    with open(duong) as f:
+        data = yaml.safe_load(f) or {}
+    tham_so = (data.get('/**') or {}).get('ros__parameters') or {}
+    tag = tham_so.get('tag') or {}
+    return {int(i): ten for i, ten in zip(tag.get('ids', []), tag.get('frames', []))}
+
+
+def ghi_tags_override(duong, tags, khung_theo_id):
+    """{tag_id: (x, y, z) ENU mét} + {tag_id: frame_name} -> ghi file tham số ROS kiểu tags.yaml.
+
+    Ghi ra NGOÀI cây build (giao ước 11.6, Pi trả lời câu 1): launch đọc bản chép trong install/,
+    colcon build ghi đè nó, nên bản nhận qua dây phải nằm ở một chỗ riêng launch ưu tiên đọc trước.
+    Sắp theo tag_id tăng dần cho khớp thứ tự CRC (mục 8.6).
+    """
+    import os
+    ids = sorted(tags)
+    os.makedirs(os.path.dirname(duong), exist_ok=True)
+    with open(duong, 'w') as f:
+        f.write('# Sinh tu dong boi gcs_link_node khi GCS nap ban do tag qua day (giao uoc 8.7, P31).\n')
+        f.write('# KHONG sua tay - lan nap ke tiep se ghi de. Ban goc dong bo van o config/tags.yaml.\n')
+        f.write('/**:\n  ros__parameters:\n')
+        nums = ', '.join(f'{tid:.1f}, {tags[tid][0]:.3f}, {tags[tid][1]:.3f}, {tags[tid][2]:.3f}'
+                         for tid in ids)
+        f.write(f'    known_tags: [{nums}]\n')
+        f.write('    tag_frames: [' + ', '.join(khung_theo_id[tid] for tid in ids) + ']\n')
+
+
 def to_ascii(chuoi, toi_da):
     """Bo dau va cat cho truong char[] cua dialect (giao uoc muc 8.4).
 

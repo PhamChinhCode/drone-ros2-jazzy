@@ -264,6 +264,23 @@ class MissionFsm:
             return self.waypoints[self.current_wp_index]
         return None
 
+    def clear_plan(self):
+        """Xoa ke hoach dang nap (chua cat canh) khi ban do tag doi (giao uoc GCS 8.7 quy tac 3):
+        ke hoach cu suy vi tri tu ban do cu, giu lai la giu mot ke hoach co nghia khac luc soan no.
+
+        Cung dieu kien voi load_plan - chi tac dung khi IDLE va khong dang cho cat canh. Tra ly do
+        tu choi, '' neu xoa duoc (ke ca khi khong co ke hoach nao dang nap - vo hai).
+        """
+        if self.state != IDLE:
+            return f'dang {self.state}, chi xoa duoc khi IDLE'
+        if self.start_requested_s is not None:
+            return 'dang cho cat canh theo ke hoach cu - khong xoa luc nay'
+        self.mission_id = 0
+        self.waypoints = []
+        self.current_wp_index = 0
+        self.retry_count = 0
+        return ''
+
     def request_start(self, now_s):
         """Yeu cau cat canh (GCS / thu tren ban). Tra ly do tu choi, '' neu nhan."""
         if self.state != IDLE:

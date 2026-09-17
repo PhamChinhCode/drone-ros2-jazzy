@@ -16,17 +16,19 @@ Bon nguyen tac bat buoc:
 """
 
 import math
+import os
 import queue
 import socket
 
 import rclpy
+from ament_index_python.packages import get_package_share_directory
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from std_msgs.msg import Bool
 from std_srvs.srv import Trigger
 
 from drone_comms.qos import EVENT_QOS, SENSOR_QOS
-from drone_comms.tagmap import to_ascii
+from drone_comms.tagmap import doc_apriltag_declared, ghi_tags_override, tagmap_crc, to_ascii
 from drone_interfaces.msg import (MissionPlan, MissionPlanAck, MissionWaypoint,
                                   TelemetryPacket)
 from drone_interfaces.srv import EmergencyDisarm
@@ -39,8 +41,15 @@ SYSID_PI, COMPID_PI = 1, 191        # MAV_COMP_ID_ONBOARD_COMPUTER (muc 2.2)
 SYSID_GCS, COMPID_GCS = 255, 190    # MAV_COMP_ID_MISSIONPLANNER
 
 SO_DIEM_TOI_DA = 16                 # muc 3.2
+SO_TAG_TOI_DA = 32                  # muc 8.7
 ITEM_TIMEOUT_S = 1.0
 ITEM_HOI_LAI_TOI_DA = 5
+
+# muc 8.7 (P31): file ghi de tags.yaml, NGOAI cay build de colcon build khong ghi lai (Pi tra loi
+# 11.6 cau 1). apriltag.yaml la NGUON DUY NHAT cho tag.ids/frame - nap qua day khong them tag moi.
+DRONE_BRINGUP_CONFIG = os.path.join(get_package_share_directory('drone_bringup'), 'config')
+TAG_OVERRIDE_PATH = os.path.expanduser('~/.config/drone_ros2_jazzy/tags_override.yaml')
+APRILTAG_YAML = os.path.join(DRONE_BRINGUP_CONFIG, 'apriltag.yaml')
 KHONG_DO_DUOC_32 = 0xFFFFFFFF       # muc 7.4: truong khong do duoc thi UINT32_MAX, khong phai 0
 KHONG_DO_DUOC_16 = 0xFFFF
 
@@ -108,8 +117,11 @@ class GcsLinkNode(Node):
         }
         self.cli_disarm = self.create_client(
             EmergencyDisarm, '/fc_command_bridge_node/emergency_disarm')
+        self.cli_clear_plan = self.create_client(Trigger, '/mission_manager_node/clear_plan')
         self.nap = None                    # luot nap ke hoach dang chay
         self.cho_ack = None                # mission_id dang cho mission_manager phan quyet
+        self.ban_do = None                 # luot nap ban do tag dang chay (muc 8.7)
+        self.mission_state = 0             # tu telemetry moi nhat - DRONE_STATE_IDLE = 0
 
         self.create_subscription(
             TelemetryPacket, '/telemetry/outgoing', self.on_telemetry, EVENT_QOS)
@@ -212,6 +224,7 @@ class GcsLinkNode(Node):
             return
         self.tx_telemetry_cho += 1
         self.pos_valid = bool(msg.valid_flags & TelemetryPacket.VALID_POS)
+        self.mission_state = msg.mission_state     # nap ban do tag (8.7) chi nhan khi IDLE
         self.enqueue(PRIORITY_TELEMETRY, self.d.MAVLink_drone_telemetry_message(
             stamp_us=int(msg.stamp.sec * 1e6 + msg.stamp.nanosec / 1e3),
             mission_id=msg.mission_id, contract_ver=msg.contract_ver,
@@ -317,6 +330,10 @@ class GcsLinkNode(Node):
             self.bat_dau_nap(msg)
         elif t == 'DRONE_MISSION_ITEM':
             self.nhan_item(msg)
+        elif t == 'DRONE_TAGMAP_COUNT':
+            self.bat_dau_nap_ban_do(msg)
+        elif t == 'DRONE_TAGMAP_ITEM':
+            self.nhan_tagmap_item(msg)
         elif t == 'COMMAND_LONG':
             self.nhan_lenh(msg)
 
@@ -434,6 +451,103 @@ class GcsLinkNode(Node):
         n['hoi_luc'] = self.now_s()
         self.hoi_item()
 
+    # ------------------------------------------------------------------ nap ban do tag (muc 8.7, P31)
+
+    def ack_ban_do(self, crc, ket_qua, ly_do):
+        self.enqueue(PRIORITY_MISSION, self.d.MAVLink_drone_tagmap_ack_message(
+            tagmap_crc=crc, result=ket_qua, reason=to_ascii(ly_do, 50)))
+        self.ban_do = None
+
+    def bat_dau_nap_ban_do(self, msg):
+        if self.mission_state != 0:    # DRONE_STATE_IDLE - doi ban do giua chuyen bay la nguy hiem
+            self.ack_ban_do(msg.tagmap_crc, self.d.DRONE_TAGMAP_ERR_BUSY,
+                            f'dang o mission_state {self.mission_state}, chi nhan ban do khi IDLE')
+            return
+        if not 1 <= msg.count <= SO_TAG_TOI_DA:
+            self.ack_ban_do(msg.tagmap_crc, self.d.DRONE_TAGMAP_ERR_COUNT,
+                            f'count = {msg.count}, phai trong 1..{SO_TAG_TOI_DA}')
+            return
+        if self.ban_do is not None:
+            self.get_logger().info(f'huy luot nap ban do cu, bat dau luot moi (crc 0x{msg.tagmap_crc:08X})')
+        self.ban_do = dict(crc=msg.tagmap_crc, count=msg.count, cho=0, tag={},
+                           hoi_luc=self.now_s(), so_lan_hoi=1)
+        self.hoi_tagmap_item()
+
+    def hoi_tagmap_item(self):
+        self.enqueue(PRIORITY_MISSION, self.d.MAVLink_drone_tagmap_request_message(
+            tagmap_crc=self.ban_do['crc'], seq=self.ban_do['cho']))
+
+    def nhan_tagmap_item(self, msg):
+        n = self.ban_do
+        if n is None or msg.tagmap_crc != n['crc'] or msg.seq != n['cho']:
+            return      # goi trung do phat lai la binh thuong, bo qua khong tang bo dem
+        n['tag'][msg.seq] = msg
+        n['cho'] += 1
+        n['so_lan_hoi'] = 1
+        n['hoi_luc'] = self.now_s()
+        if n['cho'] < n['count']:
+            self.hoi_tagmap_item()
+        else:
+            self.ghi_ban_do()
+
+    def ghi_ban_do(self):
+        """Nhan du tag: kiem tag da khai trong apriltag.yaml, doi chieu CRC, ghi file, xoa ke hoach cu.
+
+        ACCEPTED o day KHONG nghia la da co hieu luc: Pi da kiem va ghi xong, con hieu luc THAT
+        thi phai doi khoi dong lai stack. GCS xac nhan hieu luc rieng bang tagmap_crc cua
+        DRONE_TELEMETRY doi dung gia tri da khai (muc 11.6, Pi tra loi cau 1).
+        """
+        n = self.ban_do
+        tags = {}
+        for seq in sorted(n['tag']):
+            it = n['tag'][seq]
+            # NED mm tren day -> ENU m dung dinh dang tags.yaml: x = e, y = n, z = -d (muc 8.6).
+            tags[it.tag_id] = (it.e_mm / 1000.0, it.n_mm / 1000.0, -it.d_mm / 1000.0)
+        try:
+            khai_bao = doc_apriltag_declared(APRILTAG_YAML)
+        except OSError as e:
+            self.ack_ban_do(n['crc'], self.d.DRONE_TAGMAP_ERR_UNSUPPORTED,
+                            f'khong doc duoc apriltag.yaml: {e}')
+            return
+        thieu = sorted(tid for tid in tags if tid not in khai_bao)
+        if thieu:
+            # Nap qua day CHI doi toa do tag DA KHAI - them tag moi van phai sua apriltag.yaml bang
+            # tay va khoi dong lai (muc 11.6, Pi tra loi cau 2). Tu choi CA luot, khong nap mot phan.
+            self.ack_ban_do(n['crc'], self.d.DRONE_TAGMAP_ERR_UNDECLARED_TAG,
+                            f'tag {thieu[0]} khong co trong apriltag.yaml (tag.ids)')
+            return
+        tinh_lai = tagmap_crc(tags)
+        if tinh_lai != n['crc']:
+            self.ack_ban_do(n['crc'], self.d.DRONE_TAGMAP_ERR_CRC,
+                            f'CRC tinh lai 0x{tinh_lai:08X} khong khop 0x{n["crc"]:08X} da khai')
+            return
+        ghi_tags_override(TAG_OVERRIDE_PATH, tags, khai_bao)
+        # quy tac 3 (muc 8.7): ke hoach cu suy vi tri tu ban do cu - giu lai la giu mot ke hoach
+        # co nghia khac voi luc nguoi ta soan no.
+        self.xoa_ke_hoach_dang_nap()
+        self.ack_ban_do(n['crc'], self.d.DRONE_TAGMAP_ACCEPTED, '')
+        self.statustext(3, f'ban do tag moi da ghi (crc 0x{n["crc"]:08X}) - can khoi dong lai stack de co hieu luc')
+        self.get_logger().info(f'ban do tag: da ghi {TAG_OVERRIDE_PATH}, cho khoi dong lai stack')
+
+    def xoa_ke_hoach_dang_nap(self):
+        if not self.cli_clear_plan.service_is_ready():
+            self.get_logger().warning(
+                'khong xoa duoc ke hoach dang nap: mission_manager_node/clear_plan chua san sang')
+            return
+        self.cli_clear_plan.call_async(Trigger.Request())
+
+    def check_ban_do_timeout(self):
+        n = self.ban_do
+        if n is None or self.now_s() - n['hoi_luc'] < ITEM_TIMEOUT_S:
+            return
+        if n['so_lan_hoi'] >= ITEM_HOI_LAI_TOI_DA:
+            self.ack_ban_do(n['crc'], self.d.DRONE_TAGMAP_ERR_TIMEOUT,
+                            f'thieu tag {n["cho"]} sau {ITEM_HOI_LAI_TOI_DA} lan hoi')
+            return
+        n['so_lan_hoi'] += 1
+        n['hoi_luc'] = self.now_s()
+        self.hoi_tagmap_item()
+
     # ------------------------------------------------------------------ lenh (muc 4)
 
     def ack_lenh(self, command, ket_qua):
@@ -517,6 +631,7 @@ class GcsLinkNode(Node):
 
     def check_watchdog(self):
         self.check_nap_timeout()
+        self.check_ban_do_timeout()
         gioi_han = self.get_parameter('link_timeout_s').value
         song = self.last_rx_time is not None and self.now_s() - self.last_rx_time <= gioi_han
         if song != self.connected:
