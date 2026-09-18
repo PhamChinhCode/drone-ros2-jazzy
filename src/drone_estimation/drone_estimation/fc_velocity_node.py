@@ -11,19 +11,28 @@ vz CHI chuyen khi /range/vertical vua hop le: FC bo laser (nghieng > 25 do, ngoa
 do cao FC chi con baro + gia toc va troi toi ~0,9 m/s, nhung van bao sigma ~0,06 m/s - EKF Pi tin
 theo va z lao xuong -1,9 m khi cam tay nghieng (do 2026-09-18). range_vertical_node dung cung
 nguong 25 do / tre 3 do voi FC.
+
+Chua arm thi phat van toc (0, 0, 0) len /zupt/velocity (zero-velocity update): nam dat thuong
+khong co nguon van toc nao - flow FC tat duoi 0,2 m, flow camera/vz FC can laser hop le, tag hay
+ngoai tam camera chech 20 do - va EKF chi con tich phan IMU, troi toi hang tram met (do 09-18).
+Arm roi thi tat de flow va tag lam viec.
 """
 
 import math
 
 import rclpy
 from geometry_msgs.msg import TwistWithCovarianceStamped
+from mavros_msgs.msg import State
 from nav_msgs.msg import Odometry
 from rclpy.experimental import EventsExecutor
 from rclpy.node import Node
 from sensor_msgs.msg import Range
 
-from drone_estimation.estimation_math import fc_velocity_validity
-from drone_estimation.qos import SENSOR_QOS
+from drone_estimation.estimation_math import fc_velocity_validity, zupt_active
+from drone_estimation.qos import EVENT_QOS, SENSOR_QOS
+
+# sigma 0,05 m/s: dung yen that tren mat dat, nhung de tag van keo duoc vi tri.
+ZUPT_VARIANCE = 0.0025
 
 
 class FcVelocityNode(Node):
@@ -41,6 +50,16 @@ class FcVelocityNode(Node):
         self.range_ok_since_s = None  # bat dau chuoi mau hop le lien tuc hien tai
         self.create_subscription(Range, '/range/vertical', self.on_range, SENSOR_QOS)
         self.create_subscription(Odometry, '/mavros/odometry/in', self.on_odom, SENSOR_QOS)
+
+        # /mavros/state theo heartbeat FC ~1 Hz: 2,5 s cho phep lo 1-2 goi.
+        self.declare_parameter('state_max_age_s', 2.5)
+        self.fc_state = None
+        self.fc_state_s = None
+        self.zupt_on = None
+        self.create_subscription(State, '/mavros/state', self.on_fc_state, EVENT_QOS)
+        self.pub_zupt = self.create_publisher(
+            TwistWithCovarianceStamped, '/zupt/velocity', SENSOR_QOS)
+        self.create_timer(0.1, self.publish_zupt)
         self.pub_xy = self.create_publisher(
             TwistWithCovarianceStamped, '/fc/velocity_xy', SENSOR_QOS)
         self.pub_z = self.create_publisher(
@@ -48,6 +67,27 @@ class FcVelocityNode(Node):
 
     def now_s(self):
         return self.get_clock().now().nanoseconds / 1e9
+
+    def on_fc_state(self, msg):
+        self.fc_state = msg
+        self.fc_state_s = self.now_s()
+
+    def publish_zupt(self):
+        age = None if self.fc_state_s is None else self.now_s() - self.fc_state_s
+        on = zupt_active(age, self.fc_state is not None and self.fc_state.connected,
+                         self.fc_state is not None and self.fc_state.armed,
+                         self.get_parameter('state_max_age_s').value)
+        if on != self.zupt_on:
+            self.get_logger().info(f'van toc 0 khi nam dat (ZUPT) {"BAT" if on else "TAT"}')
+            self.zupt_on = on
+        if not on:
+            return
+        out = TwistWithCovarianceStamped()
+        out.header.stamp = self.get_clock().now().to_msg()
+        out.header.frame_id = 'base_link'
+        for i in (0, 7, 14):
+            out.twist.covariance[i] = ZUPT_VARIANCE
+        self.pub_zupt.publish(out)
 
     def laser_fresh(self, now):
         return (self.range_ok_s is not None and

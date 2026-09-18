@@ -53,6 +53,17 @@ ekf_filter_node:
                     false, false, false]
     twist2_queue_size: 5
 
+    # Van toc (0, 0, 0) khi CHUA arm, tu fc_velocity_node (zero-velocity update). Nam dat thuong
+    # khong co nguon van toc nao (flow FC tat < 0,2 m, laser/tag co the khong co) -> EKF chi con
+    # tich phan IMU va troi hang tram met (do 09-18). Arm roi thi ngung phat.
+    twist3: /zupt/velocity
+    twist3_config: [false, false, false,
+                    false, false, false,
+                    true,  true,  true,
+                    false, false, false,
+                    false, false, false]
+    twist3_queue_size: 5
+
     pose0: /marker/pose_odom
     pose0_config: [true, true, true,     # marker cho vi tri tuyet doi x, y, z khi co
                    false, false, false,

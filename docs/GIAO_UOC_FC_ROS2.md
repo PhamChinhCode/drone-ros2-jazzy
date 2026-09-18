@@ -2130,6 +2130,11 @@ theo REP 117 ("ngoài [min, max] là không đo được") — không phải m�
 `/mavros/mtf01p` trực tiếp nữa mà qua `range_vertical_node` → `/range/vertical` (đã bù nghiêng IMU,
 cùng ngưỡng 25° / trễ 3° với `ekf_altitude` của FC; không hợp lệ → `NaN`).
 
+**09-18: hạ `min_distance` 15 → 10 cm.** Đo lại: nằm đất laser đọc 0,10–0,14 m tuỳ chỗ đặt, không chỉ
+17–19 cm; dưới 15 thì Pi bỏ laser, mất luôn flow camera lẫn vz FC và EKF trôi. 10 cm khớp
+`EST_RANGE_MIN_M` của FC — dưới đó là laser bị che (tay che đọc 0,05–0,10 m). Đổi giá trị số, không đổi
+nghĩa trường → không tăng số. Đoạn dưới là lịch sử.
+
 **`min_distance = 15` cm — chốt 09-13, thay số tạm 1 cm.** Chủ dự án xác nhận: máy bay **nằm trên
 mặt đất thì laser đọc ~17 cm** — đó là khoảng cách từ laser tới đất theo cách lắp. Máy bay không
 xuống thấp hơn mặt đất, nên laser **không bao giờ phải đo dưới ~17 cm**; cận dưới thật của MTF01P
@@ -2479,6 +2484,7 @@ Lệnh đo nhanh: xem mục 12.A1.
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.7 *(FC + Pi, không tăng số)* | 2026-09-19 | **FC:** `DISTANCE_SENSOR.min_distance` 15 → **10** cm (nằm đất đọc 0,10–0,14 m tuỳ chỗ đặt); `ODOMETRY` không xoay vn/ve không hợp lệ sang vz thân (lọt +0,12 m/s khi nằm yên mất flow). **Pi nội bộ:** `fc_velocity_node` phát vận tốc (0, 0, 0) lên `/zupt/velocity` khi `/mavros/state` báo **chưa arm** — EKF thêm `twist3`; nằm đất không có nguồn vận tốc (flow FC tắt < 0,2 m, laser/tag có thể không có) thì z EKF trôi tới 187 m. Thử tạm bỏ flow camera khỏi EKF rồi hoàn tác (chưa bù gyro, sẽ làm sau). |
 | **1.7** | 2026-09-18 | **MINOR — `ODOMETRY` z và vz `1e6` khi laser không được dùng trong 300 ms** (11.2). Cầm tay nghiêng > 25°: FC bỏ laser, vz trôi tới −0,9 m/s mà σ báo ~0,06 → EKF Pi tin theo, z lao xuống −1,9 m, GCS vẽ drone chìm dưới sàn. `FC_CTR_VER = 10700`. Cùng đợt, sửa nội bộ FC: neo lại độ cao (1.6) nay đặt **cả v = 0 với phương sai 1 (m/s)², nới phương sai bias** — bản 1.6 giữ v cũ nên v kẹt ở −10 m/s ngay khi nằm yên sau một lần nghiêng mạnh (đo 09-18, mô phỏng xác nhận). Pi: `fc_velocity_node` chỉ chuyển vz khi `/range/vertical` hợp lệ liên tục ≥ 0,6 s (FC neo lại sau 0,5 s); `gcs_link_node` đổi dấu pitch trong `ATTITUDE` (FLU → FRD). |
 | **1.6** | 2026-09-18 | **MINOR — `DISTANCE_SENSOR.current_distance = 0` khi laser không hợp lệ** (11.2): MAVROS bỏ `signal_quality` nên bản ≤ 1.5 để Pi thấy độ cao đóng băng như hợp lệ. `FC_CTR_VER = 10600`. Cùng đợt, sửa nội bộ FC (không đổi dây): khôi phục lời gọi `ekf_velocity_update_flow` trong `estimator.c` — **mất từ commit `1e09cb4` (09-10)**, từ đó vận tốc ngang FC không bao giờ hợp lệ (`ODOMETRY` vx/vy covariance `1e6`) và POSHOLD/OFFBOARD luôn lùi về ANGLE; `range_valid` hết hạn theo luồng khoảng cách riêng; `ekf_altitude`: cổng phần dư 5σ, trễ 3° cho ngưỡng nghiêng 25°, neo lại độ cao (không đụng tốc độ lên) khi laser quay lại sau ≥ 0,5 s; bỏ laser < 0,10 m (bị che — tay che đọc 0,05–0,10 m, nằm đất 0,145–0,23 m). Pi: `range_vertical_node` → `/range/vertical` (bù nghiêng) cho `optical_flow_node`, `position_controller_node`, `mission_manager_node`; sim phát `/range/vertical` và `FC_CTR_VER = 10600`. |
 | 1.5 *(Pi viết watchdog P6 và trạng thái nhiệm vụ, không tăng số)* | 2026-09-15 | 11.3 P6 → **XONG:** `position_controller_node` ngừng phát setpoint khi `/mission/state` im quá 1 s (dựa vào hết hạn 500 ms của FC, 5.2). P2: thêm ENROUTE / MARKER_SEARCH / RETRY_LOITER. Nội bộ Pi: chuyển nguồn setpoint có ramp 0,8 s. Không dùng lệnh FC mới, không đổi gì phía FC. |

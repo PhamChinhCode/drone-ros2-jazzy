@@ -7,7 +7,7 @@ import pytest
 from drone_estimation.estimation_math import (HealthMonitor, MarkerResetPolicy,
                                               drone_position_from_tag, fc_velocity_validity,
                                               parse_known_tags, rotate, tilt_cos_from_quaternion,
-                                              vertical_range)
+                                              vertical_range, zupt_active)
 
 
 def cov(vx, vy, vz):
@@ -88,6 +88,14 @@ def test_so_do_laser_ngoai_dai_la_khong_hop_le():
     # FC hop dong 1.6 gui 0 khi mat laser; sim gui inf; NaN cung phai bi loai.
     for r in (0.0, float('inf'), float('nan'), 9.0):
         assert vr(r, 0.0)[0] is None
+
+
+def test_zupt_chi_khi_chua_arm_va_trang_thai_con_moi():
+    assert zupt_active(0.5, True, False, 2.5)
+    assert not zupt_active(0.5, True, True, 2.5)        # da arm: de flow/tag lam viec
+    assert not zupt_active(3.0, True, False, 2.5)       # trang thai qua han
+    assert not zupt_active(0.5, False, False, 2.5)      # mat ket noi FC
+    assert not zupt_active(None, True, False, 2.5)      # chua nhan /mavros/state lan nao
 
 
 def test_parse_known_tags():

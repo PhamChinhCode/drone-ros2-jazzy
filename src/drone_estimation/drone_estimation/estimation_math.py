@@ -43,6 +43,12 @@ def drone_position_from_tag(tag_in_odom, tag_in_base, q_odom_base):
     return tuple(tag_in_odom[i] - r[i] for i in range(3))
 
 
+def zupt_active(state_age_s, connected, armed, max_age_s):
+    """True -> dua van toc 0 vao EKF (zero-velocity update): FC con ket noi, trang thai con moi
+    va CHUA arm. Khong biet trang thai (mat FC, qua han) thi KHONG gia dinh drone dung yen."""
+    return state_age_s is not None and state_age_s <= max_age_s and connected and not armed
+
+
 def tilt_cos_from_quaternion(q_xyzw):
     """cos goc giua truc z than va truc z the gioi = cos(roll)*cos(pitch), khong phu thuoc yaw."""
     x, y = q_xyzw[0], q_xyzw[1]

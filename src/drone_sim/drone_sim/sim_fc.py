@@ -28,7 +28,7 @@ FC_CTR_VER = 10700              # hop dong 1.7
 SETPOINT_TIMEOUT_S = 0.5        # offboard_timeout_ms
 DISARM_MAX_HEIGHT_M = 0.20      # cong DISARM theo do cao (11.1 #12)
 GROUND_RANGE_M = 0.17           # laser doc khi nam dat (11.1 #1)
-RANGE_MIN_M, RANGE_MAX_M = 0.15, 8.0
+RANGE_MIN_M, RANGE_MAX_M = 0.10, 8.0              # khop MAV_DIST_MIN_CM = 10 cua FC (09-18)
 
 
 class SimFc:
