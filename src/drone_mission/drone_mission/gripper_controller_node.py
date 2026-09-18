@@ -10,6 +10,7 @@ khong xac nhan -> failsafe FS_GRIP_CONFIRM_FAIL) thi khong chay node nay.
 """
 
 import rclpy
+from rclpy.experimental import EventsExecutor
 from rclpy.node import Node
 
 from drone_interfaces.msg import GripperCommand, GripperStatus
@@ -108,8 +109,12 @@ class GripperControllerNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = GripperControllerNode()
+    # EventsExecutor: executor mac dinh cua rclpy dung lai wait-set moi lan thuc day, ton phan
+    # lon CPU tren Pi 4 (xem mission_manager_node).
+    executor = EventsExecutor()
+    executor.add_node(node)
     try:
-        rclpy.spin(node)
+        executor.spin()
     except KeyboardInterrupt:
         pass
     finally:

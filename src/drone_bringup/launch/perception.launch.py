@@ -17,7 +17,8 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch_ros.actions import Node
+from launch_ros.actions import ComposableNodeContainer, Node
+from launch_ros.descriptions import ComposableNode
 
 CONFIG = os.path.join(get_package_share_directory('drone_bringup'), 'config')
 
@@ -47,26 +48,40 @@ def generate_launch_description():
         # cua image_transport (compressed/theora/zstd) van giu ten cu -> chui ra
         # /image_raw/compressed thay vi /camera/image_raw/compressed. Lech namespace thi
         # Foxglove (va cac cong cu khac) khong tu ghep duoc anh voi camera_info.
-        Node(package='v4l2_camera', executable='v4l2_camera_node', name='camera_node',
-             namespace='camera',
-             parameters=[os.path.join(CONFIG, 'camera.yaml')],
-             output='screen'),
+        #
+        # Camera -> rectify -> apriltag chung MOT process (intra-process): anh 640x400 di bang con
+        # tro thay vi serialize/copy qua DDS moi buoc. _isolated: moi component mot executor/luong
+        # rieng, apriltag ~30 ms/khung khong chan camera va rectify.
+        ComposableNodeContainer(
+            name='perception_container', namespace='',
+            package='rclcpp_components', executable='component_container_isolated',
+            output='screen',
+            composable_node_descriptions=[
+                ComposableNode(
+                    package='v4l2_camera', plugin='v4l2_camera::V4L2Camera',
+                    name='camera_node', namespace='camera',
+                    parameters=[os.path.join(CONFIG, 'camera.yaml')],
+                    extra_arguments=[{'use_intra_process_comms': True}]),
 
-        # Khu meo ong kinh truoc khi phat hien marker: marker o ria khung hinh bi meo nhieu nhat.
-        # Cung ly do namespace nhu camera_node: de /camera/image_rect/compressed nam dung cho.
-        # Trong namespace 'camera' thi camera_info va image_rect da dung san, chi con
-        # phai tro 'image' sang 'image_raw'.
-        Node(package='image_proc', executable='rectify_node', name='image_rectify',
-             namespace='camera',
-             remappings=[('image', 'image_raw')],
-             output='screen'),
+                # Khu meo ong kinh truoc khi phat hien marker: marker o ria khung hinh bi meo nhieu
+                # nhat. Cung ly do namespace nhu camera_node: de /camera/image_rect/compressed nam
+                # dung cho. Trong namespace 'camera' thi camera_info va image_rect da dung san, chi
+                # con phai tro 'image' sang 'image_raw'.
+                ComposableNode(
+                    package='image_proc', plugin='image_proc::RectifyNode',
+                    name='image_rectify', namespace='camera',
+                    remappings=[('image', 'image_raw')],
+                    extra_arguments=[{'use_intra_process_comms': True}]),
 
-        Node(package='apriltag_ros', executable='apriltag_node', name='marker_detector_node',
-             parameters=[os.path.join(CONFIG, 'apriltag.yaml')],
-             remappings=[('image_rect', '/camera/image_rect'),
-                         ('camera_info', '/camera/camera_info'),
-                         ('detections', '/apriltag/detections')],
-             output='screen'),
+                ComposableNode(
+                    package='apriltag_ros', plugin='AprilTagNode',
+                    name='marker_detector_node',
+                    parameters=[os.path.join(CONFIG, 'apriltag.yaml')],
+                    remappings=[('image_rect', '/camera/image_rect'),
+                                ('camera_info', '/camera/camera_info'),
+                                ('detections', '/apriltag/detections')],
+                    extra_arguments=[{'use_intra_process_comms': True}]),
+            ]),
 
         Node(package='drone_perception', executable='marker_quality_node',
              name='marker_quality_node',

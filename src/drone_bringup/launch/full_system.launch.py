@@ -18,8 +18,10 @@ CONFIG = os.path.join(BRINGUP, 'config')
 _TAGS_OVERRIDE = os.path.expanduser('~/.config/drone_ros2_jazzy/tags_override.yaml')
 TAGS_YAML = _TAGS_OVERRIDE if os.path.isfile(_TAGS_OVERRIDE) else os.path.join(CONFIG, 'tags.yaml')
 
+# KHONG ghi /camera/image_raw: anh tho 640x400 30 FPS ~7,7 MB/s, de stack chay qua dem 09-17 da
+# lam day the SD 229 GB (bag 190 GB) va rsyslog quay vong loi "No space left".
 BAG_TOPICS = [
-    '/camera/image_raw', '/apriltag/detections', '/optical_flow/velocity',
+    '/apriltag/detections', '/optical_flow/velocity',
     '/odometry/filtered', '/mavros/state', '/mavros/battery',
     '/mission/state', '/failsafe_event', '/gripper/status',
 ]

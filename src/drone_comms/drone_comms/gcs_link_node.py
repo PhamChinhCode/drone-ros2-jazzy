@@ -23,6 +23,7 @@ import socket
 import rclpy
 from ament_index_python.packages import get_package_share_directory
 from nav_msgs.msg import Odometry
+from rclpy.experimental import EventsExecutor
 from rclpy.node import Node
 from std_msgs.msg import Bool
 from std_srvs.srv import Trigger
@@ -131,7 +132,9 @@ class GcsLinkNode(Node):
         self.pub_plan = self.create_publisher(MissionPlan, '/mission/plan', EVENT_QOS)
         self.pub_connected = self.create_publisher(Bool, '/gcs_link/connected', EVENT_QOS)
 
-        self.create_timer(0.01, self.pump_rx)
+        # 20 Hz: pump_rx rut het socket moi lan, lenh GCS tre toi da 50 ms. 100 Hz tung ton
+        # ~40 % CPU Pi 4 chi de hoi mot socket rong.
+        self.create_timer(0.05, self.pump_rx)
         self.create_timer(0.05, self.pump_tx)          # 20 Hz rut hang doi
         self.create_timer(0.5, self.check_watchdog)
         self.create_timer(self.get_parameter('heartbeat_interval_s').value, self.send_heartbeat)
@@ -654,8 +657,12 @@ class GcsLinkNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = GcsLinkNode()
+    # EventsExecutor: executor mac dinh cua rclpy dung lai wait-set moi lan thuc day, ton phan
+    # lon CPU tren Pi 4 (xem mission_manager_node).
+    executor = EventsExecutor()
+    executor.add_node(node)
     try:
-        rclpy.spin(node)
+        executor.spin()
     except KeyboardInterrupt:
         pass
     finally:

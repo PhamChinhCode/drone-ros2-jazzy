@@ -9,6 +9,7 @@ nguon - tranh lam ngap kenh 4G/radio bang thong hep.
 import rclpy
 from mavros_msgs.msg import DebugValue, State
 from nav_msgs.msg import Odometry
+from rclpy.experimental import EventsExecutor
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from sensor_msgs.msg import BatteryState, NavSatFix
@@ -211,8 +212,12 @@ class TelemetryAggregatorNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = TelemetryAggregatorNode()
+    # EventsExecutor: executor mac dinh cua rclpy dung lai wait-set moi lan thuc day, ton phan
+    # lon CPU tren Pi 4 (xem mission_manager_node).
+    executor = EventsExecutor()
+    executor.add_node(node)
     try:
-        rclpy.spin(node)
+        executor.spin()
     except KeyboardInterrupt:
         pass
     finally:
