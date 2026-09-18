@@ -58,7 +58,18 @@ cấu hình camera V4L2 (MỤC 1), nạp ROS (MỤC 2) rồi `exec ros2 launch d
 sudo cp systemd/drone-startup.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now drone-startup.service
+# BẮT BUỘC: giữ bộ nhớ chia sẻ của user pc khi phiên SSH đóng (xem ghi chú bên dưới)
+sudo loginctl enable-linger pc
+sudo mkdir -p /etc/systemd/logind.conf.d
+sudo cp systemd/10-drone-keep-ipc.conf /etc/systemd/logind.conf.d/
+sudo systemctl restart systemd-logind
 ```
+
+**Vì sao cần hai lệnh cuối:** Ubuntu mặc định `RemoveIPC=yes` — mỗi khi phiên đăng nhập cuối của `pc`
+kết thúc (một phiên SSH đóng) logind xoá bộ nhớ chia sẻ của `pc`, kể cả của stack đang chạy bằng service.
+Fast DDS truyền dữ liệu giữa các node qua đúng bộ nhớ đó, nên các node mất liên lạc giữa chừng và EKF
+trôi nhiều mét trong khi drone nằm yên (gặp thật 2026-09-18). Kiểm: `ls /dev/shm | grep -c fastrtps`
+phải > 0 khi stack chạy, kể cả sau khi đã thoát hết SSH.
 
 **Vận hành:**
 
@@ -81,6 +92,10 @@ sudo systemctl enable --now drone-startup.service
 - Mỗi lần chạy bag ghi vào thư mục riêng `~/drone_logs/bag_<ngày>_<giờ>` (không ghi ảnh thô, khoảng
   60 MB/giờ). Pi 4 không có đồng hồ thời gian thực nên giờ trong tên lấy theo lúc Pi đồng bộ được giờ.
 - Muốn chỉ nạp môi trường để gõ lệnh tay: `source scripts/drone_startup.sh` — dừng sau MỤC 2, không launch.
+- Script đợi Pi có IPv4 (tối đa 60 s) rồi mới launch — phòng ngừa, vì Fast DDS chọn giao diện mạng lúc
+  node khởi tạo. Chưa kiểm chứng hành vi khi không có mạng nào (bay ngoài vùng WiFi): sau 60 s vẫn launch.
+  **Không** dùng `ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST`: Fast DDS chỉ dò vài participant đầu, stack hơn
+  20 tiến trình thì phần lớn node không thấy nhau (đã thử, EKF trôi).
 
 ## Tài liệu
 

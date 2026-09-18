@@ -96,5 +96,20 @@ if (( SOURCED )); then
   echo "[3/3] Đã nạp môi trường. Chạy stack: ros2 launch drone_bringup full_system.launch.py"
   return 0
 fi
+
+# Phòng ngừa: đợi có IPv4 (không phải loopback) rồi mới launch. network-online.target tới khi
+# wlan0 mới có carrier, CHƯA có IPv4, mà Fast DDS chọn giao diện lúc node khởi tạo.
+# Lỗi "các node không thấy nhau" gặp 2026-09-18 rốt cuộc do logind RemoveIPC xoá bộ nhớ chia sẻ
+# (xem systemd/10-drone-keep-ipc.conf), không chắc do thiếu IPv4.
+# ĐỪNG dùng ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST: Fast DDS khi đó chỉ dò vài participant đầu
+# trên localhost, stack >20 tiến trình thì phần lớn node không thấy nhau (đã thử, EKF trôi).
+for _ in $(seq 60); do
+  ip -4 -o addr show scope global | grep -q . && break
+  sleep 1
+done
+if ! ip -4 -o addr show scope global | grep -q .; then
+  echo "[!] Chưa có IPv4 sau 60 s - vẫn chạy, nhưng các node có thể không thấy nhau" >&2
+fi
+
 echo "[3/3] Chạy stack: ros2 launch drone_bringup full_system.launch.py"
 exec ros2 launch drone_bringup full_system.launch.py
