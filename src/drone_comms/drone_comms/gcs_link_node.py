@@ -275,8 +275,10 @@ class GcsLinkNode(Node):
         cy = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
         # ENU yaw (nguoc chieu kim dong ho tu truc x=E) -> NED yaw (tu truc N, thuan chieu).
         yaw_enu = math.atan2(sy, cy)
+        # FLU -> FRD: roll giu nguyen; pitch DOI DAU - FLU pitch duong la CHUI mui (quay quanh truc
+        # y sang TRAI), ATTITUDE NED/FRD pitch duong la NGUA mui. Thieu dau tru thi GCS ve nguoc.
         self.enqueue(PRIORITY_TELEMETRY, self.d.MAVLink_attitude_message(
-            time_boot_ms=t_ms, roll=math.atan2(sr, cr), pitch=math.asin(sp),
+            time_boot_ms=t_ms, roll=math.atan2(sr, cr), pitch=-math.asin(sp),
             yaw=math.atan2(math.cos(yaw_enu), math.sin(yaw_enu)),
             rollspeed=0.0, pitchspeed=0.0, yawspeed=0.0))
 
