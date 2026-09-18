@@ -6,13 +6,21 @@ tu loc duoc theo covariance nen node nay loc truoc (chot 11.3 P3).
 
 Tach hai topic vi vx/vy (flow) va vz (do cao) hop le doc lap: nam sat dat flow tat nhung vz van
 dung. Van toc giu trong khung than base_link (FLU) nhu MAVROS phat.
+
+vz CHI chuyen khi /range/vertical vua hop le: FC bo laser (nghieng > 25 do, ngoai tam, bi che) thi
+do cao FC chi con baro + gia toc va troi toi ~0,9 m/s, nhung van bao sigma ~0,06 m/s - EKF Pi tin
+theo va z lao xuong -1,9 m khi cam tay nghieng (do 2026-09-18). range_vertical_node dung cung
+nguong 25 do / tre 3 do voi FC.
 """
+
+import math
 
 import rclpy
 from geometry_msgs.msg import TwistWithCovarianceStamped
 from nav_msgs.msg import Odometry
 from rclpy.experimental import EventsExecutor
 from rclpy.node import Node
+from sensor_msgs.msg import Range
 
 from drone_estimation.estimation_math import fc_velocity_validity
 from drone_estimation.qos import SENSOR_QOS
@@ -23,15 +31,46 @@ class FcVelocityNode(Node):
     def __init__(self):
         super().__init__('fc_velocity_node')
         self.xy_valid = None
+        self.z_valid = None
+        # Laser 20 Hz: 0,3 s cho phep lo vai mau.
+        self.declare_parameter('range_max_age_s', 0.3)
+        # Laser vua hop le lai thi FC CHUA sua xong vz: FC neo lai do cao sau 0,5 s khong dung laser
+        # (EST_RANGE_REANCHOR_MS) - trong quang do vz cua FC van la gia tri da troi.
+        self.declare_parameter('range_settle_s', 0.6)
+        self.range_ok_s = None      # lan gan nhat /range/vertical hop le
+        self.range_ok_since_s = None  # bat dau chuoi mau hop le lien tuc hien tai
+        self.create_subscription(Range, '/range/vertical', self.on_range, SENSOR_QOS)
         self.create_subscription(Odometry, '/mavros/odometry/in', self.on_odom, SENSOR_QOS)
         self.pub_xy = self.create_publisher(
             TwistWithCovarianceStamped, '/fc/velocity_xy', SENSOR_QOS)
         self.pub_z = self.create_publisher(
             TwistWithCovarianceStamped, '/fc/velocity_z', SENSOR_QOS)
 
+    def now_s(self):
+        return self.get_clock().now().nanoseconds / 1e9
+
+    def laser_fresh(self, now):
+        return (self.range_ok_s is not None and
+                now - self.range_ok_s <= self.get_parameter('range_max_age_s').value)
+
+    def on_range(self, msg):
+        now = self.now_s()
+        if math.isfinite(msg.range) and msg.min_range <= msg.range <= msg.max_range:
+            if not self.laser_fresh(now):
+                self.range_ok_since_s = now
+            self.range_ok_s = now
+
     def on_odom(self, msg):
         cov = msg.twist.covariance
         xy_ok, z_ok = fc_velocity_validity(cov)
+        now = self.now_s()
+        laser_ok = (self.laser_fresh(now) and
+                    now - self.range_ok_since_s >= self.get_parameter('range_settle_s').value)
+        z_ok = z_ok and laser_ok
+        if z_ok != self.z_valid:
+            state = 'HOP LE' if z_ok else 'KHONG dung (FC mat laser hoac khong hop le) - bo mau'
+            self.get_logger().info(f'van toc doc FC {state}')
+            self.z_valid = z_ok
         if xy_ok != self.xy_valid:
             state = 'HOP LE' if xy_ok else 'KHONG hop le - bo mau'
             self.get_logger().info(f'van toc ngang FC {state}')

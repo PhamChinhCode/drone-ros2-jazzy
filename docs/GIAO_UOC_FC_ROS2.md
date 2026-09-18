@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| Phiên bản hợp đồng | **1.6** |
+| Phiên bản hợp đồng | **1.7** |
 | Ngày | 2026-09-14 |
 | Trạng thái | Đang hiệu lực |
 | Phạm vi | Mọi thứ đi qua đường dây MAVLink giữa FC và Pi. Kiến trúc nội bộ mỗi bên nằm ngoài phạm vi. |
@@ -2197,11 +2197,11 @@ plugin `odometry` chấp nhận đúng tổ hợp frame dưới đây bằng ph�
 | `vx, vy, vz` | vận tốc **hệ thân FRD** (xoay từ NED bằng **cả ma trận thái độ** — sửa 09-13) |
 | `rollspeed…yawspeed` | `est.rate_dps` đổi rad/s |
 | `pose_covariance` x, y | `(uncertainty_mps × t_từ_lúc_khoá)²`; **`1e6` khi `position_valid` sai** |
-| `pose_covariance` z | từ hiệp phương sai EKF độ cao |
+| `pose_covariance` z | từ hiệp phương sai EKF độ cao; **1.7: `1e6` khi laser không được dùng trong 300 ms** |
 | `pose_covariance` roll/pitch | **cố định `(1°)²`** theo mục 8.4 — không dùng số bộ lọc tự chấm |
 | `pose_covariance` yaw | **`1e6`** cho tới khi hướng từ kế được kiểm chứng (10.6a) |
 | `velocity_covariance` vx, vy | `ekf_velocity_uncertainty_mps()²`; **`1e6` khi bit flow tắt** — thay thế quy tắc 4.2a |
-| `velocity_covariance` vz | từ EKF độ cao |
+| `velocity_covariance` vz | từ EKF độ cao; **1.7: `1e6` khi laser không được dùng trong 300 ms** (nghiêng > 25°, ngoài tầm, bị che) — chỉ còn baro + gia tốc thì vz trôi tới ~0,9 m/s mà hiệp phương sai vẫn báo σ ~0,06 |
 | `reset_counter` | tăng mỗi lần tích phân vị trí được đặt lại — firmware 1.2 không bao giờ đặt lại, nên luôn 0 |
 | `estimator_type` | `MAV_ESTIMATOR_TYPE_UNKNOWN` (0) |
 | `quality` | 0 khi vận tốc không hợp lệ, 100 khi hợp lệ |
@@ -2479,6 +2479,7 @@ Lệnh đo nhanh: xem mục 12.A1.
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| **1.7** | 2026-09-18 | **MINOR — `ODOMETRY` z và vz `1e6` khi laser không được dùng trong 300 ms** (11.2). Cầm tay nghiêng > 25°: FC bỏ laser, vz trôi tới −0,9 m/s mà σ báo ~0,06 → EKF Pi tin theo, z lao xuống −1,9 m, GCS vẽ drone chìm dưới sàn. `FC_CTR_VER = 10700`. Cùng đợt, sửa nội bộ FC: neo lại độ cao (1.6) nay đặt **cả v = 0 với phương sai 1 (m/s)², nới phương sai bias** — bản 1.6 giữ v cũ nên v kẹt ở −10 m/s ngay khi nằm yên sau một lần nghiêng mạnh (đo 09-18, mô phỏng xác nhận). Pi: `fc_velocity_node` chỉ chuyển vz khi `/range/vertical` hợp lệ liên tục ≥ 0,6 s (FC neo lại sau 0,5 s); `gcs_link_node` đổi dấu pitch trong `ATTITUDE` (FLU → FRD). |
 | **1.6** | 2026-09-18 | **MINOR — `DISTANCE_SENSOR.current_distance = 0` khi laser không hợp lệ** (11.2): MAVROS bỏ `signal_quality` nên bản ≤ 1.5 để Pi thấy độ cao đóng băng như hợp lệ. `FC_CTR_VER = 10600`. Cùng đợt, sửa nội bộ FC (không đổi dây): khôi phục lời gọi `ekf_velocity_update_flow` trong `estimator.c` — **mất từ commit `1e09cb4` (09-10)**, từ đó vận tốc ngang FC không bao giờ hợp lệ (`ODOMETRY` vx/vy covariance `1e6`) và POSHOLD/OFFBOARD luôn lùi về ANGLE; `range_valid` hết hạn theo luồng khoảng cách riêng; `ekf_altitude`: cổng phần dư 5σ, trễ 3° cho ngưỡng nghiêng 25°, neo lại độ cao (không đụng tốc độ lên) khi laser quay lại sau ≥ 0,5 s; bỏ laser < 0,10 m (bị che — tay che đọc 0,05–0,10 m, nằm đất 0,145–0,23 m). Pi: `range_vertical_node` → `/range/vertical` (bù nghiêng) cho `optical_flow_node`, `position_controller_node`, `mission_manager_node`; sim phát `/range/vertical` và `FC_CTR_VER = 10600`. |
 | 1.5 *(Pi viết watchdog P6 và trạng thái nhiệm vụ, không tăng số)* | 2026-09-15 | 11.3 P6 → **XONG:** `position_controller_node` ngừng phát setpoint khi `/mission/state` im quá 1 s (dựa vào hết hạn 500 ms của FC, 5.2). P2: thêm ENROUTE / MARKER_SEARCH / RETRY_LOITER. Nội bộ Pi: chuyển nguồn setpoint có ramp 0,8 s. Không dùng lệnh FC mới, không đổi gì phía FC. |
 | 1.5 *(Pi viết hạ cánh theo marker, không tăng số)* | 2026-09-15 | 11.3 P1 → **phần Pi viết xong, gain chờ tune:** `landing_target_bridge_node` bám đúng ID qua TF, vòng căn tâm `SOURCE_LANDING` trong `position_controller_node` (dấu kiểm trên bàn), trạng thái PRECISION_LAND. Thử cả chuỗi trên bàn: 1 ARM + 1 DISARM thường, `ACCEPTED`. Không dùng lệnh FC mới, không đổi gì phía FC. |
