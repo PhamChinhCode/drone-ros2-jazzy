@@ -24,7 +24,7 @@ MAV_RESULT_DENIED = 2
 MAV_RESULT_UNSUPPORTED = 3
 
 OB_STATE_KHOA, OB_STATE_TAT, OB_STATE_DANG_CHAY = 0, 1, 2
-FC_CTR_VER = 10500              # hop dong 1.5
+FC_CTR_VER = 10600              # hop dong 1.6
 SETPOINT_TIMEOUT_S = 0.5        # offboard_timeout_ms
 DISARM_MAX_HEIGHT_M = 0.20      # cong DISARM theo do cao (11.1 #12)
 GROUND_RANGE_M = 0.17           # laser doc khi nam dat (11.1 #1)

@@ -44,7 +44,7 @@ class OpticalFlowNode(Node):
         self.create_subscription(Image, '/camera/image_raw', self.on_image, SENSOR_QOS)
         # Do cao lay tu laser MTF01P (20 Hz, ngang tam camera) thay /mavros/global_position/rel_alt:
         # relative_alt chua duoc giao uoc kiem (12.A1) va de FC giam GLOBAL_POSITION_INT (11.1 #14).
-        self.create_subscription(Range, '/mavros/mtf01p', self.on_altitude, SENSOR_QOS)
+        self.create_subscription(Range, '/range/vertical', self.on_altitude, SENSOR_QOS)
 
         self.pub_velocity = self.create_publisher(
             TwistWithCovarianceStamped, '/optical_flow/velocity', SENSOR_QOS)

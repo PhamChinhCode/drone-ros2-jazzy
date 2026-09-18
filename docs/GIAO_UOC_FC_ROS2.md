@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| Phiên bản hợp đồng | **1.5** |
+| Phiên bản hợp đồng | **1.6** |
 | Ngày | 2026-09-14 |
 | Trạng thái | Đang hiệu lực |
 | Phạm vi | Mọi thứ đi qua đường dây MAVLink giữa FC và Pi. Kiến trúc nội bộ mỗi bên nằm ngoài phạm vi. |
@@ -2121,6 +2121,15 @@ Cách điền `DISTANCE_SENSOR` đã thống nhất: `type = MAV_DISTANCE_SENSOR
 `id = 0`, FOV = 0 (không biết), quaternion = 0 (chỉ dùng khi hướng `CUSTOM`). `max_distance`
 lấy từ tham số `flow_range_max_mm` lúc chạy, nên luôn khớp ngưỡng firmware đang loại mẫu.
 
+**Hợp đồng 1.6 — khi không hợp lệ thì `current_distance = 0`** (vẫn giữ `signal_quality = 1`).
+MAVROS (`distance_sensor`) **bỏ hẳn `signal_quality`**, còn driver FC giữ `range_mm` là số đo hợp lệ
+cuối: bản ≤ 1.5 gửi nguyên số đó nên Pi thấy **một độ cao đóng băng mà vẫn nằm trong
+[`min`, `max`]** — nhánh "mất laser" phía Pi không bao giờ chạy (phát hiện 09-18, trước đó chỉ nghiệm
+thu với `signal_quality = 100`). `0 < min_distance` nên Pi loại bằng chính phép kiểm min/max sẵn có,
+theo REP 117 ("ngoài [min, max] là không đo được") — không phải mẹo `max + 1` ở trên. Pi không dùng
+`/mavros/mtf01p` trực tiếp nữa mà qua `range_vertical_node` → `/range/vertical` (đã bù nghiêng IMU,
+cùng ngưỡng 25° / trễ 3° với `ekf_altitude` của FC; không hợp lệ → `NaN`).
+
 **`min_distance = 15` cm — chốt 09-13, thay số tạm 1 cm.** Chủ dự án xác nhận: máy bay **nằm trên
 mặt đất thì laser đọc ~17 cm** — đó là khoảng cách từ laser tới đất theo cách lắp. Máy bay không
 xuống thấp hơn mặt đất, nên laser **không bao giờ phải đo dưới ~17 cm**; cận dưới thật của MTF01P
@@ -2470,6 +2479,7 @@ Lệnh đo nhanh: xem mục 12.A1.
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| **1.6** | 2026-09-18 | **MINOR — `DISTANCE_SENSOR.current_distance = 0` khi laser không hợp lệ** (11.2): MAVROS bỏ `signal_quality` nên bản ≤ 1.5 để Pi thấy độ cao đóng băng như hợp lệ. `FC_CTR_VER = 10600`. Cùng đợt, sửa nội bộ FC (không đổi dây): khôi phục lời gọi `ekf_velocity_update_flow` trong `estimator.c` — **mất từ commit `1e09cb4` (09-10)**, từ đó vận tốc ngang FC không bao giờ hợp lệ (`ODOMETRY` vx/vy covariance `1e6`) và POSHOLD/OFFBOARD luôn lùi về ANGLE; `range_valid` hết hạn theo luồng khoảng cách riêng; `ekf_altitude`: cổng phần dư 5σ, trễ 3° cho ngưỡng nghiêng 25°, neo lại độ cao (không đụng tốc độ lên) khi laser quay lại sau ≥ 0,5 s; bỏ laser < 0,10 m (bị che — tay che đọc 0,05–0,10 m, nằm đất 0,145–0,23 m). Pi: `range_vertical_node` → `/range/vertical` (bù nghiêng) cho `optical_flow_node`, `position_controller_node`, `mission_manager_node`; sim phát `/range/vertical` và `FC_CTR_VER = 10600`. |
 | 1.5 *(Pi viết watchdog P6 và trạng thái nhiệm vụ, không tăng số)* | 2026-09-15 | 11.3 P6 → **XONG:** `position_controller_node` ngừng phát setpoint khi `/mission/state` im quá 1 s (dựa vào hết hạn 500 ms của FC, 5.2). P2: thêm ENROUTE / MARKER_SEARCH / RETRY_LOITER. Nội bộ Pi: chuyển nguồn setpoint có ramp 0,8 s. Không dùng lệnh FC mới, không đổi gì phía FC. |
 | 1.5 *(Pi viết hạ cánh theo marker, không tăng số)* | 2026-09-15 | 11.3 P1 → **phần Pi viết xong, gain chờ tune:** `landing_target_bridge_node` bám đúng ID qua TF, vòng căn tâm `SOURCE_LANDING` trong `position_controller_node` (dấu kiểm trên bàn), trạng thái PRECISION_LAND. Thử cả chuỗi trên bàn: 1 ARM + 1 DISARM thường, `ACCEPTED`. Không dùng lệnh FC mới, không đổi gì phía FC. |
 | 1.5 *(Pi nghiệm thu, không tăng số)* | 2026-09-14 | **Pi đo 1.5 trên dây:** tần số từng bản tin khớp FC, `LOCAL_POSITION_NED`/`VFR_HUD` 0 khung, tổng 151,9 bản tin/s, băng thông 14,3 %, không mất khung; `FC_CTR_VER = 10500`, `FC_DIRTY = 0`, hash `df169c5c0ae19ac5`, `0x2080`. Qua MAVROS với đủ hệ thống: `mavros_node` 41 % CPU (52 % trước 1.5), setpoint 20,0/s, EKF bám marker healthy. Đóng 11.1 #14. |

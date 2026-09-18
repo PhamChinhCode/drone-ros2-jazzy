@@ -97,7 +97,7 @@ class MissionManagerNode(Node):
         self.create_subscription(EkfHealth, '/ekf/health', self.on_ekf_health, EVENT_QOS)
         self.create_subscription(FailsafeEvent, '/failsafe_event', self.on_failsafe, EVENT_QOS)
         # Tieu chi cham dat 11.1 #12e: laser, vz cua FC, vz Pi dang ra lenh (chi doc, khong publish).
-        self.create_subscription(Range, '/mavros/mtf01p', self.on_range, SENSOR_QOS)
+        self.create_subscription(Range, '/range/vertical', self.on_range, SENSOR_QOS)
         self.create_subscription(Odometry, '/mavros/odometry/in', self.on_fc_odom, SENSOR_QOS)
         self.create_subscription(
             PositionTarget, '/mavros/setpoint_raw/local', self.on_cmd_setpoint, SENSOR_QOS)

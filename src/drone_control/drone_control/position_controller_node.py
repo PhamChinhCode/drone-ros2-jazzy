@@ -96,7 +96,7 @@ class PositionControllerNode(Node):
         self.velocity_stamp_s = None
 
         self.create_subscription(Odometry, '/odometry/filtered', self.on_odom, SENSOR_QOS)
-        self.create_subscription(Range, '/mavros/mtf01p', self.on_range, SENSOR_QOS)
+        self.create_subscription(Range, '/range/vertical', self.on_range, SENSOR_QOS)
         self.create_subscription(PoseStamped, '/mission/setpoint', self.on_mission_setpoint, EVENT_QOS)
         self.create_subscription(Float32, '/mission/max_vel', self.on_max_vel, EVENT_QOS)
         # Lenh van toc FLU truc tiep (cat/ha canh) - uu tien hon duong vi tri khi con moi.

@@ -6,7 +6,8 @@ import pytest
 
 from drone_estimation.estimation_math import (HealthMonitor, MarkerResetPolicy,
                                               drone_position_from_tag, fc_velocity_validity,
-                                              parse_known_tags, rotate)
+                                              parse_known_tags, rotate, tilt_cos_from_quaternion,
+                                              vertical_range)
 
 
 def cov(vx, vy, vz):
@@ -47,6 +48,46 @@ def test_vi_tri_drone_co_yaw():
     # Mui drone huong +y odom (yaw 90), tag nam 1 m phia truoc mui, 2 m ben duoi.
     pos = drone_position_from_tag((10.0, 0.0, 0.0), (1.0, 0.0, -2.0), yaw_q(90))
     assert pos == pytest.approx((10.0, -1.0, 2.0), abs=1e-9)
+
+
+def roll_pitch_yaw_q(roll_deg, pitch_deg, yaw_deg):
+    r, p, y = (math.radians(a) / 2.0 for a in (roll_deg, pitch_deg, yaw_deg))
+    cr, sr, cp, sp, cy, sy = math.cos(r), math.sin(r), math.cos(p), math.sin(p), math.cos(y), \
+        math.sin(y)
+    return (sr * cp * cy - cr * sp * sy, cr * sp * cy + sr * cp * sy,
+            cr * cp * sy - sr * sp * cy, cr * cp * cy + sr * sp * sy)
+
+
+def test_tilt_cos_la_cos_roll_nhan_cos_pitch_khong_phu_thuoc_yaw():
+    for yaw in (0, 90, -135):
+        c = tilt_cos_from_quaternion(roll_pitch_yaw_q(10, 20, yaw))
+        assert c == pytest.approx(math.cos(math.radians(10)) * math.cos(math.radians(20)))
+
+
+def vr(r, tilt_deg, blocked=False):
+    return vertical_range(r, 0.15, 8.0, math.cos(math.radians(tilt_deg)), blocked, 25.0, 3.0)
+
+
+def test_do_cao_thang_dung_bu_nghieng():
+    h, blocked = vr(2.0, 20.0)
+    assert h == pytest.approx(2.0 * math.cos(math.radians(20.0)))
+    assert not blocked
+
+
+def test_nghieng_qua_nguong_thi_bo_va_co_tre():
+    assert vr(2.0, 26.0) == (None, True)
+    # Da bo: 24 do van chua du thap de nhan lai (nguong ve la 22 do).
+    assert vr(2.0, 24.0, blocked=True) == (None, True)
+    h, blocked = vr(2.0, 21.0, blocked=True)
+    assert h is not None and not blocked
+    # Chua bo: 24 do van nhan.
+    assert vr(2.0, 24.0)[0] is not None
+
+
+def test_so_do_laser_ngoai_dai_la_khong_hop_le():
+    # FC hop dong 1.6 gui 0 khi mat laser; sim gui inf; NaN cung phai bi loai.
+    for r in (0.0, float('inf'), float('nan'), 9.0):
+        assert vr(r, 0.0)[0] is None
 
 
 def test_parse_known_tags():

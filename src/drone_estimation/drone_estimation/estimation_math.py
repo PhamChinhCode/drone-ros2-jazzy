@@ -43,6 +43,25 @@ def drone_position_from_tag(tag_in_odom, tag_in_base, q_odom_base):
     return tuple(tag_in_odom[i] - r[i] for i in range(3))
 
 
+def tilt_cos_from_quaternion(q_xyzw):
+    """cos goc giua truc z than va truc z the gioi = cos(roll)*cos(pitch), khong phu thuoc yaw."""
+    x, y = q_xyzw[0], q_xyzw[1]
+    return 1.0 - 2.0 * (x * x + y * y)
+
+
+def vertical_range(range_m, min_range, max_range, tilt_cos, blocked, max_tilt_deg, hyst_deg):
+    """(do_cao_thang_dung | None, blocked) tu khoang cach laser doc truc than.
+
+    Giong ekf_altitude cua FC: qua max_tilt_deg thi bo, va da bo roi thi phai ve duoi
+    (max_tilt_deg - hyst_deg) moi nhan lai - khong co tre thi quanh nguong laser bat/tat tung mau.
+    """
+    limit = max_tilt_deg - hyst_deg if blocked else max_tilt_deg
+    blocked = tilt_cos < math.cos(math.radians(limit))
+    if blocked or not (min_range <= range_m <= max_range):
+        return None, blocked
+    return range_m * tilt_cos, blocked
+
+
 def parse_known_tags(flat):
     """[id, x, y, z, id, x, y, z, ...] -> {id: (x, y, z)}. Sai do dai thi ValueError."""
     if len(flat) % 4:

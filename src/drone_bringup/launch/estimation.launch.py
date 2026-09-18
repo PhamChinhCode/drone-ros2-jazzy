@@ -59,6 +59,10 @@ def generate_launch_description():
         Node(package='drone_estimation', executable='fc_velocity_node', name='fc_velocity_node',
              output='screen'),
 
+        # Laser doc truc than -> do cao thang dung (bu nghieng IMU) -> /range/vertical.
+        Node(package='drone_estimation', executable='range_vertical_node',
+             name='range_vertical_node', output='screen'),
+
         Node(package='robot_localization', executable='ekf_node', name='ekf_filter_node',
              parameters=[os.path.join(CONFIG, 'ekf.yaml')], output='screen'),
 

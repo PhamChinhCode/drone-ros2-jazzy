@@ -6,7 +6,8 @@ node nao. Logic FC nam trong sim_fc.py.
 
   /mavros/setpoint_raw/local  -> SimFc -> /X3/gazebo/command/twist, /X3/enable
   /model/X3/odometry          -> /odometry/filtered (thay EKF: tre + nhieu tuy chon),
-                                 /mavros/odometry/in, /mavros/mtf01p, TF odom -> base_link
+                                 /mavros/odometry/in, /mavros/mtf01p, /range/vertical,
+                                 TF odom -> base_link
   SimFc                       -> /mavros/state, /mavros/debug_value/named_value_int,
                                  service /mavros/cmd/command
 """
@@ -69,6 +70,8 @@ class SimFcBridgeNode(Node):
         self.tf_bc = TransformBroadcaster(self)
         self.pub_fc_odom = self.create_publisher(Odometry, '/mavros/odometry/in', SENSOR_QOS)
         self.pub_range = self.create_publisher(Range, '/mavros/mtf01p', SENSOR_QOS)
+        # Laser gia da la do cao thang dung va sim khong co IMU: thay range_vertical_node.
+        self.pub_range_v = self.create_publisher(Range, '/range/vertical', SENSOR_QOS)
         self.pub_state = self.create_publisher(State, '/mavros/state', RELIABLE_QOS)
         self.pub_named = self.create_publisher(
             DebugValue, '/mavros/debug_value/named_value_int', NAMED_VALUE_QOS)
@@ -122,8 +125,9 @@ class SimFcBridgeNode(Node):
         rng.radiation_type = Range.INFRARED
         rng.min_range, rng.max_range = sim_fc.RANGE_MIN_M, sim_fc.RANGE_MAX_M
         r = self.fc.range_m()
-        rng.range = float('inf') if r is None else r
+        rng.range = 0.0 if r is None else r      # hop dong 1.6: FC gui 0 khi mat laser
         self.pub_range.publish(rng)
+        self.pub_range_v.publish(rng)
 
         # "EKF": ground truth + nhieu, phat tre odom_delay_s.
         out = Odometry()
