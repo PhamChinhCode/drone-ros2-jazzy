@@ -5,6 +5,7 @@ khac muc dich voi mission_logger_node (log nghiep vu doi chieu CSDL GCS).
 """
 
 import os
+import time
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -68,7 +69,10 @@ def generate_launch_description():
              name='foxglove_bridge',
              parameters=[{'port': 8765, 'address': '0.0.0.0'}], output='screen'),
 
+        # Moi lan chay mot thu muc rieng: ten co dinh thi tu lan khoi dong thu hai (tu chay luc
+        # boot) ros2 bag chet vi "Output folder already exists".
         ExecuteProcess(cmd=['ros2', 'bag', 'record', '-o',
-                            os.path.expanduser('~/drone_logs/bag'), *BAG_TOPICS],
+                            os.path.expanduser(time.strftime('~/drone_logs/bag_%Y%m%d_%H%M%S')),
+                            *BAG_TOPICS],
                        output='screen'),
     ])

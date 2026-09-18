@@ -1627,8 +1627,9 @@ node tính `tagmap_crc` — tức đúng node mà quy tắc 2 của 8.7 dựa v�
 - Cả bốn node đọc bản đồ **đúng một lần** lúc khởi động; không node nào có callback đổi tham số.
 - Nạp nóng `marker_pose_republisher_node` nghĩa là đổi điểm neo odom trong lúc EKF đang chạy — việc chạm
   vào phần ước lượng vị trí, không đáng làm chỉ để bớt một lần khởi động lại khi drone đang đậu.
-- Hiện chưa có tiến trình nào tự khởi động lại stack (`drone-startup.service` chưa chạy `ros2 launch`), nên
-  việc khởi động lại do **người vận hành** làm.
+- Không tiến trình nào tự khởi động lại stack sau khi nhận bản đồ (`drone-startup.service` chỉ chạy stack
+  lúc boot, từ 2026-09-18), nên việc khởi động lại do **người vận hành** làm:
+  `sudo systemctl restart drone-startup` hoặc khởi động lại Pi.
 - Launch đọc bản chép trong `install/`, `colcon build` ghi đè nó; Pi sẽ ghi bản nhận qua dây ra chỗ riêng
   ngoài cây build. Đây là việc nội bộ Pi, không thuộc hợp đồng.
 

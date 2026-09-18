@@ -56,6 +56,12 @@ in use*) nên **GCS vẫn nói chuyện với node cũ**; hai `position_controll
 nguồn `/odometry/filtered` làm vị trí nhảy; MAVROS mới tranh cổng serial với MAVROS cũ. Log chỉ báo lỗi
 ở vài node, phần còn lại trông như chạy bình thường.
 
+**Drone thật: stack chạy bằng `drone-startup.service`** (tự lên lúc boot) — tắt bằng
+`sudo systemctl stop drone-startup`, **không** dùng `pkill`: service có `Restart=on-failure`, bị giết từ
+ngoài thì systemd có thể chạy lại ngay. Build xong: `sudo systemctl start drone-startup`.
+
+Stack chạy tay (mô phỏng, hoặc đã tắt service rồi launch bằng tay):
+
 ```bash
 # Ctrl+C trong terminal đang chạy ros2 launch, hoặc:
 pkill -INT -f "ros2 launch"
@@ -131,7 +137,12 @@ python3 tools/gcs_sim.py --cmd rtl                           # rtl / land / star
 
 ## 4. Chạy — phần cứng thật
 
+**Mặc định stack TỰ CHẠY lúc boot** qua `drone-startup.service` — cắm điện Pi là xong, không phải gõ gì.
+Cài đặt, xem log, tắt/khởi động lại: [`README.md` mục "Tự chạy lúc boot"](../README.md#tự-chạy-lúc-boot).
+Muốn chạy tay (debug, đổi tham số launch) thì **tắt service trước** rồi mới làm như dưới:
+
 ```bash
+sudo systemctl stop drone-startup
 scripts/camera_v4l2_setup.sh --width 640 --height 400 --vblank 3957 --exposure 300 --gain 32
 source install/setup.bash
 ros2 launch drone_bringup full_system.launch.py

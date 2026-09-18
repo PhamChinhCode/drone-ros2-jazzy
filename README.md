@@ -48,16 +48,39 @@ mà chưa `colcon build` thì chạy vẫn ra bản cũ.
 
 ## Tự chạy lúc boot
 
+Cắm điện Pi là cả hệ thống tự lên: `drone-startup.service` gọi `scripts/drone_startup.sh`, script
+cấu hình camera V4L2 (MỤC 1), nạp ROS (MỤC 2) rồi `exec ros2 launch drone_bringup full_system.launch.py`
+(MỤC 3). Mất khoảng 1 phút sau khi Pi có mạng thì GCS thấy drone.
+
+**Cài một lần** (và cài lại mỗi khi sửa `systemd/drone-startup.service`):
+
 ```bash
 sudo cp systemd/drone-startup.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now drone-startup.service
 ```
 
-Mặc định unit chỉ cấu hình camera + nạp môi trường ROS rồi thoát (MỤC 3 của
-`drone_startup.sh` để trống có chủ ý — không tự cất cánh khi cắm điện). Muốn tự
-chạy cả stack thì thêm lệnh `ros2 launch` vào MỤC 3 **và** đổi unit sang
-`Type=simple` — hướng dẫn ngay trong comment đầu file service.
+**Vận hành:**
+
+| Việc | Lệnh |
+|---|---|
+| Xem trạng thái | `systemctl status drone-startup` |
+| Xem log stack (thay `/tmp/full_system.log` cũ) | `journalctl -u drone-startup -f` |
+| Tắt stack (SIGINT như Ctrl+C, bag đóng file) | `sudo systemctl stop drone-startup` |
+| Khởi động lại stack (vd sau khi nạp bản đồ tag qua dây) | `sudo systemctl restart drone-startup` |
+| Không tự chạy lúc boot nữa | `sudo systemctl disable drone-startup` |
+
+- **Tắt service trước khi `colcon build` hoặc chạy `ros2 launch` bằng tay.** Hai stack chạy song song là
+  hai `gcs_link_node` tranh cổng UDP, hai MAVROS tranh cổng serial (xem `docs/HUONG_DAN_BUILD_CHAY.md`
+  mục 1b). Build xong thì `sudo systemctl start drone-startup`.
+- Tự chạy stack **không** làm drone tự cất cánh: cất cánh cần GCS gửi kế hoạch + lệnh bắt đầu, người lái bật
+  công tắc cho phép OFFBOARD (ch8) và FC báo sẵn sàng arm.
+- Camera không lên (overlay chưa nạp, cáp lỏng) thì service thử lại 5 lần trong 2 phút rồi dừng —
+  `journalctl -u drone-startup` có dòng `[!] Không thấy sensor ov9281`. Launch chết bất thường thì tự
+  chạy lại sau 5 s.
+- Mỗi lần chạy bag ghi vào thư mục riêng `~/drone_logs/bag_<ngày>_<giờ>` (không ghi ảnh thô, khoảng
+  60 MB/giờ). Pi 4 không có đồng hồ thời gian thực nên giờ trong tên lấy theo lúc Pi đồng bộ được giờ.
+- Muốn chỉ nạp môi trường để gõ lệnh tay: `source scripts/drone_startup.sh` — dừng sau MỤC 2, không launch.
 
 ## Tài liệu
 

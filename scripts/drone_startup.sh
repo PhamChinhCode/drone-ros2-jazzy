@@ -7,9 +7,9 @@
 #                                               shell hiện tại có sẵn lệnh `ros2` và các
 #                                               gói của workspace.
 #
-#   ~/ros2_ws/scripts/drone_startup.sh          Dùng cho systemd lúc boot. Môi trường ROS
-#                                               CHỈ có bên trong script — mọi lệnh cần nó
-#                                               phải nằm ở MỤC 3 bên dưới.
+#   ~/ros2_ws/scripts/drone_startup.sh          Dùng cho systemd lúc boot: cấu hình camera,
+#                                               nạp ROS rồi CHẠY CẢ STACK (MỤC 3) cho tới khi
+#                                               service dừng.
 #
 # Thêm việc mới về sau: viết vào MỤC 3.
 
@@ -81,15 +81,20 @@ source "$WS_SETUP"  || { echo "[!] Không nạp được $WS_SETUP — đã colc
 echo "    ROS_DISTRO=${ROS_DISTRO}  workspace=$(dirname "$(dirname "$WS_SETUP")")"
 
 # ---------------------------------------------------------------------------
-# MỤC 3 — CHỖ THÊM LỆNH VỀ SAU (đang để trống có chủ ý)
+# MỤC 3 — Chạy cả stack (CHỈ khi chạy trực tiếp, tức từ systemd)
 #
-# Viết lệnh vào đây. Lưu ý khi script được `source`: lệnh chạy nền (kết thúc bằng &)
-# thì shell vẫn dùng tiếp được; lệnh chạy nền trước (như `ros2 launch`) sẽ GIỮ shell
-# cho tới khi Ctrl+C.
+# `source` bằng tay thì dừng ở đây: shell có môi trường ROS và người dùng tự launch.
 #
-# Ví dụ (bỏ dấu # để dùng):
-#   ros2 launch drone_bringup perception.launch.py
-#   ros2 launch drone_bringup full_system.launch.py
-#   ros2 run foxglove_bridge foxglove_bridge &
+# Chạy stack KHÔNG làm drone tự cất cánh: cất cánh cần GCS gửi kế hoạch + MISSION_START,
+# người lái bật công tắc cho phép OFFBOARD (ch8) và FC báo OB_ARM_RDY = 1.
+#
+# `exec`: tiến trình `ros2 launch` THAY chỗ script, để SIGINT của systemd (KillSignal)
+# tới thẳng launch — tắt êm như Ctrl+C, bag kịp đóng file. Không exec thì SIGINT chỉ
+# tới bash và launch bị SIGKILL khi hết TimeoutStopSec.
 # ---------------------------------------------------------------------------
-echo "[3/3] Xong. Chưa có lệnh nào ở MỤC 3."
+if (( SOURCED )); then
+  echo "[3/3] Đã nạp môi trường. Chạy stack: ros2 launch drone_bringup full_system.launch.py"
+  return 0
+fi
+echo "[3/3] Chạy stack: ros2 launch drone_bringup full_system.launch.py"
+exec ros2 launch drone_bringup full_system.launch.py

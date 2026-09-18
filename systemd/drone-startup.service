@@ -1,37 +1,49 @@
-# Chạy drone_startup.sh sau mỗi lần boot (cấu hình V4L2 cho OV9281 + nạp môi trường ROS 2).
+# Chạy drone_startup.sh sau mỗi lần boot: cấu hình V4L2 cho OV9281 + nạp môi trường ROS 2
+# + chạy cả stack (ros2 launch drone_bringup full_system.launch.py).
 #
-# Cài:
+# Cài (hoặc cài lại sau khi sửa file này):
 #   sudo cp /home/pc/ros2_ws/systemd/drone-startup.service /etc/systemd/system/
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now drone-startup.service
 #
-# Khi MỤC 3 của drone_startup.sh có lệnh chạy dài (ví dụ `ros2 launch`), đổi 2 dòng:
-#   Type=oneshot + RemainAfterExit=yes   ->   Type=simple
-#   và bỏ comment 2 dòng KillSignal/TimeoutStopSec ở dưới để Ctrl+C-tương-đương tắt sạch.
+# Vận hành:
+#   sudo systemctl stop drone-startup       # tắt stack (SIGINT như Ctrl+C) - PHẢI làm trước khi
+#                                           # colcon build hoặc chạy ros2 launch bằng tay
+#   sudo systemctl restart drone-startup    # khởi động lại stack (vd sau khi nạp bản đồ tag)
+#   journalctl -u drone-startup -f          # xem log stack
 
 [Unit]
-Description=Khoi dong he thong drone (camera V4L2 + moi truong ROS 2)
-Documentation=file:///home/pc/ros2_ws/docs/CAMERA.md
+Description=He thong drone: camera V4L2 + ROS 2 full_system
+Documentation=file:///home/pc/ros2_ws/README.md
 After=multi-user.target
 Wants=network-online.target
 After=network-online.target
+# Camera thiếu (overlay chưa nạp, cáp lỏng) thì script thoát lỗi: thử lại tối đa 5 lần/2 phút
+# rồi dừng hẳn, thay vì lặp vô hạn.
+StartLimitIntervalSec=120
+StartLimitBurst=5
 
 [Service]
-# MỤC 3 đang trống nên script chạy xong là thoát -> oneshot.
-# RemainAfterExit=yes để `systemctl status` báo "active (exited)" thay vì "inactive",
-# nhờ đó unit khác có thể dùng After=/Requires= unit này.
-Type=oneshot
-RemainAfterExit=yes
+# drone_startup.sh exec thẳng `ros2 launch`, nên tiến trình chính là launch.
+Type=simple
 
 User=pc
 SupplementaryGroups=video
 Environment=HOME=/home/pc
+# Log Python ra journal ngay, không bị giữ trong bộ đệm.
+Environment=PYTHONUNBUFFERED=1
 
 ExecStart=/home/pc/ros2_ws/scripts/drone_startup.sh
 
-# Chỉ dùng khi đã đổi sang Type=simple:
-#KillSignal=SIGINT
-#TimeoutStopSec=15
+# Tắt như Ctrl+C: SIGINT CHỈ tới launch (mixed), launch tự chuyển cho từng node và ros2 bag kịp
+# đóng file. Quá 20 s mới SIGKILL cả nhóm.
+KillSignal=SIGINT
+KillMode=mixed
+TimeoutStopSec=20
+
+# Launch chết bất thường (không phải do `systemctl stop`) thì chạy lại sau 5 s.
+Restart=on-failure
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
