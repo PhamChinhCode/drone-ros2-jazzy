@@ -20,8 +20,18 @@ CAM_WIDTH=640
 CAM_HEIGHT=400
 CAM_VBLANK=3957       # 30 FPS (đo 09-14). Toàn hệ thống trên Pi 4 bão hoà CPU: ở 60 FPS apriltag chỉ
                       # 3,9 Hz, ở 30 FPS lên 15-16 Hz. KHÔNG dùng 110 (246 FPS).
-CAM_EXPOSURE=300      # không có auto-exposure. Đo 09-14 trong phòng: 800/120 cháy sáng, tag không bắt
-CAM_GAIN=32           # được; 300/32 bắt ổn định. Ngoài trời phải đo lại.
+# Sensor KHÔNG có auto-exposure: chọn bộ số theo chỗ bay rồi `sudo systemctl restart drone-startup`.
+# Đổi tức thì không cần khởi động lại: v4l2-ctl -d /dev/v4l-subdev0 --set-ctrl=exposure=40,analogue_gain=16
+#   trong_nha : 300/32 - đo 09-14 trong phòng, sáng TB ~60 (800/120 cháy sáng, tag không bắt được).
+#   ngoai_troi: 40/16  - đo 09-19 ngoài trời: 300/32 cho sáng TB 235, 72 % điểm cháy, 0 tag; 40/16 cho
+#               TB 63-67, cháy 0-0,2 %, tag mọi khung. 10/16 quá tối (tag 0,18/khung), 80/16 cháy 23 %.
+CAM_PROFILE=ngoai_troi
+case "$CAM_PROFILE" in
+  trong_nha)  CAM_EXPOSURE=300; CAM_GAIN=32 ;;
+  ngoai_troi) CAM_EXPOSURE=40;  CAM_GAIN=16 ;;
+  *)          echo "[!] CAM_PROFILE='$CAM_PROFILE' không hợp lệ (trong_nha | ngoai_troi)" >&2
+              [[ "${BASH_SOURCE[0]}" != "$0" ]] && return 1 || exit 1 ;;
+esac
 
 # Tự định vị: suy ra vị trí workspace từ chỗ script đang nằm, để clone về đâu
 # cũng chạy được mà không phải sửa đường dẫn (giống scripts/run_camera_node.sh).

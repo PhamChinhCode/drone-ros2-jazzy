@@ -92,6 +92,11 @@ phải > 0 khi stack chạy, kể cả sau khi đã thoát hết SSH.
 - Mỗi lần chạy bag ghi vào thư mục riêng `~/drone_logs/bag_<ngày>_<giờ>` (không ghi ảnh thô, khoảng
   60 MB/giờ). Pi 4 không có đồng hồ thời gian thực nên giờ trong tên lấy theo lúc Pi đồng bộ được giờ.
 - Muốn chỉ nạp môi trường để gõ lệnh tay: `source scripts/drone_startup.sh` — dừng sau MỤC 2, không launch.
+- **Độ sáng camera (không có auto-exposure):** `CAM_PROFILE` đầu `scripts/drone_startup.sh` —
+  `ngoai_troi` (exposure 40 / gain 16, mặc định từ 09-19) hoặc `trong_nha` (300 / 32). Đổi rồi
+  `sudo systemctl restart drone-startup`. Đổi tức thì không restart:
+  `v4l2-ctl -d /dev/v4l-subdev0 --set-ctrl=exposure=300,analogue_gain=32`. Ảnh cháy sáng (trắng
+  xoá) hoặc quá tối thì apriltag không bắt được tag.
 - Script đợi Pi có IPv4 (tối đa 60 s) rồi mới launch — phòng ngừa, vì Fast DDS chọn giao diện mạng lúc
   node khởi tạo. Chưa kiểm chứng hành vi khi không có mạng nào (bay ngoài vùng WiFi): sau 60 s vẫn launch.
   **Không** dùng `ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST`: Fast DDS chỉ dò vài participant đầu, stack hơn
