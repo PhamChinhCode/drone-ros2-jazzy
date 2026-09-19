@@ -57,7 +57,13 @@ if (( SOURCED )); then DUNG=return; else DUNG=exit; set -o pipefail; fi
 # Vòng chờ ở đây là để dùng được lúc boot: udev tạo /dev/media* SAU khi systemd
 # khởi động service, và /dev/video0 không có TAG systemd nên không đợi bằng
 # `After=dev-video0.device` được. Chạy tay thì vòng này qua ngay lần lặp đầu.
+#
+# `source` tay trong lúc drone-startup đang chạy thì BỎ QUA: đặt lại định dạng subdev khi camera
+# đang stream làm camera node ngừng ra ảnh cho tới khi khởi động lại stack (gặp thật 09-19).
 # ---------------------------------------------------------------------------
+if (( SOURCED )) && systemctl is-active --quiet drone-startup; then
+  echo "[1/3] BỎ QUA cấu hình camera: drone-startup đang chạy (đổi exposure tức thì: xem README)"
+else
 echo "[1/3] Cấu hình camera V4L2 (${CAM_WIDTH}x${CAM_HEIGHT}, vblank=${CAM_VBLANK})"
 
 CAM_OK=0
@@ -77,6 +83,7 @@ fi
 "$CAM_SETUP" --width "$CAM_WIDTH" --height "$CAM_HEIGHT" --vblank "$CAM_VBLANK" \
              --exposure "$CAM_EXPOSURE" --gain "$CAM_GAIN" --quiet \
   || { echo "[!] Cấu hình camera thất bại — dừng." >&2; $DUNG 1; }
+fi
 
 # ---------------------------------------------------------------------------
 # MỤC 2 — Nạp môi trường ROS 2
