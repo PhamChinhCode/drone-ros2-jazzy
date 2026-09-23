@@ -45,6 +45,53 @@ def test_round_chu_khong_phai_int():
     assert tagmap_crc({0: (0.0, 0.0001235, 0.0)}) == tagmap_crc({0: (0.0, 0.000124, 0.0)})
 
 
+# --------------------------------------------------- goc WGS84 cua ban do (ban 0.7)
+
+GOC = (21.0285110, 105.8048170, 15.0, -1.5)       # lat, lon, alt_m, north_yaw_deg
+
+
+def test_khong_goc_thi_crc_nhu_0_6():
+    """Ban do khong co goc giu NGUYEN CRC cu - GCS/Pi ban 0.6 khong bi anh huong."""
+    assert tagmap_crc(doc_known_tags(TAGS_YAML), None) == 0x6BDEA0A6
+
+
+def test_vecto_kiem_co_goc():
+    """Vecto kiem 0.7 - GCS tinh lai doc lap phai ra dung so nay (test_tagmap GCS).
+
+    Chuoi = 28 byte tag cua vecto 0.6 + 14 byte goc little-endian
+    36b2880c aa88103f 983a0000 6aff  (lat_e7 210285110, lon_e7 1058048170, alt_mm 15000,
+    north_yaw_cdeg -150).
+    """
+    assert tagmap_crc(doc_known_tags(TAGS_YAML), GOC) == 0xA35B41F9
+
+
+def test_goc_lech_mot_don_vi_thi_crc_doi():
+    lat, lon, alt, yaw = GOC
+    goc = tagmap_crc(doc_known_tags(TAGS_YAML), GOC)
+    for khac in [(lat + 1e-7, lon, alt, yaw), (lat, lon, alt + 0.001, yaw),
+                 (lat, lon, alt, yaw + 0.01)]:
+        assert tagmap_crc(doc_known_tags(TAGS_YAML), khac) != goc
+
+
+def test_ghi_override_doc_lai_ra_dung_crc(tmp_path):
+    """File Pi ghi khi GCS nap ban do phai doc lai ra DUNG CRC GCS da khai - khong thi GCS khoa
+    nap ke hoach mai mai (quy tac 2 muc 8.7)."""
+    import yaml
+
+    from drone_comms.tagmap import doc_goc, ghi_tags_override
+    tags = doc_known_tags(TAGS_YAML)
+    duong = tmp_path / 'tags_override.yaml'
+    ghi_tags_override(str(duong), tags, {0: 'pad_home', 1: 'pad_a'}, GOC)
+    p = yaml.safe_load(duong.read_text())['/**']['ros__parameters']
+    goc = doc_goc(p['geo_origin_valid'], p['geo_origin_lat'], p['geo_origin_lon'],
+                  p['geo_origin_alt'], p['geo_north_yaw_deg'])
+    assert tagmap_crc(doc_known_tags(p['known_tags']), goc) == 0xA35B41F9
+
+    ghi_tags_override(str(duong), tags, {0: 'pad_home', 1: 'pad_a'}, None)
+    p = yaml.safe_load(duong.read_text())['/**']['ros__parameters']
+    assert p['geo_origin_valid'] is False
+
+
 def test_known_tags_sai_dinh_dang_thi_bao_loi():
     with pytest.raises(ValueError):
         doc_known_tags([0.0, 1.0, 2.0])               # khong phai boi so cua 4

@@ -240,7 +240,8 @@ class GcsLinkNode(Node):
             retry_count=msg.retry_count, gripper_state=msg.gripper_state,
             failsafe_type=msg.failsafe_type, expected_marker_id=msg.expected_marker_id,
             tagmap_crc=msg.tagmap_crc, home_n_mm=msg.home_n_mm, home_e_mm=msg.home_e_mm,
-            flight_result=msg.flight_result))
+            flight_result=msg.flight_result, gps_fix_type=msg.gps_fix_type,
+            gps_sats=msg.gps_sats, gps_hacc_cm=msg.gps_hacc_cm))
 
     def on_odom(self, msg):
         self.odom = msg
@@ -474,7 +475,12 @@ class GcsLinkNode(Node):
             return
         if self.ban_do is not None:
             self.get_logger().info(f'huy luot nap ban do cu, bat dau luot moi (crc 0x{msg.tagmap_crc:08X})')
-        self.ban_do = dict(crc=msg.tagmap_crc, count=msg.count, cho=0, tag={},
+        # Goc WGS84 (ext 0.7). GCS cu khong gui -> origin_valid doc ra 0 -> ban do khong goc.
+        goc = None
+        if getattr(msg, 'origin_valid', 0):
+            goc = (msg.origin_lat_e7 / 1e7, msg.origin_lon_e7 / 1e7, msg.origin_alt_mm / 1000.0,
+                   msg.north_yaw_cdeg / 100.0)
+        self.ban_do = dict(crc=msg.tagmap_crc, count=msg.count, cho=0, tag={}, goc=goc,
                            hoi_luc=self.now_s(), so_lan_hoi=1)
         self.hoi_tagmap_item()
 
@@ -521,12 +527,12 @@ class GcsLinkNode(Node):
             self.ack_ban_do(n['crc'], self.d.DRONE_TAGMAP_ERR_UNDECLARED_TAG,
                             f'tag {thieu[0]} khong co trong apriltag.yaml (tag.ids)')
             return
-        tinh_lai = tagmap_crc(tags)
+        tinh_lai = tagmap_crc(tags, n['goc'])
         if tinh_lai != n['crc']:
             self.ack_ban_do(n['crc'], self.d.DRONE_TAGMAP_ERR_CRC,
                             f'CRC tinh lai 0x{tinh_lai:08X} khong khop 0x{n["crc"]:08X} da khai')
             return
-        ghi_tags_override(TAG_OVERRIDE_PATH, tags, khai_bao)
+        ghi_tags_override(TAG_OVERRIDE_PATH, tags, khai_bao, n['goc'])
         # quy tac 3 (muc 8.7): ke hoach cu suy vi tri tu ban do cu - giu lai la giu mot ke hoach
         # co nghia khac voi luc nguoi ta soan no.
         self.xoa_ke_hoach_dang_nap()

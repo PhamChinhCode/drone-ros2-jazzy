@@ -73,3 +73,18 @@ ekf_filter_node:
     pose0_differential: false
     pose0_rejection_threshold: 2.0       # loai pose marker nhay vot bat thuong (Mahalanobis)
     pose0_queue_size: 5
+
+    # GPS (giao uoc FC 1.8) da quy ve khung ban do tag boi gps_odom_node - CHI x, y. Chi co mau
+    # khi co goc ban do + fix 3D + h_acc <= 3 m. Phuong sai = (1,5 h_acc)^2 nen marker (0,01 m^2)
+    # van thang khi thay tag: gan bai dap vi tri do tag quyet dinh, GPS lap khoang giua.
+    pose1: /gps/pose_odom
+    pose1_config: [true, true, false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false]
+    pose1_differential: false
+    # Mahalanobis (so sigma). GPS nhay 5 sigma la da hong - bo. Lech that lau hon thi
+    # ekf_health_node ep /set_pose ve GPS (gps_reset_*).
+    pose1_rejection_threshold: 5.0
+    pose1_queue_size: 5

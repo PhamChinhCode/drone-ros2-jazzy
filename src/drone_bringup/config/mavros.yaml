@@ -24,7 +24,8 @@
       - 'setpoint_raw'
       - 'command'
       - 'imu'
-      - 'global_position'   # /global_position/global cho telemetry_aggregator (GPS, hien NO_FIX)
+      - 'global_position'   # /global_position/global - GPS tho, chi de xem (lat/lon GCS lay tu EKF)
+      - 'gps_status'        # GPS_RAW_INT -> /gpsstatus/gps1/raw: fix_type, h_acc, so ve tinh (giao uoc FC 1.8)
       - 'debug_value'   # NAMED_VALUE_INT OB_STATE/OB_AUTH/OB_EXIT tu FC (tra_loi_dot_2_pi4.md muc 2.1)
       - 'distance_sensor'  # DISTANCE_SENSOR laser MTF01P - GIAO_UOC_FC_ROS2.md muc 8.3, 11.2
       - 'odometry'      # ODOMETRY 331 tu FC hop dong 1.2 -> /mavros/odometry/in (GIAO_UOC muc 11.2)

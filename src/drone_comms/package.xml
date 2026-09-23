@@ -12,6 +12,8 @@
   <depend>std_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>mavros_msgs</depend>
+  <!-- geo.py: quy vi tri EKF ra WGS84 cho lat/lon gui GCS (giao uoc 0.7) -->
+  <depend>drone_estimation</depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

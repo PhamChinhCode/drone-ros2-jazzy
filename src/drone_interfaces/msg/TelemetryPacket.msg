@@ -30,11 +30,16 @@ uint32 contract_ver           # MAJOR*10000 + MINOR*100
 # Ket qua chuyen bay gan nhat (MissionState.RESULT_*), chot lai qua ca luc ve IDLE.
 # 0 = chua co chuyen nao ket thuc. Xem giao uoc GCS 11.5 P30.
 uint8 flight_result
+# Chat luong GPS THO tu FC (giao uoc GCS 0.7, FC 1.8). Hieu luc theo gia tri "khong biet" rieng:
+# gps_fix_type 0 = khong co GPS / khong biet; gps_sats 255, gps_hacc_cm 65535 = khong biet.
+uint8 gps_fix_type
+uint8 gps_sats
+uint16 gps_hacc_cm
 builtin_interfaces/Time stamp
 
 # --- valid_flags: hieu luc DU LIEU (giao uoc muc 5.2) ---
 uint16 VALID_POS=1            # odom DA NEO theo tags.yaml, EKF khoe, odom con tuoi
-uint16 VALID_GLOBAL_POS=2     # hien LUON 0: FC chua co GPS
+uint16 VALID_GLOBAL_POS=2     # POS_VALID VA ban do co goc WGS84 -> lat/lon cua vi tri HOP NHAT
 uint16 VALID_BATTERY=4        # hien LUON 0: FC chua gui BATTERY_STATUS
 uint16 VALID_FC_LINK=8        # /mavros/state con tuoi VA connected
 uint16 VALID_MARKER=16

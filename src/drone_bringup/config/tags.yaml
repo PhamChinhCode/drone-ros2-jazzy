@@ -11,4 +11,12 @@
                  2.0, -0.002, 0.000, 0.055]
     # Ten khung TF tung tag, cung thu tu known_tags
     tag_frames: [pad_home, pad_a, pad_b]
+    # Goc WGS84 cua ban do (diem x = y = z = 0) va phuong vi truc N ban do do tu Bac THAT (chieu
+    # kim dong ho). GCS gui kem ban do tag (giao uoc GCS 8.7); do tai cho bang `gps_survey`.
+    # false = CHUA CO GOC: GPS khong vao EKF, GCS khong nhan lat/lon (GLOBAL_POS_VALID = 0).
+    geo_origin_valid: false
+    geo_origin_lat: 0.0
+    geo_origin_lon: 0.0
+    geo_origin_alt: 0.0
+    geo_north_yaw_deg: 0.0
 

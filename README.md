@@ -1,7 +1,24 @@
 # Drone ROS 2 Workspace
 
-Workspace ROS 2 Jazzy cho drone hạ cánh chính xác bằng AprilTag, chạy trên
-Raspberry Pi 4 (Ubuntu 24.04) với camera OV9281 và flight controller Pixhawk.
+Workspace ROS 2 Jazzy cho drone giao hàng hạ cánh chính xác bằng AprilTag, chạy
+trên Raspberry Pi 4 (Ubuntu 24.04) với camera OV9281 và flight controller STM32H743
+tự làm (repo [`drone-fch743`](https://github.com/PhamChinhCode/drone-fch743), nói
+chuyện qua MAVLink/MAVROS — hợp đồng ở `docs/GIAO_UOC_FC_ROS2.md`).
+
+## Vị trí drone đến từ đâu
+
+EKF (`robot_localization`) trong khung `odom` — chính là khung bản đồ tag — hợp nhất:
+
+| Nguồn | Cho gì | Ghi chú |
+|---|---|---|
+| IMU của FC | hướng, gia tốc | qua MAVROS |
+| **AprilTag** | vị trí tuyệt đối, chính xác cm | chỉ khi camera thấy tag |
+| Optical flow (camera Pi + MTF-01P của FC) | vận tốc ngang | |
+| **GPS** (MG-F10-A trên FC, từ hợp đồng 1.8) | vị trí tuyệt đối, sai số vài mét | chỉ khi bản đồ tag có **gốc WGS84** (GCS gửi kèm bản đồ, mục 8.7 hợp đồng GCS) |
+
+Gần bãi đáp thì tag quyết định; ra ngoài tầm tag thì GPS giữ vị trí. Chưa khai gốc
+thì GPS **không** được dùng, và GCS không nhận toạ độ địa lý — xem `gps_odom_node`.
+Đo gốc tại chỗ: `ros2 run drone_estimation gps_survey`.
 
 Gộp từ hai nơi cũ: workspace ROS (`ros2_ws`) và repo bring-up camera (`PiDrone`).
 

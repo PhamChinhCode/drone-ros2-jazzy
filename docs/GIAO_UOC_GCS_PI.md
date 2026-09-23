@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| Phiên bản hợp đồng | **0.6** |
-| Ngày | 2026-09-16 |
+| Phiên bản hợp đồng | **0.7** |
+| Ngày | 2026-09-21 |
 | Trạng thái | **Bản thảo 0.6 — hai bên THẬT đã nói chuyện được trên dây (10.A một phần + 10.B, xem 10.D).** P30 **đã phân giải** (11.5): Pi chọn (a) **và** thêm `DRONE_TELEMETRY.flight_result`. **P31 đã phân giải** (11.6, 8.7): bốn bản tin `42005–42008` hiện thực xong cả hai bên, đã chạy thật qua Tailscale UDP. Không còn mục mở. Chưa mục nào [CHỐT]: còn thiếu chữ ký gói nối hai đầu, `TIMESYNC`, `PARAM_*`, và 10.C |
 | Phạm vi | Mọi thứ đi qua đường 4G/LTE giữa Pi và GCS. Kiến trúc nội bộ mỗi bên nằm ngoài phạm vi |
 | Tài liệu song sinh | `GIAO_UOC_FC_ROS2.md` (đường FC ↔ Pi) — **hai hợp đồng độc lập, xem mục 1.2** |
@@ -351,7 +351,7 @@ phải hỏi lại được, vì GCS có thể khởi động lại bất cứ l
 | Bit | Tên | Hạ cờ khi |
 |---|---|---|
 | 0 | `POS_VALID` | **odom CHƯA neo** theo `tags.yaml` lần nào / EKF không khoẻ / `/odometry/filtered` quá hạn. **Xem 5.2b** |
-| 1 | `GLOBAL_POS_VALID` | **hiện luôn = 0: FC chưa có GPS** |
+| 1 | `GLOBAL_POS_VALID` | `POS_VALID` = 0, **hoặc** bản đồ tag **chưa có gốc WGS84** (8.7). Từ 0.7 — trước đó luôn 0 |
 | 2 | `BATTERY_VALID` | **hiện luôn = 0: FC chưa gửi `BATTERY_STATUS`** |
 | 3 | `FC_LINK_VALID` | `/mavros/state.connected` = false |
 | 4 | `MARKER_VALID` | không bám marker nào |
@@ -375,9 +375,16 @@ thường gặp nhất là người lái chưa gạt ch5/ch8 để trao quyền 
 Đây là quy tắc **R3 của hợp đồng FC** áp nguyên văn: *"Dữ liệu không tin cậy thì GẮN CỜ, đừng thay
 bằng giá trị an toàn — `0` là một lời nói dối khác."*
 
-Hai bit `GLOBAL_POS_VALID` và `BATTERY_VALID` hiện **luôn bằng 0** vì FC chưa gửi GPS và chưa gửi
-pin. Ghi thẳng vào hợp đồng để phía GCS **không vẽ đồng hồ pin rồi hiển thị 0 %** — và để không ai
-nhầm rằng failsafe pin đang bảo vệ mình (mục 9.2).
+Bit `BATTERY_VALID` hiện **luôn bằng 0** vì FC chưa gửi pin. Ghi thẳng vào hợp đồng để phía GCS
+**không vẽ đồng hồ pin rồi hiển thị 0 %** — và để không ai nhầm rằng failsafe pin đang bảo vệ mình
+(mục 9.2).
+
+**Từ 0.7 (FC có GPS, giao ước FC 1.8):** `lat`/`lon` là **vị trí HỢP NHẤT của EKF** (tag + GPS + flow +
+IMU) quy ra WGS84 theo gốc của bản đồ tag — **không phải GPS thô**. Nên `GLOBAL_POS_VALID` =
+`POS_VALID` VÀ bản đồ có gốc. Không có gốc thì khung bản đồ không gắn với mặt đất, mọi lat/lon đều là
+bịa. Chất lượng GPS thô đi riêng ở ba trường `gps_*` (8.4), có quy ước "không biết" của chính chúng.
+**`POS_VALID` từ 0.7 cũng bật được nhờ GPS**: odom neo khi EKF gần pose marker **hoặc gần GPS** (đã quy
+về khung bản đồ) — sai số vài mét cho tới khi thấy tag, rồi tag quyết định.
 
 > **GCS:** đồng ý nguyên tắc — GCS sẽ không vẽ đồng hồ pin/GPS khi bit = 0.
 
@@ -399,6 +406,8 @@ lúc đó thì GCS vẽ drone ở toạ độ thuộc một khung khác rồi th
 **2. "NED" trên kênh này KHÔNG phải Bắc/Đông địa lý.** [THOẢ THUẬN] N và E là trục của **bản đồ
 tag**: `n = y`, `e = x` của `tags.yaml`. `ATTITUDE.yaw` đo so với trục N đó. Đừng đem so với la bàn
 hay bản đồ nền — yaw tuyệt đối của FC hiện **vô nghĩa** vì từ kế chưa hiệu chuẩn (giao ước FC 10.6a).
+*Từ 0.7:* khi bản đồ có gốc WGS84, trục N bản đồ lệch Bắc **thật** đúng `north_yaw` (8.7) — đó là cách
+duy nhất để đặt bản đồ tag lên bản đồ nền, và cũng là thứ Pi dùng để quy GPS về khung bản đồ.
 
 **3. Trả lời câu hỏi của GCS: odom NHẢY TỨC THÌ, không trượt dần.** [THOẢ THUẬN]
 `ekf_health_node` ép `/set_pose` của `robot_localization` về pose marker khi EKF lệch marker > 1 m
@@ -878,8 +887,8 @@ mới sẽ được nhận vào kế hoạch mới, và không có gì phát hi�
 | `stamp_us` | `uint64` | `stamp` | — |
 | `mission_id` | `uint32` | `mission_id` | — |
 | `contract_ver` | `uint32` | hằng số của Pi | — (mục 6.2) |
-| `lat` | `int32` | `lat` × 10⁷ | `GLOBAL_POS_VALID` |
-| `lon` | `int32` | `lon` × 10⁷ | `GLOBAL_POS_VALID` |
+| `lat` | `int32` | vị trí **hợp nhất** (EKF) quy ra WGS84, × 10⁷ — 0.7 | `GLOBAL_POS_VALID` |
+| `lon` | `int32` | như `lat` | `GLOBAL_POS_VALID` |
 | `marker_id_tracking` | `int32` | `marker_id_tracking` | tag đang **BÁM**. `MARKER_VALID` = 0 thì **bỏ qua trường**, không đọc −1 |
 | `alt_m` | `float` | `alt_m` | `POS_VALID` |
 | `vel_ned` | `float[3]` | `vel_ned` | `POS_VALID`. **NED**, không phải FLU |
@@ -898,6 +907,10 @@ mới sẽ được nhận vào kế hoạch mới, và không có gì phát hi�
 | `tagmap_crc` | `uint32` **`ext`** | tính từ `tags.yaml` | mục 8.6 |
 | `home_n_mm` | `int32` **`ext`** | `MissionFsm.home[0]` × 1000 | mục 11.P18 |
 | `home_e_mm` | `int32` **`ext`** | `MissionFsm.home[1]` × 1000 | mục 11.P18 |
+| `flight_result` | `uint8` **`ext`** | `MissionState.mission_result` | 8.5b (0.5) |
+| `gps_fix_type` | `uint8` **`ext`** | `GPS_RAW_INT.fix_type` từ FC | **0 = không có GPS / không biết** (Pi cũ, FC không gửi, quá hạn). Enum `GPS_FIX_TYPE` chuẩn: 1 chưa fix, 3 = 3D… — 0.7 |
+| `gps_sats` | `uint8` **`ext`** | số vệ tinh dùng trong nghiệm | **255 = không biết** — 0.7 |
+| `gps_hacc_cm` | `uint16` **`ext`** | `GPS_RAW_INT.h_acc` ÷ 10 | **65535 = không biết / chưa fix** — 0.7 |
 
 **Bỏ trường `fc_connected` khỏi gói** [THOẢ THUẬN]: nó trùng nghĩa với bit `FC_LINK_VALID`. Giữ cả
 hai thì phải nhớ hai quy ước cho cùng một thông tin, và chúng sẽ lệch nhau vào đúng lúc quan trọng.
@@ -1026,6 +1039,19 @@ nhất trên cả kênh**, không để hai hệ cùng tồn tại.
 Chỉ gồm tag đang bật. Với `tags.yaml` hiện tại (tag 0 tại gốc, tag 1 tại x = 10 m) thì chuỗi là hai
 bản ghi 14 byte.
 
+**Gốc WGS84 của bản đồ (0.7) [THOẢ THUẬN].** Bản đồ **có gốc** thì nối thêm **một** bản ghi 14 byte
+sau các bản ghi tag:
+
+```
+(int32 lat_e7, int32 lon_e7, int32 alt_mm, int16 north_yaw_cdeg)     # little-endian, round()
+```
+
+Bản đồ **không có gốc** thì chuỗi y hệt 0.6 — mọi bản đồ cũ giữ nguyên CRC, không bên nào phải đổi gì.
+**Vectơ kiểm 0.7**, cả hai bên có test (Pi `test_tagmap.test_vecto_kiem_co_goc`, GCS
+`test_gps_origin.test_vecto_kiem_co_goc_trung_pi`): hai tag của vectơ 0.6 + gốc
+`(21.0285110, 105.8048170, 15.0 m, −1.5°)` → 14 byte `36b2880c aa88103f 983a0000 6aff` →
+**`0xA35B41F9`** (tính lại bằng `zlib.crc32` trên chuỗi hex, độc lập với code).
+
 **Thêm `size_mm` vào CRC là việc MINOR**, làm sau khi đo `pad_a` bằng thước (nợ nhật ký 6.2 #5) và
 sau khi `tags.yaml` gánh luôn `size` thay vì để ở `apriltag.yaml`. Không làm bây giờ để CRC không
 khoá cứng một con số giả định.
@@ -1048,6 +1074,15 @@ viết lại quy tắc 2, bỏ `frame_name`, thêm mã `6 ERR_UNDECLARED_TAG`. *
 |---|---|---|
 | `tagmap_crc` | `uint32` | CRC của bản đồ **sắp gửi**, tính theo 8.6. Đồng thời là khoá tương quan của lượt — bản đồ sắp gửi tự có một CRC duy nhất, không cần cấp ID riêng |
 | `count` | `uint8` | số tag, **1–32**. 0 hoặc quá 32 → `ERR_COUNT` |
+| `origin_valid` | `uint8` **`ext`** | **0.7.** 1 = bản đồ có gốc WGS84 (năm trường dưới). **0 = không có gốc, hoặc GCS cũ** → Pi ghi `geo_origin_valid: false` |
+| `origin_lat_e7` / `origin_lon_e7` | `int32` **`ext`** | điểm gốc bản đồ (`x = y = z = 0`, thường là pad home). GCS lấy từ Site; đo tại chỗ bằng `ros2 run drone_estimation gps_survey` |
+| `origin_alt_mm` | `int32` **`ext`** | độ cao MSL của gốc — Pi không fuse z của GPS nên sai vài mét không hại |
+| `north_yaw_cdeg` | `int16` **`ext`** | phương vị trục N bản đồ đo từ **Bắc thật**, chiều kim đồng hồ, −18000..18000 (GCS: `Site.yaw_offset_deg`) |
+
+Gốc thuộc về **đúng bản đồ đi kèm**: nạp một bản đồ không gốc thì Pi **xoá** gốc cũ (ghi
+`geo_origin_valid: false`), không kế thừa gốc của `tags.yaml`. `CRC_EXTRA` của 42005 giữ nguyên 174 —
+năm trường nằm sau `<extensions/>` (đã sinh mã hai bản XML và đối chiếu; bên cũ đọc gói mới bình
+thường, bên mới đọc gói cũ ra `origin_valid = 0`).
 
 **`DRONE_TAGMAP_REQUEST`** (42006, Pi→GCS): `tagmap_crc` (`uint32`), `seq` (`uint8`).
 Cùng nhịp và cùng quy tắc phát lại với mục 3.2 — hết 1,0 s thì hỏi lại cùng `seq`, 5 lần rồi bỏ.
@@ -1709,6 +1744,7 @@ bản tin vào `drone_gcs.xml`, tăng số, rồi mới viết code. **Pi chưa 
 | **0.3** | **2026-09-16** | **Pi phân giải 5 mục GCS nêu khi duyệt 0.2; không còn mục mở.** Ba lỗi nữa của Pi được sửa: **P19 ý 3** — `home` chốt trong khung chưa neo nên **RTH bay về `pad_home` thay vì điểm cất cánh** (Pi tái hiện đúng kịch bản GCS nêu); **P20** — "nằm trên đất" không suy ra `POS_VALID` = 0, ngân sách phải lấy xấu nhất 6,5 kbit/s; **P22** — `alt_m` là so với **tag đích**, không phải điểm cất cánh (chú thích `MissionWaypoint.msg` cũng sai y vậy). Nhận: `POS_VALID` = đã neo (5.2b), N/E là trục bản đồ tag chứ không phải Bắc/Đông địa lý, bit 8 `HOME_VALID` (P21), `round()` + vectơ kiểm `0x6BDEA0A6` **Pi đã đối chiếu khớp** (P23). Trả lời: odom **nhảy tức thì** khi neo. Pi nêu tương tác P19×P20: `POS_VALID` thường = 0 khi đậu vì drone không thấy pad của chính nó. Thêm việc 9–11 vào danh sách 9.1 |
 | **0.4** | **2026-09-17** | **Nhập vào tài liệu hai trường mà `drone_gcs.xml` đã có nhưng mục 8 chưa ghi, và tăng số cho lần đổi dialect đó.** `DRONE_MISSION_ITEM.mission_id` (8.3) — trường này **nằm TRƯỚC `<extensions/>`**, tức thuộc loại đổi `CRC_EXTRA`; **Pi đối chiếu lịch sử XML: nó có mặt từ commit ĐẦU TIÊN của `drone_gcs.xml` và chưa từng đổi giữa hai bản đã publish**, nên không bản XML nào đang lưu hành bị lệch `CRC_EXTRA` của 42003. Cái thực sự đổi mà không tăng số là `DRONE_MISSION_COUNT.contract_ver`, và nó nằm **sau** `<extensions/>` nên `CRC_EXTRA` của 42001 giữ nguyên 148 — lành, nhưng vẫn là một lần đổi dialect không có số đi kèm, đúng thứ mục 6.2 nói là nguy hiểm. `DRONE_MISSION_COUNT.contract_ver` (8.4, extension) — chiều GCS→Pi của mục 6.2, `0` = GCS cũ chưa khai. Thêm **R3b** (6.3): trường extension mới phải có `0` nghĩa là "không biết". Thêm vào 6.1 dòng cho trường thêm trước `<extensions/>`. Ghi ở 7.1 ba lý do lệnh `mavgen` không chạy được với `pymavlink` cài bằng pip và việc **ghim 2.4.49** ở cả hai bên. Ghi ở 8.4 rằng mọi `char[]` là **ASCII không dấu**, bên gửi bỏ dấu. Do GCS nêu khi hiện thực xong tầng liên kết và tầng dịch vụ |
 | **0.5** | **2026-09-16** | **Pi phân giải P30 — mục duy nhất mà lần chạy thật đầu tiên tìm ra.** Làm (a) như GCS đề nghị: giữ `MISSION_COMPLETE` **1,5 s** (`MISSION_COMPLETE_HOLD_S`), vì vòng FSM 5 Hz so với telemetry 2 Hz khiến trạng thái 9 chỉ sống **một tick 200 ms**. **Nhưng (a) một mình chưa đủ, và trần (a) là bước lùi:** `MISSION_COMPLETE` là đích chung của cả huỷ lệnh, RTH, `NAV_LAND`, hết lượt thử và hết kế hoạch, nên đọc giá trị 9 là "thành công" sẽ **báo mọi lệnh huỷ là thành công**; và cửa sổ 1,5 s không cứu được GCS khởi động lại muộn hơn, tức vẫn hở R5. Nên thêm **`DRONE_TELEMETRY.flight_result`** (8.5b, enum `DRONE_FLIGHT_RESULT` 7 giá trị): trường extension nên **cả sáu `CRC_EXTRA` 42001–42011 giữ nguyên** (đã sinh mã từ hai bản XML và đối chiếu), `0` = không biết theo R3b, và **chốt lại tới lần cất cánh sau** nên hỏi lại được bất cứ lúc nào. Sửa kèm một lỗi kẹt mà việc giữ trạng thái phơi ra: `TRANSITIONS[MISSION_COMPLETE]` không có nhánh `FAILSAFE` nên lệnh huỷ đến trong cửa sổ giữ làm **FSM kẹt vĩnh viễn**. Thêm cảnh báo **bất đối xứng mặc định chữ ký** ở 7.6 (GCS mặc định BẬT, Pi mặc định TẮT — lệch nhau là im lặng hoàn toàn). Sửa 5.4 (+1 byte/gói), và câu "chưa byte nào chạy trên dây" ở 11.4 nay đã hết hiệu lực |
+| **0.7** | **2026-09-21** | **MINOR — GPS vào hệ thống (FC có GPS MG-F10-A, giao ước FC 1.8).** (1) `DRONE_TAGMAP_COUNT` thêm năm trường ext gốc WGS84 của bản đồ (8.7); `tagmap_crc` nối thêm bản ghi gốc **chỉ khi có gốc** (8.6, vectơ kiểm `0xA35B41F9`) — bản đồ không gốc giữ nguyên CRC. (2) `DRONE_TELEMETRY` thêm ext `gps_fix_type`, `gps_sats`, `gps_hacc_cm` (8.4). (3) **`lat`/`lon` đổi nguồn**: vị trí hợp nhất của EKF quy ra WGS84 thay cho GPS thô; `GLOBAL_POS_VALID` = `POS_VALID` VÀ có gốc (5.2) — trước đó bit này luôn 0 nên không bên nào đang đọc, vẫn tính MINOR. (4) `POS_VALID` bật được nhờ GPS (neo theo GPS). **Mười `CRC_EXTRA` 42001–42011 giữ nguyên** (sinh mã hai bản XML, đối chiếu; gói chéo phiên bản đọc được hai chiều). `contract_ver` `600` → `700` cả hai bên. **Đã chạy thật trên Pi** (miền ROS riêng, không đụng stack bay): GCS giả nạp bản đồ có gốc → `ACCEPTED`, file override đọc lại đúng CRC; EKF thật + GPS tổng hợp hội tụ 0,14 m, lat/lon telemetry lệch 0,13 m; tag lệch GPS 1 m → EKF theo tag (0,00 m); không gốc → GPS bị bỏ qua, CRC như 0.6. GCS: ô nhập gốc ở trang thiết kế khu vực, bảng telemetry tách "Toạ độ (hợp nhất)" và "GPS" |
 | **0.6** | **2026-09-16** | **P31 hiện thực xong cả hai bên và đã chạy thật trên dây — không còn mục mở.** Thêm bốn bản tin `42005–42008` (`DRONE_TAGMAP_COUNT/REQUEST/ITEM/ACK`) và enum `DRONE_TAGMAP_RESULT` vào `drone_gcs.xml` — **MINOR** theo 6.1 (thêm bản tin), sáu `CRC_EXTRA` 42001–42011 cũ giữ nguyên (chỉ thêm bản tin mới, không sửa bản tin cũ). `contract_ver` 0.5 → 0.6 (`500` → `600`) cả hai bên. Mục 8.7 áp đúng ba sửa Pi nêu ở 0.5: quy tắc 2 viết lại (`ACCEPTED` = đã ghi, không phải đã có hiệu lực — xác nhận bằng `tagmap_crc` telemetry), bỏ `frame_name` (Pi tự tra theo `apriltag.yaml`), thêm mã `6 ERR_UNDECLARED_TAG`. Phía Pi: `gcs_link_node` xử lý bắt tay (mirror `DRONE_MISSION_*`), ghi bản đồ ra `~/.config/drone_ros2_jazzy/tags_override.yaml` (ngoài cây build), bốn launch file (`control`/`estimation`/`full_system`/`sim_launch`) ưu tiên đọc file đó nếu có; thêm dịch vụ `mission_manager_node ~/clear_plan` (quy tắc 3). Phía GCS: `tagmap_client.py` (mirror `mission_client.py`), `Runtime.upload_tagmap()`, `POST /tags/upload`. **Đã chạy thật 2026-09-16 qua Tailscale UDP** (không cùng LAN, xem hạ tầng mạng ngoài phạm vi tài liệu): nạp 3 tag đổi toạ độ `pad_a`, `ACCEPTED`, khởi động lại `telemetry_aggregator_node`, `tagmap_crc` telemetry đổi khớp chính xác `0x4E7ECD6B` đã khai — xác nhận quy tắc 2 đúng như thiết kế. Test đơn vị cả hai bên xanh (122 Pi, 67 GCS) |
 | 0.5 | 2026-09-16 | **Pi trả lời P31, không tăng số** (chưa sửa dialect). Nhận hướng đi và số hiệu `42005–42008`, nhưng đề nghị GCS sửa 8.7 ba chỗ trước khi chốt: `tags.yaml` được **bốn** node đọc (sót `telemetry_aggregator_node`, node tính `tagmap_crc`) và cả bốn chỉ đọc lúc khởi động, nên **quy tắc 2 viết lại** — `ACCEPTED` = đã ghi, hiệu lực sau khi khởi động lại stack, GCS xác nhận bằng `tagmap_crc` trong telemetry; `apriltag_ros` bỏ qua tag không khai trong `tag.frames` nên **không thêm được tag mới qua dây** và **bỏ `frame_name`** (không nằm trong CRC); thêm mã **`6 ERR_UNDECLARED_TAG`**. Giữ giới hạn 32 tag (11.6) |
 | 0.5 | 2026-09-16 | **GCS nêu P31, không tăng số** (mới là [ĐỀ XUẤT], chưa sửa dialect). Đề nghị nạp bản đồ tag qua dây thay cho chép `tags.yaml` bằng tay — bốn bản tin `42005–42008` giữ nguyên hình dạng bắt tay của mục 3, đặc tả trường ở **8.7**, lý do và ba câu hỏi cho Pi ở **11.6**. Kèm ghi chú rằng GCS sẽ vẽ vị trí giả định khi `POS_VALID` = 0 nhưng **không** xin đường ép pose xuống EKF, vì làm vậy là tái tạo lỗi P19 |

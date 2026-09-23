@@ -59,6 +59,10 @@ def generate_launch_description():
         Node(package='drone_estimation', executable='fc_velocity_node', name='fc_velocity_node',
              output='screen'),
 
+        # GPS (giao uoc FC 1.8) -> khung ban do tag theo goc trong tags.yaml -> /gps/pose_odom.
+        Node(package='drone_estimation', executable='gps_odom_node', name='gps_odom_node',
+             parameters=[TAGS_YAML], output='screen'),
+
         # Laser doc truc than -> do cao thang dung (bu nghieng IMU) -> /range/vertical.
         Node(package='drone_estimation', executable='range_vertical_node',
              name='range_vertical_node', output='screen'),

@@ -6,18 +6,21 @@ Publish o TAN SO CO DINH bang timer (mac dinh 2 Hz), KHONG publish theo su kien 
 nguon - tranh lam ngap kenh 4G/radio bang thong hep.
 """
 
+import math
+
 import rclpy
-from mavros_msgs.msg import DebugValue, State
+from mavros_msgs.msg import GPSRAW, DebugValue, State
 from nav_msgs.msg import Odometry
 from rclpy.experimental import EventsExecutor
 from rclpy.node import Node
 from rclpy.parameter import Parameter
-from sensor_msgs.msg import BatteryState, NavSatFix
+from sensor_msgs.msg import BatteryState
 
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 
 from drone_comms.qos import EVENT_QOS, SENSOR_QOS
-from drone_comms.tagmap import doc_known_tags, tagmap_crc
+from drone_comms.tagmap import doc_goc, doc_known_tags, tagmap_crc
+from drone_estimation.geo import map_to_lla, origin_from_params
 from drone_interfaces.msg import (EkfHealth, FailsafeEvent, GripperStatus, MarkerQuality,
                                   MissionState, TelemetryPacket)
 
@@ -37,23 +40,40 @@ class TelemetryAggregatorNode(Node):
         self.declare_parameter('publish_rate_hz', 2.0)
         # Qua han thi HA CO, khong giu gia tri cu: mot so cu 5 giay la mot loi noi doi (R3).
         self.declare_parameter('stale_s', 2.0)
-        self.declare_parameter('contract_ver', 600)     # ban 0.6 = 0*10000 + 6*100
+        self.declare_parameter('contract_ver', 700)     # ban 0.7 = 0*10000 + 7*100
         self.declare_parameter('known_tags', Parameter.Type.DOUBLE_ARRAY)
+        # Goc WGS84 cua ban do (tags.yaml / tags_override.yaml) - vao CRC va de quy lat/lon.
+        self.declare_parameter('geo_origin_valid', False)
+        self.declare_parameter('geo_origin_lat', 0.0)
+        self.declare_parameter('geo_origin_lon', 0.0)
+        self.declare_parameter('geo_origin_alt', 0.0)
+        self.declare_parameter('geo_north_yaw_deg', 0.0)
 
         # Moi nguon giu (ban_tin, thoi_diem_nhan) de xet do tuoi rieng tung nguon.
         self.nguon = {}
+        g = self.get_parameter
+        goc = doc_goc(g('geo_origin_valid').value, g('geo_origin_lat').value,
+                      g('geo_origin_lon').value, g('geo_origin_alt').value,
+                      g('geo_north_yaw_deg').value)
         try:
-            self.tagmap_crc = tagmap_crc(doc_known_tags(self.get_parameter('known_tags').value))
-            self.get_logger().info(f'tagmap_crc = 0x{self.tagmap_crc:08X}')
+            self.tagmap_crc = tagmap_crc(doc_known_tags(g('known_tags').value), goc)
+            self.get_logger().info(f'tagmap_crc = 0x{self.tagmap_crc:08X}'
+                                   f'{" (co goc WGS84)" if goc else " (khong co goc WGS84)"}')
         except Exception as e:
             self.tagmap_crc = 0
             self.get_logger().error(f'khong tinh duoc tagmap_crc ({e}) - GCS se khoa nap ke hoach')
+        try:
+            self.goc = None if goc is None else origin_from_params(True, *goc)
+        except ValueError as e:
+            self.goc = None
+            self.get_logger().error(f'goc ban do sai ({e}) - khong gui lat/lon')
 
         self.create_subscription(MissionState, '/mission/state', self.on_mission_state, EVENT_QOS)
         self.create_subscription(State, '/mavros/state', self.on_fc_state, EVENT_QOS)
         self.create_subscription(BatteryState, '/mavros/battery', self.on_battery, SENSOR_QOS)
-        self.create_subscription(
-            NavSatFix, '/mavros/global_position/global', self.on_global_pos, SENSOR_QOS)
+        # GPS tho chi de bao CHAT LUONG (fix, ve tinh, h_acc); lat/lon gui GCS la vi tri HOP NHAT
+        # cua EKF quy ra WGS84 (giao uoc 0.7), khong phai GPS tho.
+        self.create_subscription(GPSRAW, '/mavros/gpsstatus/gps1/raw', self.on_gps_raw, SENSOR_QOS)
         self.create_subscription(GripperStatus, '/gripper/status', self.on_gripper, EVENT_QOS)
         self.create_subscription(
             MarkerQuality, '/marker/tracking_quality', self.on_marker, EVENT_QOS)
@@ -93,11 +113,8 @@ class TelemetryAggregatorNode(Node):
     def on_battery(self, msg):
         self.ghi('battery', msg)
 
-    def on_global_pos(self, msg):
-        # status < 0 (NO_FIX): bo mach khong co GPS -> lat/lon = 0 va altitude la do cao ap suat
-        # rac. Bo qua de GCS khong hien toa do 0,0 o do cao ~37 m.
-        if msg.status.status >= 0:
-            self.ghi('gps', msg)
+    def on_gps_raw(self, msg):
+        self.ghi('gps_raw', msg)
 
     def on_gripper(self, msg):
         self.ghi('gripper', msg)
@@ -157,6 +174,13 @@ class TelemetryAggregatorNode(Node):
             t = odom.twist.twist.linear
             m.alt_m = float(p.z)
             m.vel_ned = [float(t.y), float(t.x), float(-t.z)]     # ENU -> NED
+            # lat/lon = vi tri HOP NHAT quy ra WGS84. Chi khi ban do co goc: khong goc thi khung
+            # ban do khong gan voi mat dat that, lat/lon nao cung la bia.
+            if self.goc is not None:
+                lat, lon, _ = map_to_lla(p.x, p.y, p.z, self.goc)
+                if math.isfinite(lat) and math.isfinite(lon):
+                    co |= P.VALID_GLOBAL_POS
+                    m.lat, m.lon = float(lat), float(lon)
         fc = self.lay('fc')
         if fc is not None and fc.connected:
             co |= P.VALID_FC_LINK
@@ -167,10 +191,13 @@ class TelemetryAggregatorNode(Node):
             co |= P.VALID_BATTERY
             m.battery_pct = float(bat.percentage * 100.0)
             m.battery_v = float(bat.voltage)
-        gps = self.lay('gps')
+        gps = self.lay('gps_raw')
+        m.gps_fix_type, m.gps_sats, m.gps_hacc_cm = 0, 255, 0xFFFF   # khong biet (R3)
         if gps is not None:
-            co |= P.VALID_GLOBAL_POS
-            m.lat, m.lon = float(gps.latitude), float(gps.longitude)
+            m.gps_fix_type = int(gps.fix_type)
+            m.gps_sats = int(gps.satellites_visible)
+            if gps.fix_type >= 2 and gps.h_acc > 0:
+                m.gps_hacc_cm = min(int(round(gps.h_acc / 10.0)), 0xFFFE)
         grip = self.lay('gripper')
         if grip is not None:
             co |= P.VALID_GRIPPER

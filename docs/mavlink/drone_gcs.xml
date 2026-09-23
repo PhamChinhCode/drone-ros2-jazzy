@@ -51,7 +51,7 @@
     <enum name="DRONE_VALID_FLAGS" bitmask="true">
       <description>Co hieu luc du lieu trong DRONE_TELEMETRY. Bit = 0 -> BO QUA truong tuong ung, dung doc gia tri.</description>
       <entry value="1" name="DRONE_POS_VALID"><description>odom DA NEO theo tags.yaml it nhat mot lan, VA EKF khoe, VA /odometry/filtered con tuoi (muc 5.2b).</description></entry>
-      <entry value="2" name="DRONE_GLOBAL_POS_VALID"><description>lat/lon dung duoc. HIEN LUON = 0: FC chua co GPS.</description></entry>
+      <entry value="2" name="DRONE_GLOBAL_POS_VALID"><description>lat/lon dung duoc: POS_VALID = 1 VA ban do co goc WGS84 (muc 8.7, ban 0.7). lat/lon la vi tri HOP NHAT cua EKF (tag + GPS + flow + IMU) quy ra WGS84, KHONG phai GPS tho.</description></entry>
       <entry value="4" name="DRONE_BATTERY_VALID"><description>battery_pct/battery_v dung duoc. HIEN LUON = 0: FC chua gui BATTERY_STATUS.</description></entry>
       <entry value="8" name="DRONE_FC_LINK_VALID"><description>/mavros/state con tuoi VA connected = true.</description></entry>
       <entry value="16" name="DRONE_MARKER_VALID"><description>marker_id_tracking dung duoc.</description></entry>
@@ -185,6 +185,12 @@
       <description>GCS mo mot luot nap ban do tag. Pi tra loi bang DRONE_TAGMAP_REQUEST(0). CHI nhan khi Pi o IDLE.</description>
       <field type="uint32_t" name="tagmap_crc">CRC-32 cua ban do SAP gui, tinh theo muc 8.6. Dong thoi la khoa tuong quan cac goi cua luot nay - ban do sap gui tu no da co mot CRC duy nhat, khong can cap ID rieng.</field>
       <field type="uint8_t" name="count">So tag, 1-32. Ngoai dai -> ERR_COUNT.</field>
+      <extensions/>
+      <field type="uint8_t" name="origin_valid">1 = ban do co goc WGS84 (5 truong duoi). 0 = khong co goc, hoac GCS cu (&lt; 0.7) - Pi ghi geo_origin_valid = false. Ban 0.7.</field>
+      <field type="int32_t" name="origin_lat_e7" units="degE7">Vi do diem goc ban do (x = y = z = 0, thuong la pad_home).</field>
+      <field type="int32_t" name="origin_lon_e7" units="degE7">Kinh do diem goc ban do.</field>
+      <field type="int32_t" name="origin_alt_mm" units="mm">Do cao MSL diem goc (cung quy uoc alt cua GPS_RAW_INT).</field>
+      <field type="int16_t" name="north_yaw_cdeg" units="cdeg">Phuong vi truc N cua ban do do tu Bac THAT, chieu kim dong ho, -18000..18000. 0 = ban do dat dung Bac/Dong.</field>
     </message>
 
     <message id="42006" name="DRONE_TAGMAP_REQUEST">
@@ -216,8 +222,8 @@
       <field type="uint64_t" name="stamp_us" units="us">Dong ho he thong Pi, co the lech neu chua dong bo NTP. Chi de log va sap thu tu; xet do tuoi thi dung thoi diem GCS NHAN.</field>
       <field type="uint32_t" name="mission_id">Ke hoach dang chay. 0 = chua nap.</field>
       <field type="uint32_t" name="contract_ver">MAJOR*10000 + MINOR*100. Ban 0.4 = 400. Lech MAJOR -> muc 6.2.</field>
-      <field type="int32_t" name="lat" units="degE7">Vi do. Hieu luc theo GLOBAL_POS_VALID (hien luon 0).</field>
-      <field type="int32_t" name="lon" units="degE7">Kinh do. Hieu luc theo GLOBAL_POS_VALID (hien luon 0).</field>
+      <field type="int32_t" name="lat" units="degE7">Vi do cua vi tri HOP NHAT (EKF), quy tu khung ban do tag theo goc WGS84 cua ban do. Hieu luc theo GLOBAL_POS_VALID.</field>
+      <field type="int32_t" name="lon" units="degE7">Kinh do cua vi tri HOP NHAT (EKF). Hieu luc theo GLOBAL_POS_VALID.</field>
       <field type="int32_t" name="marker_id_tracking">Tag dang BAM. MARKER_VALID = 0 thi BO QUA truong, dung doc -1.</field>
       <field type="float" name="alt_m" units="m">Do cao so voi GOC BAN DO TAG, = -z cua LOCAL_POSITION_NED. Khac goc voi alt_m cua DRONE_MISSION_ITEM.</field>
       <field type="float[3]" name="vel_ned" units="m/s">Van toc he NED (N, E, D). NED, KHONG phai FLU - dien sai dau thi GCS hien drone di len khi no dang xuong.</field>
@@ -238,6 +244,9 @@
       <field type="int32_t" name="home_n_mm" units="mm">Toa do N cua "nha" RTH trong khung da neo. Hieu luc theo HOME_VALID.</field>
       <field type="int32_t" name="home_e_mm" units="mm">Toa do E cua "nha" RTH. Hieu luc theo HOME_VALID.</field>
       <field type="uint8_t" name="flight_result" enum="DRONE_FLIGHT_RESULT">Ket qua chuyen bay GAN NHAT da ket thuc, chot lai qua ca luc ve IDLE. 0 = chua co chuyen nao xong, hoac Pi cu chua khai (R3b). Can truong nay vi mission_state = 9 khong phan biet duoc "xong" voi "bi huy" (muc 11.5 P30).</field>
+      <field type="uint8_t" name="gps_fix_type" enum="GPS_FIX_TYPE">Chat luong GPS THO tu FC (GPS_RAW_INT, giao uoc FC 1.8). 0 = khong co GPS / khong biet (Pi cu, FC khong gui, qua han). 1 = co GPS chua fix. 3 = 3D. Ban 0.7.</field>
+      <field type="uint8_t" name="gps_sats">So ve tinh dung trong nghiem. 255 = khong biet. Ban 0.7.</field>
+      <field type="uint16_t" name="gps_hacc_cm" units="cm">Sai so ngang 1-sigma module tu bao. 65535 = khong biet hoac chua fix. Ban 0.7.</field>
     </message>
 
     <message id="42011" name="DRONE_LINK_STATS">

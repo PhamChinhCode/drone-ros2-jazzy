@@ -5,8 +5,14 @@ trong khi robot_localization chi xuat covariance va /diagnostics. Node nay lam c
 
 Kiem them viec keo EKF ve marker (/set_pose) khi EKF lech xa ma van thay tag - xem
 MarkerResetPolicy.
+
+Tu khi co GPS (giao uoc FC 1.8): khong co marker moi thi GPS (/gps/pose_odom, chi x, y) lam dung
+viec do voi nguong rong hon - sai so GPS vai met chu khong phai vai cm. Truoc lan neo dau goc odom
+la cho EKF khoi dong, GPS (da quy ve khung ban do) lech hang chuc met va pose1_rejection_threshold
+loai no mai mai; ep /set_pose ve GPS la cach duy nhat de GPS neo duoc khung.
 """
 
+import copy
 import math
 
 import rclpy
@@ -42,6 +48,14 @@ class EkfHealthNode(Node):
         # Coi la da neo khi EKF cach pose marker khong qua nguong nay. Mac dinh bang
         # pose0_rejection_threshold cua ekf.yaml: trong nguong do la EKF DA fuse marker.
         self.declare_parameter('anchor_tol_m', 2.0)
+        # Cung viec do cho GPS - CHI xet khi khong co marker moi (marker chinh xac hon ~100 lan).
+        # Lech ngang qua gps_reset_max_error_m lien tuc gps_reset_after_s thi ep ve GPS.
+        self.declare_parameter('gps_reset_max_error_m', 5.0)
+        self.declare_parameter('gps_reset_after_s', 2.0)
+        self.declare_parameter('gps_max_age_s', 1.0)
+        self.declare_parameter('gps_reset_cooldown_s', 5.0)
+        # Coi la neo theo GPS khi EKF cach GPS (ngang) khong qua nguong nay.
+        self.declare_parameter('gps_anchor_tol_m', 3.0)
 
         self.last_odom = None
         self.last_odom_time = None
@@ -51,16 +65,23 @@ class EkfHealthNode(Node):
                                      self.get_parameter('odom_timeout_s').value)
         self.last_healthy = None
         self.last_marker = None
+        self.last_gps = None
         self.anchored = False
         self.reset_policy = MarkerResetPolicy(self.get_parameter('reset_max_error_m').value,
                                               self.get_parameter('reset_after_s').value,
                                               self.get_parameter('reset_marker_max_age_s').value,
                                               self.get_parameter('reset_cooldown_s').value)
+        self.gps_reset_policy = MarkerResetPolicy(self.get_parameter('gps_reset_max_error_m').value,
+                                                  self.get_parameter('gps_reset_after_s').value,
+                                                  self.get_parameter('gps_max_age_s').value,
+                                                  self.get_parameter('gps_reset_cooldown_s').value)
 
         self.create_subscription(Odometry, '/odometry/filtered', self.on_odom, SENSOR_QOS)
         self.create_subscription(DiagnosticArray, '/diagnostics', self.on_diagnostics, EVENT_QOS)
         self.create_subscription(
             PoseWithCovarianceStamped, '/marker/pose_odom', self.on_marker, SENSOR_QOS)
+        self.create_subscription(
+            PoseWithCovarianceStamped, '/gps/pose_odom', self.on_gps, SENSOR_QOS)
         self.pub_health = self.create_publisher(EkfHealth, '/ekf/health', EVENT_QOS)
         # Topic set_pose cua robot_localization/ekf_node: dat lai trang thai ve pose nay.
         self.pub_set_pose = self.create_publisher(PoseWithCovarianceStamped, '/set_pose', EVENT_QOS)
@@ -74,6 +95,9 @@ class EkfHealthNode(Node):
 
     def on_marker(self, msg):
         self.last_marker = msg
+
+    def on_gps(self, msg):
+        self.last_gps = msg
 
     def on_diagnostics(self, msg):
         """Ghi canh bao/loi robot_localization tu bao de bo sung ly do (khong doi healthy)."""
@@ -122,14 +146,22 @@ class EkfHealthNode(Node):
         anchor_tol_m (= pose0_rejection_threshold) => pose do da duoc nhan chu khong bi loai.
         Ep /set_pose ve marker cung la neo, dat co ngay tai cho do.
         """
-        if self.anchored or self.last_marker is None or self.last_odom is None:
+        if self.anchored or self.last_odom is None:
             return self.anchored
         a = self.last_odom.pose.pose.position
-        b = self.last_marker.pose.pose.position
-        if math.dist((a.x, a.y, a.z), (b.x, b.y, b.z)) <= \
-                self.get_parameter('anchor_tol_m').value:
-            self.anchored = True
-            self.get_logger().info('odom DA NEO theo bang tag - vi tri tuyet doi dung duoc')
+        if self.last_marker is not None:
+            b = self.last_marker.pose.pose.position
+            if math.dist((a.x, a.y, a.z), (b.x, b.y, b.z)) <= \
+                    self.get_parameter('anchor_tol_m').value:
+                self.anchored = True
+                self.get_logger().info('odom DA NEO theo bang tag - vi tri tuyet doi dung duoc')
+        # GPS da quy ve khung ban do (gps_odom_node) nen gan GPS cung la neo, chi kem chinh xac.
+        if not self.anchored and self.last_gps is not None:
+            b = self.last_gps.pose.pose.position
+            if math.hypot(a.x - b.x, a.y - b.y) <= self.get_parameter('gps_anchor_tol_m').value:
+                self.anchored = True
+                self.get_logger().info('odom DA NEO theo GPS - vi tri tuyet doi dung duoc (sai so '
+                                       'vai met cho toi khi thay tag)')
         return self.anchored
 
     def check_marker_reset(self, now, odom_stamp_s, healthy):
@@ -140,13 +172,16 @@ class EkfHealthNode(Node):
         marker = self.last_marker
         if not alive or marker is None:
             self.reset_policy.evaluate(now_s, alive, healthy, (0, 0, 0), (0, 0, 0), None)
+            self.check_gps_reset(now, now_s, alive, healthy)
             return
         p, m = self.last_odom.pose.pose.position, marker.pose.pose.position
         # Tuoi marker tinh theo stamp anh (tre 250-430 ms luc day tai) - cung dong ho node.
+        marker_stamp_s = Time.from_msg(marker.header.stamp).nanoseconds / 1e9
         reason = self.reset_policy.evaluate(
-            now_s, alive, healthy, (p.x, p.y, p.z), (m.x, m.y, m.z),
-            Time.from_msg(marker.header.stamp).nanoseconds / 1e9)
+            now_s, alive, healthy, (p.x, p.y, p.z), (m.x, m.y, m.z), marker_stamp_s)
         if not reason:
+            if now_s - marker_stamp_s > self.get_parameter('reset_marker_max_age_s').value:
+                self.check_gps_reset(now, now_s, alive, healthy)
             return
         out = PoseWithCovarianceStamped()
         out.header.frame_id = marker.header.frame_id
@@ -163,6 +198,40 @@ class EkfHealthNode(Node):
         self.get_logger().warning(
             f'Ep EKF ve marker ({reason}): EKF ({p.x:.2f}, {p.y:.2f}, {p.z:.2f}) -> '
             f'marker ({m.x:.2f}, {m.y:.2f}, {m.z:.2f})')
+
+    def check_gps_reset(self, now, now_s, alive, healthy):
+        """Khong co marker moi: EKF lech GPS (ngang) xa / khong healthy -> ep x, y ve GPS.
+
+        Giu z va huong cua EKF - GPS chi fuse x, y (gps_odom_node).
+        """
+        gps = self.last_gps
+        if not alive or gps is None:
+            self.gps_reset_policy.evaluate(now_s, alive, healthy, (0, 0, 0), (0, 0, 0), None)
+            return
+        p, g = self.last_odom.pose.pose.position, gps.pose.pose.position
+        reason = self.gps_reset_policy.evaluate(
+            now_s, alive, healthy, (p.x, p.y, 0.0), (g.x, g.y, 0.0),
+            Time.from_msg(gps.header.stamp).nanoseconds / 1e9)
+        if not reason:
+            return
+        out = PoseWithCovarianceStamped()
+        out.header.frame_id = gps.header.frame_id
+        out.header.stamp = now.to_msg()
+        # Chep: gan thang se sua luon ban tin odom dang giu.
+        out.pose.pose = copy.deepcopy(self.last_odom.pose.pose)
+        out.pose.pose.position.x = g.x
+        out.pose.pose.position.y = g.y
+        cov = [0.0] * 36
+        cov[0], cov[7] = gps.pose.covariance[0], gps.pose.covariance[7]
+        cov[14] = self.last_odom.pose.covariance[14]
+        for i in range(3, 6):
+            cov[i * 7] = SET_POSE_ANGLE_VARIANCE
+        out.pose.covariance = cov
+        self.pub_set_pose.publish(out)
+        self.anchored = True
+        self.get_logger().warning(
+            f'Ep EKF ve GPS ({reason.replace("marker", "GPS")}): EKF ({p.x:.2f}, {p.y:.2f}) -> '
+            f'GPS ({g.x:.2f}, {g.y:.2f})')
 
 
 def main(args=None):

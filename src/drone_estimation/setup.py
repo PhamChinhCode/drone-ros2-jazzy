@@ -22,6 +22,8 @@ setup(
             'ekf_health_node = drone_estimation.ekf_health_node:main',
             'fc_velocity_node = drone_estimation.fc_velocity_node:main',
             'range_vertical_node = drone_estimation.range_vertical_node:main',
+            'gps_odom_node = drone_estimation.gps_odom_node:main',
+            'gps_survey = drone_estimation.gps_survey:main',
         ],
     },
 )

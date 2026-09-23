@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| Phiên bản hợp đồng | **1.7** |
-| Ngày | 2026-09-14 |
+| Phiên bản hợp đồng | **1.8** |
+| Ngày | 2026-09-21 |
 | Trạng thái | Đang hiệu lực |
 | Phạm vi | Mọi thứ đi qua đường dây MAVLink giữa FC và Pi. Kiến trúc nội bộ mỗi bên nằm ngoài phạm vi. |
 
@@ -402,6 +402,16 @@ vì suy luận qua tầng biến đổi của MAVROS.
 | `NAMED_VALUE_FLOAT` | 251 | 2 Hz × 4 tên *(1.2)* | 8.0 (mỗi tên 2.0) | `/mavros/debug_value/named_value_float` |
 | `ODOMETRY` | 331 | 30 Hz *(1.2)* | 30.3 | `/mavros/odometry/in` (`nav_msgs/Odometry`) |
 | `RC_CHANNELS` | 65 | 5 Hz *(1.2)* | 5.0 | `/mavros/rc/in` (`mavros_msgs/RCIn`) |
+| `GPS_RAW_INT` | 24 | **5 Hz** *(1.8)* | **5,00** *(dây, 09-22)* | `/mavros/gpsstatus/gps1/raw` (`mavros_msgs/GPSRAW`, plugin `gps_status`), `/mavros/global_position/raw/fix` |
+
+**Đo 09-21 (bản 1.8), 30 s qua MAVROS trên Pi đang chạy đủ stack:** `/mavros/gpsstatus/gps1/raw`
+5,57 Hz — cùng lúc `/mavros/global_position/global` (1 Hz, đã đo đúng 1,00 Hz trên dây 09-14) cũng
+ra 1,14 Hz: cả hai cao ~12–14 % là sai số `ros2 topic hz` trên Pi đầy tải, không phải FC phát nhanh
+hơn (FC lập lịch 200 ms, không thể vượt 5 Hz). **Đo trên dây bằng `pymavlink` 09-22** (bước 6 của 10.3,
+dừng stack, 30 s, ngoài trời): `GPS_RAW_INT` **5,00 Hz**, khoảng cách 142–203 ms, `GLOBAL_POSITION_INT`
+1,00, `SYS_STATUS` 2,00, `ODOMETRY`/`ATTITUDE` 30,3 Hz, **0 khung hỏng**. Nội dung đúng 4.3: fix 3,
+18 vệ tinh, `h_acc` 1093 mm, `eph = epv = 65535`, `cog = 65535` ở 9 cm/s. Trong nhà: `fix_type = 1`, `satellites_visible = 0`, `lat = lon = 0`,
+`h_acc = 0` — đúng quy ước "chưa fix" ở 4.3.
 
 Tần số topic ROS đo trên MAVROS: `/mavros/imu/data` 49.99, `/mavros/imu/mag` 48.05,
 `/mavros/local_position/pose` 30.30, `/mavros/global_position/rel_alt` 9.997,
@@ -502,9 +512,11 @@ Kiểu `uint16`, cộng dồn từ lúc khởi động, **không bao giờ tự 
 
 ### 4.3 Ghi chú từng bản tin
 
-**`GLOBAL_POSITION_INT` — bo mạch KHÔNG có GPS.** Bản tin vẫn phát vì `optical_flow_node`
-cần `relative_alt`. Quy ước "không biết" theo đúng đặc tả: `lat = lon = 0`, `hdg = 65535`.
-Chỉ ba nhóm trường mang thông tin thật:
+**`GLOBAL_POSITION_INT` — chỉ hiển thị, KHÔNG phải nguồn GPS cho hợp nhất.** Từ 1.8 (GPS MG-F10-A
+trên FC): `lat`/`lon`/`alt` lấy từ GPS **khi có fix 3D** (`gnssFixOK` và kiểu fix ≥ 3D), không thì
+vẫn quy ước "không biết" như trước: `lat = lon = 0`, `alt` = độ cao áp suất. `hdg = 65535`. Nguồn GPS
+cho EKF là `GPS_RAW_INT` (có `h_acc`, `fix_type`, số vệ tinh) — bản tin này không có sai số nào.
+Khi chưa fix, ba nhóm trường mang thông tin thật:
 
 | Trường | Nguồn | Ghi chú |
 |---|---|---|
@@ -512,8 +524,8 @@ Chỉ ba nhóm trường mang thông tin thật:
 | `alt` | `baro.altitude_m` × 1000 | độ cao áp suất, **không phải MSL thật** |
 | `vx`/`vy`/`vz` | `est.velocity_mps` × 100 | hệ NED, cm/s |
 
-Phía Pi: `telemetry_aggregator_node` phải bỏ qua `NavSatFix` khi `status.status < 0`
-(`NO_FIX`) để GCS không thấy toạ độ 0,0 ở độ cao ~37 m.
+Phía Pi: từ 1.8 `telemetry_aggregator_node` **không** đọc bản tin này nữa — lat/lon gửi GCS là vị trí
+hợp nhất của EKF quy ra WGS84 (giao ước GCS 0.7), chất lượng GPS lấy từ `GPS_RAW_INT`.
 
 **`LOCAL_POSITION_NED` — độ tin cậy KHÔNG đồng đều giữa các trục.**
 
@@ -540,9 +552,23 @@ lại `UINT16_MAX`. Chưa cắm pin thì `cell_count = 0` nên cả 10 ô đều
 **`EXTENDED_SYS_STATE`.** Chưa arm → `ON_GROUND`. Đã arm → theo độ cao, ngưỡng **0,5 m**.
 Không có `est.altitude_valid` → `UNDEFINED`.
 
-**`GPS_RAW_INT` (24) — KHÔNG phát, có chủ ý.** Bo mạch không có GPS nên bản tin sẽ mang
-`fix_type = 0` vĩnh viễn, và MAVROS cũng cho ra đúng "no fix" khi thiếu nó. Phát một bản
-tin rỗng không đổi được gì. Bật lại khi lắp GPS thật.
+**`GPS_RAW_INT` (24) — từ 1.8, 5 Hz, nguồn GPS DUY NHẤT cho hợp nhất phía Pi.** GPS MicoAir
+MG-F10-A (u-blox NEO-F10N, L1+L5) trên UART7 của FC, FC đọc `UBX-NAV-PVT` 10 Hz. Cách điền [CHỐT]:
+
+| Trường | Cách điền | "Không biết" |
+|---|---|---|
+| `fix_type` | `0` driver không nhận NAV-PVT (dây, nguồn, đang dò baud); `1` module sống chưa có nghiệm; `2` 2D; `3` 3D; `4` 3D + SBAS (`diffSoln`); `5`/`6` RTK float/fixed (`carrSoln`) | — (chính nó là cờ hiệu lực) |
+| `lat`, `lon` | degE7 | **`0` khi `fix_type < 2`** — KHÔNG gửi toạ độ cũ module còn nhớ |
+| `alt`, `alt_ellipsoid` | mm, MSL / ellipsoid | `0` khi `fix_type < 2` |
+| `h_acc`, `v_acc` | mm, **sai số 1-σ module tự báo** — Pi lọc và đặt hiệp phương sai theo trường này | `0` khi `fix_type < 2` |
+| `vel`, `vel_acc` | cm/s, mm/s | `UINT16_MAX` / `0` khi `fix_type < 2` |
+| `cog`, `hdg_acc` | cdeg, degE5 | `cog = UINT16_MAX` khi tốc độ < 0,5 m/s (hướng đi lúc đứng yên là nhiễu) |
+| `satellites_visible` | số vệ tinh **dùng trong nghiệm** | `255` khi `fix_type = 0` |
+| `eph`, `epv` | **luôn `UINT16_MAX`** — NAV-PVT chỉ có pDOP, không có HDOP/VDOP. Pi KHÔNG suy sai số từ DOP | — |
+| `yaw` | `0` — module một anten, không đo được hướng | — |
+
+Kèm theo: `SYS_STATUS` khai bit `MAV_SYS_STATUS_SENSOR_GPS` trong `present`, `health` = driver còn
+nhận NAV-PVT (không nói có fix hay chưa).
 
 ### 4.4 Timestamp
 
@@ -956,7 +982,8 @@ Bảng này là giao diện mà node phía Pi được phép dựa vào. Cột c
 | `HIGHRES_IMU` | `/mavros/imu/data_raw`, `/mavros/imu/mag` | `sensor_msgs/Imu`, `MagneticField` | chẩn đoán |
 | `LOCAL_POSITION_NED` | `/mavros/local_position/pose`, `.../velocity_local` | `PoseStamped`, `TwistStamped` | **không** — plugin `local_position` tắt 09-14 (trùng `ODOMETRY`; 11.1 #14 đề xuất FC ngừng) |
 | `GLOBAL_POSITION_INT` | `/mavros/global_position/rel_alt` | `std_msgs/Float64` | **không** từ 09-14 — `optical_flow_node` lấy độ cao từ laser `/mavros/mtf01p` (11.1 #14) |
-| `GLOBAL_POSITION_INT` | `/mavros/global_position/global` | `sensor_msgs/NavSatFix` | `telemetry_aggregator` (bỏ khi `NO_FIX`) |
+| `GLOBAL_POSITION_INT` | `/mavros/global_position/global` | `sensor_msgs/NavSatFix` | **không** từ 1.8 — chỉ để xem |
+| `GPS_RAW_INT` | `/mavros/gpsstatus/gps1/raw` | `mavros_msgs/GPSRAW` | `gps_odom_node` (→ `/gps/pose_odom` cho EKF `pose1`), `telemetry_aggregator` (chất lượng GPS cho GCS), `gps_survey` (đo gốc bản đồ) — plugin `gps_status` |
 | `BATTERY_STATUS`, `SYS_STATUS` | `/mavros/battery` | `sensor_msgs/BatteryState` | `failsafe_monitor` (**xử lý `percentage < 0`**) |
 | `EXTENDED_SYS_STATE` | `/mavros/extended_state` | `mavros_msgs/ExtendedState` | `mission_manager` |
 | `VFR_HUD` | `/mavros/vfr_hud` | `mavros_msgs/VfrHud` | **không** — plugin `vfr_hud` tắt 09-14 (11.1 #14) |
@@ -1058,7 +1085,8 @@ Bản tin chuẩn đã cấp:
 | 11 | `SET_MODE` | Pi→FC | **không hiện thực, không dùng** |
 | 30 | `ATTITUDE` | FC→Pi | [CHỐT] — **30 Hz từ 1.5** (11.1 #14) |
 | 32 | ~~`LOCAL_POSITION_NED`~~ | FC→Pi | **[PHẾ BỎ — ngừng phát từ 1.5]** — thay bằng `ODOMETRY` (331), đã song song từ 1.2 (10.4 bước 1–2). Không MAJOR theo ngoại lệ Pi xác nhận (11.1 #14). Số 32 không tái sử dụng |
-| 33 | `GLOBAL_POSITION_INT` | FC→Pi | [CHỐT] — **1 Hz từ 1.5**, chỉ hiển thị GCS (11.1 #14) |
+| 24 | `GPS_RAW_INT` | FC→Pi | [CHỐT từ 1.8] — 5 Hz, cách điền 4.3. Pi: plugin `gps_status`. Đo trên dây 09-22: 5,00 Hz, 0 khung hỏng |
+| 33 | `GLOBAL_POSITION_INT` | FC→Pi | [CHỐT] — **1 Hz từ 1.5**, chỉ hiển thị. Từ 1.8 mang lat/lon GPS khi có fix 3D |
 | 65 | `RC_CHANNELS` | FC→Pi | [CHỐT] — Pi đo 09-13 trên dây và qua `rc_io`: 5 Hz, cách điền 11.2 |
 | 74 | ~~`VFR_HUD`~~ | FC→Pi | **[PHẾ BỎ — ngừng phát từ 1.5]** — không node nào dùng, plugin đã tắt (11.1 #14). Số 74 không tái sử dụng |
 | 76 | `COMMAND_LONG` | Pi→FC | [CHỐT] |
@@ -1344,6 +1372,13 @@ Chỉ khi có nguồn vị trí tuyệt đối. Việc phải làm: FC thêm vò
 (bit 0–2 về `000`) → **tăng MAJOR**; cấp `custom_mode` mới cho LAND/RTL trong dải 16–31;
 bật `GPS_RAW_INT` (24). **Đừng làm từng phần** — nửa vời là kiểu bay để bù cho phần trôi
 không có thật, đã nói ở mục 1.
+
+> **1.8 (2026-09-21) — GPS vào hệ thống, nhưng KHÔNG phải hướng (b).** `GPS_RAW_INT` bật để Pi hợp
+> nhất GPS trong EKF của **chính Pi** (`robot_localization`, cùng khung bản đồ tag) — nơi vòng vị trí
+> vốn đã nằm (`position_controller_node` → vận tốc hệ thân). FC **không** có vòng vị trí mới, `type_mask`
+> không đổi, không cấp `custom_mode` mới. Cảnh báo "nửa vời" ở trên nói về việc cho FC bay theo vị trí
+> khi chưa có nguồn tuyệt đối; ở đây nguồn tuyệt đối vào đúng chỗ đã điều khiển vị trí. Hướng (b) —
+> đường lệnh vị trí xuống FC — vẫn để ngỏ, vẫn MAJOR.
 
 **c) Chuyển `LOCAL_POSITION_NED` → `ODOMETRY` (331).**
 `ODOMETRY` mang covariance nên **giải quyết dứt điểm** cả vấn đề covariance đoán mò (8.4)
@@ -2484,6 +2519,7 @@ Lệnh đo nhanh: xem mục 12.A1.
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| **1.8** | 2026-09-21 | **MINOR — GPS MG-F10-A trên FC.** FC phát `GPS_RAW_INT` (24) 5 Hz, cách điền 4.3 (`eph`/`epv` = `UINT16_MAX`, sai số ở `h_acc`/`v_acc`, `lat = lon = 0` khi chưa fix); `GLOBAL_POSITION_INT` mang lat/lon/alt GPS khi có fix 3D; `SYS_STATUS` khai bit GPS. `FC_CTR_VER = 10800`. Không phải hướng 10.6b — ghi chú dưới 10.6b. **Pi:** plugin `gps_status`; `gps_odom_node` quy GPS về khung bản đồ tag theo gốc WGS84 (giao ước GCS 0.7) → EKF `pose1` (chỉ x, y); `ekf_health_node` neo/ép `/set_pose` theo GPS khi không có marker mới; `telemetry_aggregator` bỏ `/mavros/global_position/global`. Cùng đợt, nội bộ FC: IMU chính đổi ICM20602 → **ICM-42688-P** (cùng chân SPI1, trục đo lại), la bàn IST8310 trên GPS có driver nhưng **chưa bật** (chưa đo trục/hiệu chuẩn). |
 | 1.7 *(FC + Pi, không tăng số)* | 2026-09-19 | **FC:** `DISTANCE_SENSOR.min_distance` 15 → **10** cm (nằm đất đọc 0,10–0,14 m tuỳ chỗ đặt); `ODOMETRY` không xoay vn/ve không hợp lệ sang vz thân (lọt +0,12 m/s khi nằm yên mất flow). **Pi nội bộ:** `fc_velocity_node` phát vận tốc (0, 0, 0) lên `/zupt/velocity` khi `/mavros/state` báo **chưa arm** — EKF thêm `twist3`; nằm đất không có nguồn vận tốc (flow FC tắt < 0,2 m, laser/tag có thể không có) thì z EKF trôi tới 187 m. Thử tạm bỏ flow camera khỏi EKF rồi hoàn tác (chưa bù gyro, sẽ làm sau). |
 | **1.7** | 2026-09-18 | **MINOR — `ODOMETRY` z và vz `1e6` khi laser không được dùng trong 300 ms** (11.2). Cầm tay nghiêng > 25°: FC bỏ laser, vz trôi tới −0,9 m/s mà σ báo ~0,06 → EKF Pi tin theo, z lao xuống −1,9 m, GCS vẽ drone chìm dưới sàn. `FC_CTR_VER = 10700`. Cùng đợt, sửa nội bộ FC: neo lại độ cao (1.6) nay đặt **cả v = 0 với phương sai 1 (m/s)², nới phương sai bias** — bản 1.6 giữ v cũ nên v kẹt ở −10 m/s ngay khi nằm yên sau một lần nghiêng mạnh (đo 09-18, mô phỏng xác nhận). Pi: `fc_velocity_node` chỉ chuyển vz khi `/range/vertical` hợp lệ liên tục ≥ 0,6 s (FC neo lại sau 0,5 s); `gcs_link_node` đổi dấu pitch trong `ATTITUDE` (FLU → FRD). |
 | **1.6** | 2026-09-18 | **MINOR — `DISTANCE_SENSOR.current_distance = 0` khi laser không hợp lệ** (11.2): MAVROS bỏ `signal_quality` nên bản ≤ 1.5 để Pi thấy độ cao đóng băng như hợp lệ. `FC_CTR_VER = 10600`. Cùng đợt, sửa nội bộ FC (không đổi dây): khôi phục lời gọi `ekf_velocity_update_flow` trong `estimator.c` — **mất từ commit `1e09cb4` (09-10)**, từ đó vận tốc ngang FC không bao giờ hợp lệ (`ODOMETRY` vx/vy covariance `1e6`) và POSHOLD/OFFBOARD luôn lùi về ANGLE; `range_valid` hết hạn theo luồng khoảng cách riêng; `ekf_altitude`: cổng phần dư 5σ, trễ 3° cho ngưỡng nghiêng 25°, neo lại độ cao (không đụng tốc độ lên) khi laser quay lại sau ≥ 0,5 s; bỏ laser < 0,10 m (bị che — tay che đọc 0,05–0,10 m, nằm đất 0,145–0,23 m). Pi: `range_vertical_node` → `/range/vertical` (bù nghiêng) cho `optical_flow_node`, `position_controller_node`, `mission_manager_node`; sim phát `/range/vertical` và `FC_CTR_VER = 10600`. |
