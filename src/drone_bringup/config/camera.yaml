@@ -1,4 +1,4 @@
-# v4l2_camera doc THANG /dev/video0 cua bcm2835-unicam.
+# v4l2_camera doc THANG /dev/video0 cua bcm2835-unicam (Pi 4) / rp1-cfe-csi2_ch0 (Pi 5).
 #
 # KHONG dung camera_ros/libcamera tren may nay: docs/CAMERA.md muc 9 ghi nhan hai loi
 # khong sua duoc tu phia ung dung tren Ubuntu 24.04 + libcamera 0.2.0

@@ -92,6 +92,19 @@ fi
 ACTUAL="$(v4l2-ctl -d "$SUBDEV" --get-subdev-fmt 0 2>/dev/null | sed -n 's/.*Mediabus Code *: \(.*\)/\1/p')"
 echo "    -> $(v4l2-ctl -d "$SUBDEV" --get-subdev-fmt 0 2>/dev/null | sed -n 's/.*Width\/Height *: \(.*\)/\1/p') ${ACTUAL}"
 
+# Pi 5 (rp1-cfe): giữa sensor và /dev/video0 còn subdev "csi2", link csi2:4 -> csi2_ch0 mặc định TẮT
+# và pad của csi2 giữ định dạng cũ. Thiếu bước này STREAMON trả EPIPE (Broken pipe), dmesg
+# "Failed to start media pipeline: -32". field/colorspace phải ghi rõ, không thì vẫn EPIPE (thử 09-26).
+if media-ctl -d "$MEDIA_DEV" -p 2>/dev/null | grep -qE '^driver[[:space:]]+rp1-cfe'; then
+  CSI_FMT="fmt:${MBUS}/${WIDTH}x${HEIGHT} field:none colorspace:raw"
+  if ! media-ctl -d "$MEDIA_DEV" -l '"csi2":4 -> "rp1-cfe-csi2_ch0":0 [1]' 2>&1 \
+     || ! media-ctl -d "$MEDIA_DEV" -V "\"csi2\":0 [${CSI_FMT}], \"csi2\":4 [${CSI_FMT}]" 2>&1; then
+    echo "[!] Nối link / đặt định dạng csi2 (rp1-cfe) thất bại."
+    exit 1
+  fi
+  echo "    -> rp1-cfe: csi2 -> csi2_ch0 ${MBUS}/${WIDTH}x${HEIGHT}"
+fi
+
 # ---------------------------------------------------------------------------
 # 2) vertical_blanking (quyết định FPS) rồi mới tới exposure / gain
 #
