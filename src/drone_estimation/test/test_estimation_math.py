@@ -6,7 +6,7 @@ import pytest
 
 from drone_estimation.estimation_math import (HealthMonitor, MarkerResetPolicy,
                                               drone_position_from_tag, fc_velocity_validity,
-                                              parse_known_tags, rotate, tilt_cos_from_quaternion,
+                                              rotate, tilt_cos_from_quaternion,
                                               vertical_range, zupt_active)
 
 
@@ -96,13 +96,6 @@ def test_zupt_chi_khi_chua_arm_va_trang_thai_con_moi():
     assert not zupt_active(3.0, True, False, 2.5)       # trang thai qua han
     assert not zupt_active(0.5, False, False, 2.5)      # mat ket noi FC
     assert not zupt_active(None, True, False, 2.5)      # chua nhan /mavros/state lan nao
-
-
-def test_parse_known_tags():
-    assert parse_known_tags([0.0, 0.0, 0.0, 0.0, 1.0, 10.0, 0.0, 0.0]) == \
-        {0: (0.0, 0.0, 0.0), 1: (10.0, 0.0, 0.0)}
-    with pytest.raises(ValueError):
-        parse_known_tags([0.0, 1.0])
 
 
 def test_health_im_lang_va_nan():

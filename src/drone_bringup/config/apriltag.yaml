@@ -21,6 +21,9 @@
       debug: false
     pose_estimation_method: "pnp"
     tag:
-      ids: [0, 1,2,3,4,5,6,7,8,9]
-      frames: [home, a, b,c,d,e,f,g,h,i]
-      sizes: [0.122,0.122,0.122,0.122,0.122,0.122,0.122,0.122,0.122,0.122]   # pad_a chua do - gia dinh cung ban in voi pad_home
+      # 0-9: tag to cua bai. 10-19: tag nho cua bai (id + 10, khung <ten>_s) - Pi tu suy vi tri tu
+      # tag to (tags.yaml pad_small_tag_*), giao uoc GCS 0.8 muc 8.7. Size tag nho tam 0,10 m -
+      # DO LAI bang thuoc sau khi in (M1).
+      ids: [0, 1,2,3,4,5,6,7,8,9, 10,11,12,13,14,15,16,17,18,19]
+      frames: [home, a, b,c,d,e,f,g,h,i, home_s,a_s,b_s,c_s,d_s,e_s,f_s,g_s,h_s,i_s]
+      sizes: [0.122,0.122,0.122,0.122,0.122,0.122,0.122,0.122,0.122,0.122, 0.10,0.10,0.10,0.10,0.10,0.10,0.10,0.10,0.10,0.10]   # pad_a chua do - gia dinh cung ban in voi pad_home

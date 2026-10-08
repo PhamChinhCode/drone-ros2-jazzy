@@ -9,8 +9,18 @@
     known_tags: [0.0, 0.000, 0.000, 0.000,
                  1.0, 10.000, 0.000, 0.000,
                  2.0, -0.002, 0.000, 0.055]
-    # Ten khung TF tung tag, cung thu tu known_tags
-    tag_frames: [pad_home, pad_a, pad_b]
+    # Ten khung TF tung tag, cung thu tu known_tags - PHAI khop tag.frames cua apriltag.yaml
+    # (09-17 apriltag.yaml doi sang home/a/b nhung file nay con pad_home/... -> marker_pose khong
+    # bao gio tra duoc TF, EKF khong neo theo tag; sua 10-08, test_pad_map kiem hai file khop).
+    tag_frames: [home, a, b]
+    # Huong "tren" cua tag [id, do, ...]: do tu truc N ban do, CHIEU KIM DONG HO (giao uoc GCS 8.6,
+    # ban 0.8). Chi khai tag DA BIET huong; tag co huong moi co tag nho. Vi du: [0.0, 90.0, 1.0, 0.0]
+    known_tags_heading: []
+    # Mau tag nho chung cho moi bai (docs/ke_hoach_huong_bay_hai_tag.md muc 1): id = id_to + 10,
+    # canh 10 cm, tam cach tam tag to 0,22 m ve phia "tren". So tam - chot sau khi do M1-M3.
+    pad_small_tag_id_offset: 10
+    pad_small_tag_size_m: 0.10
+    pad_small_tag_forward_m: 0.22
     # Goc WGS84 cua ban do (diem x = y = z = 0) va phuong vi truc N ban do do tu Bac THAT (chieu
     # kim dong ho). GCS gui kem ban do tag (giao uoc GCS 8.7); do tai cho bang `gps_survey`.
     # false = CHUA CO GOC: GPS khong vao EKF, GCS khong nhan lat/lon (GLOBAL_POS_VALID = 0).

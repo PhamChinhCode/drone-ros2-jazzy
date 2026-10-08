@@ -5,9 +5,10 @@ waypoint suy tu tags.yaml tren Pi, con GCS dat tag bang trang thiet ke khu vuc. 
 drone bay cho khac cho GCS ve, va phep kiem vung cam cua GCS sai ma khong ai biet.
 ERR_UNKNOWN_TAG chi bat THIEU tag, khong bat SAI VI TRI.
 
-Khong dua yaw / size / kind vao CRC, va day la ly do:
-  - tags.yaml khong khai yaw, va yaw tuyet doi cua FC hien vo nghia vi tu ke chua hieu chuan
-    (giao uoc FC 10.6a) - dua vao CRC la dua vao mot so khong ai tin;
+Huong tag (yaw) vao CRC tu ban 0.8 - truoc do khong, vi tags.yaml khong khai yaw va yaw tuyet
+doi cua FC vo nghia (giao uoc FC 10.6a). Tu 0.8 huong tag la DU LIEU BAY: Pi doc yaw drone tu
+chinh tag va ha canh theo huong bai, nen hai ben lech huong la lech that, CRC phai bat.
+Khong dua size / kind vao CRC, va day la ly do:
   - size nam o apriltag.yaml, va size cua pad_a dang GIA DINH 0,122 m chua do bang thuoc
     (no nhat ky 6.2 #5) - dua mot phong doan vao CRC la khoa cung no mai mai;
   - kind (home/pickup/dropoff) la khai niem lap ke hoach cua GCS, khong phai du lieu Pi.
@@ -15,6 +16,7 @@ Them size_mm la viec MINOR sau khi do pad_a.
 
 Goc WGS84 cua ban do (giao uoc 0.7, muc 8.6/8.7): co goc thi noi THEM mot ban ghi sau cac tag;
 khong co goc thi chuoi y het ban 0.6 - ban do cu giu nguyen CRC, khong ben nao phai doi gi.
+Huong tag (0.8) cung vay: chi tag CO huong moi noi them ban ghi, sau ban ghi goc.
 """
 
 import struct
@@ -24,6 +26,25 @@ BAN_GHI = '<Hiii'          # uint16 tag_id, int32 n_mm, int32 e_mm, int32 d_mm =
 CO_BAN_GHI = struct.calcsize(BAN_GHI)
 # int32 lat_e7, int32 lon_e7, int32 alt_mm, int16 north_yaw_cdeg = 14 byte, sau moi ban ghi tag.
 BAN_GHI_GOC = '<iiih'
+# uint16 tag_id, int16 yaw_cdeg = 4 byte, cho MOI tag co huong, sau ban ghi goc (ban 0.8).
+BAN_GHI_HUONG = '<Hh'
+# Dai ID danh cho tag nho cua bai: Pi tu suy tu tag to (id + 10), GCS khong gui (giao uoc 8.7).
+TAG_NHO_IDS = range(10, 20)
+
+
+def huong_cdeg(do):
+    """Huong (do, tu truc N ban do, chieu kim dong ho) -> cdeg dang CHUAN TAC -18000..17999.
+
+    180 do phai ra -18000, khong ra 18000: hai ben gui cung mot dang thi CRC moi khop (muc 8.6).
+    """
+    return (round(do * 100) + 18000) % 36000 - 18000
+
+
+def doc_huong(flat):
+    """[id, do, id, do, ...] (known_tags_heading cua tags.yaml) -> {id: do}."""
+    if len(flat) % 2:
+        raise ValueError(f'known_tags_heading phai co so phan tu chan, dang co {len(flat)}')
+    return {int(flat[i]): float(flat[i + 1]) for i in range(0, len(flat), 2)}
 
 
 def goc_nguyen(goc):
@@ -46,11 +67,13 @@ def doc_known_tags(flat):
             for i in range(0, len(flat), 4)}
 
 
-def tagmap_crc(tags, goc=None):
+def tagmap_crc(tags, goc=None, huong=None):
     """tags: {id: (x, y, z)} theo ENU met -> CRC-32 IEEE (giao uoc muc 8.6).
 
     goc: (lat_deg, lon_deg, alt_m, north_yaw_deg) hoac None. Co goc thi noi them ban ghi
     BAN_GHI_GOC sau cac tag (0.7); None thi CRC y het 0.6.
+    huong: {id: do} cho tag CO huong (0.8) - moi tag mot ban ghi BAN_GHI_HUONG sau ban ghi goc,
+    sap theo id; None / rong thi CRC nhu 0.7.
 
     Ban ghi little-endian (tag_id, n_mm, e_mm, d_mm), sap theo tag_id TANG DAN.
     Doi ENU -> NED: n = y, e = x, d = -z. Dung he NED cho khop LOCAL_POSITION_NED o muc 5.1 -
@@ -65,6 +88,8 @@ def tagmap_crc(tags, goc=None):
         buf += struct.pack(BAN_GHI, tag_id, round(y * 1000), round(x * 1000), round(-z * 1000))
     if goc is not None:
         buf += struct.pack(BAN_GHI_GOC, *goc_nguyen(goc))
+    for tag_id in sorted(huong or {}):
+        buf += struct.pack(BAN_GHI_HUONG, tag_id, huong_cdeg(huong[tag_id]))
     return zlib.crc32(buf)
 
 
@@ -83,7 +108,7 @@ def doc_apriltag_declared(duong):
     return {int(i): ten for i, ten in zip(tag.get('ids', []), tag.get('frames', []))}
 
 
-def ghi_tags_override(duong, tags, khung_theo_id, goc=None):
+def ghi_tags_override(duong, tags, khung_theo_id, goc=None, huong=None):
     """{tag_id: (x, y, z) ENU mét} + {tag_id: frame_name} -> ghi file tham số ROS kiểu tags.yaml.
 
     Ghi ra NGOÀI cây build (giao ước 11.6, Pi trả lời câu 1): launch đọc bản chép trong install/,
@@ -92,6 +117,8 @@ def ghi_tags_override(duong, tags, khung_theo_id, goc=None):
 
     goc: (lat_deg, lon_deg, alt_m, north_yaw_deg) hoặc None — None thì ghi geo_origin_valid: false
     để bản đồ nạp qua dây KHÔNG kế thừa gốc của tags.yaml gốc (gốc thuộc về đúng bản đồ đi kèm).
+    huong: {tag_id: độ} của tag có hướng (0.8) — ghi known_tags_heading, rỗng nếu không có, để
+    cũng không kế thừa hướng của tags.yaml gốc.
     """
     import os
     ids = sorted(tags)
@@ -104,6 +131,9 @@ def ghi_tags_override(duong, tags, khung_theo_id, goc=None):
                          for tid in ids)
         f.write(f'    known_tags: [{nums}]\n')
         f.write('    tag_frames: [' + ', '.join(khung_theo_id[tid] for tid in ids) + ']\n')
+        # 2 chu so thap phan = dung do phan giai cdeg tren day.
+        f.write('    known_tags_heading: [' + ', '.join(
+            f'{tid:.1f}, {huong[tid]:.2f}' for tid in sorted(huong or {})) + ']\n')
         if goc is None:
             f.write('    geo_origin_valid: false\n')
         else:

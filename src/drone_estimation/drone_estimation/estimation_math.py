@@ -68,13 +68,6 @@ def vertical_range(range_m, min_range, max_range, tilt_cos, blocked, max_tilt_de
     return range_m * tilt_cos, blocked
 
 
-def parse_known_tags(flat):
-    """[id, x, y, z, id, x, y, z, ...] -> {id: (x, y, z)}. Sai do dai thi ValueError."""
-    if len(flat) % 4:
-        raise ValueError(f'known_tags phai co boi so cua 4 phan tu, dang co {len(flat)}')
-    return {int(flat[i]): tuple(flat[i + 1:i + 4]) for i in range(0, len(flat), 4)}
-
-
 class HealthMonitor:
     """Co healthy cua EKF: im lang, phuong sai vi tri vuot nguong lien tuc, hoac nan/inf."""
 

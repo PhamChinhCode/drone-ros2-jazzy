@@ -23,13 +23,16 @@ import threading
 import rclpy
 from apriltag_msgs.msg import AprilTagDetectionArray
 from geometry_msgs.msg import PoseWithCovarianceStamped
+from rclpy.exceptions import ParameterUninitializedException
 from rclpy.experimental import EventsExecutor
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from rclpy.signals import SignalHandlerOptions
 from rclpy.time import Time
 from tf2_ros import Buffer, TransformException, TransformListener
 
-from drone_estimation.estimation_math import drone_position_from_tag, parse_known_tags
+from drone_estimation.estimation_math import drone_position_from_tag
+from drone_estimation.pad_map import build_pad_map, parse_headings
 from drone_estimation.qos import SENSOR_QOS
 
 # TF tag cu hon muc nay (so voi dong ho node) thi bo - pose da troi, EKF khong nen nhan.
@@ -49,14 +52,25 @@ class MarkerPoseRepublisherNode(Node):
         self.declare_parameter('known_tags', [0.0])
         # Ten khung TF tung tag, CUNG THU TU voi known_tags - khop tag.frames trong apriltag.yaml.
         self.declare_parameter('tag_frames', [''])
+        # Huong tag + mau tag nho (giao uoc GCS 0.8): tag nho cung la diem neo vi tri, nho no ma
+        # xuong thap (tag to ra khoi khung hinh) EKF van duoc sua vi tri.
+        self.declare_parameter('known_tags_heading', Parameter.Type.DOUBLE_ARRAY)
+        self.declare_parameter('pad_small_tag_id_offset', 10)
+        self.declare_parameter('pad_small_tag_forward_m', 0.22)
         self.declare_parameter('base_frame', 'base_link')
 
-        self.known_tags = parse_known_tags(self.get_parameter('known_tags').value)
-        frames = self.get_parameter('tag_frames').value
-        if len(frames) != len(self.known_tags):
-            raise ValueError(
-                f'tag_frames co {len(frames)} ten, known_tags co {len(self.known_tags)} tag')
-        self.tag_frames = dict(zip(self.known_tags.keys(), frames))
+        try:
+            headings = parse_headings(self.get_parameter('known_tags_heading').value)
+        except ParameterUninitializedException:
+            headings = {}
+        pads = build_pad_map(
+            self.get_parameter('known_tags').value, self.get_parameter('tag_frames').value,
+            headings, self.get_parameter('pad_small_tag_id_offset').value,
+            self.get_parameter('pad_small_tag_forward_m').value)
+        self.known_tags = {i: t.pos for i, t in pads.items()}
+        self.tag_frames = {i: t.frame for i, t in pads.items()}
+        self.get_logger().info(f'ban do: {len(pads)} tag ({sum(t.small for t in pads.values())} '
+                               f'tag nho tu suy), khung {sorted(self.tag_frames.values())}')
         self.warned = set()
         self.last_tag_stamp = {}         # tag id -> stamp TF da dung, tranh phat trung
 

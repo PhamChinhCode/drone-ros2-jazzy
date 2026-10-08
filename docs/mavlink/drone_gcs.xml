@@ -85,6 +85,15 @@
       </entry>
       <entry value="9" name="DRONE_STATE_MISSION_COMPLETE"/>
       <entry value="10" name="DRONE_STATE_FAILSAFE"/>
+      <entry value="11" name="DRONE_STATE_ALIGN_HEADING">
+        <description>Ban 0.8. Dang treo tren tag (da neo), quay mui ve phuong vi toi diem ke tiep truoc khi bay.</description>
+      </entry>
+      <entry value="12" name="DRONE_STATE_PAD_ALIGN">
+        <description>Ban 0.8. Da can tam tren tag to cua bai, quay mui theo huong bai (yaw_cdeg cua tag) de tag nho vao khung hinh khi ha thap.</description>
+      </entry>
+      <entry value="13" name="DRONE_STATE_FINAL_APPROACH">
+        <description>Ban 0.8. Ha doan cuoi theo tag nho cua bai (tag to da ra khoi khung hinh), ha mu doan sat dat.</description>
+      </entry>
     </enum>
 
     <!-- Muc 8.5b. Ly do chuyen bay GAN NHAT ket thuc. Trung drone_interfaces/msg/MissionState.RESULT_*.
@@ -138,6 +147,8 @@
       <entry value="4" name="DRONE_TAGMAP_ERR_BUSY"><description>Pi khong o IDLE. Doi ban do giua chuyen bay la nguy hiem.</description></entry>
       <entry value="5" name="DRONE_TAGMAP_ERR_UNSUPPORTED"><description>Pi chua hien thuc tinh nang nay.</description></entry>
       <entry value="6" name="DRONE_TAGMAP_ERR_UNDECLARED_TAG"><description>Co tag_id khong nam trong tag.ids cua apriltag.yaml - Pi tu choi CA luot, reason ghi id dau tien bi thieu. Nap qua day chi doi duoc toa do tag DA KHAI, khong them tag moi (muc 11.6, Pi tra loi cau 2).</description></entry>
+      <entry value="7" name="DRONE_TAGMAP_ERR_RESERVED_TAG"><description>Ban 0.8. Co tag_id thuoc dai danh cho tag nho (10-19) - Pi tu suy tag nho tu tag to, GCS khong gui. Pi tu choi CA luot (muc 8.7).</description></entry>
+      <entry value="8" name="DRONE_TAGMAP_ERR_YAW"><description>Ban 0.8. yaw_valid = 1 nhung yaw_cdeg ngoai -18000..17999 (dang chuan tac, muc 8.6). Pi tu choi CA luot.</description></entry>
     </enum>
   </enums>
 
@@ -207,6 +218,9 @@
       <field type="int32_t" name="d_mm" units="mm">Toa do D, NED milimet.</field>
       <field type="uint8_t" name="seq">Thu tu tag, tu 0, lien tuc.</field>
       <field type="uint16_t" name="tag_id">Phai co trong tag.ids cua apriltag.yaml, khong thi ACK ERR_UNDECLARED_TAG cho CA luot. Nap qua day CHI doi duoc toa do tag DA KHAI, khong them duoc tag moi.</field>
+      <extensions/>
+      <field type="uint8_t" name="yaw_valid">Ban 0.8. 1 = yaw_cdeg co nghia. 0 = tag khong khai huong, hoac GCS cu (&lt; 0.8) - KHONG doc yaw_cdeg (R3b: yaw 0 la huong that).</field>
+      <field type="int16_t" name="yaw_cdeg" units="cdeg">Ban 0.8. Huong "TREN" cua tag: tu tam tag toi mep tren cua anh tag chuan dat dung chieu, do tu truc N cua ban do, CHIEU KIM DONG HO, dang chuan tac -18000..17999. Bai co tag nho thi tag nho nam ve phia nay (muc 8.7).</field>
     </message>
 
     <message id="42008" name="DRONE_TAGMAP_ACK">
@@ -221,7 +235,7 @@
       <description>Trang thai tong hop, 2 Hz CO DINH ke ca khi khong nguon nao cap nhat - nguon thieu thi ha co hieu luc tuong ung (quy tac R5).</description>
       <field type="uint64_t" name="stamp_us" units="us">Dong ho he thong Pi, co the lech neu chua dong bo NTP. Chi de log va sap thu tu; xet do tuoi thi dung thoi diem GCS NHAN.</field>
       <field type="uint32_t" name="mission_id">Ke hoach dang chay. 0 = chua nap.</field>
-      <field type="uint32_t" name="contract_ver">MAJOR*10000 + MINOR*100. Ban 0.4 = 400. Lech MAJOR -> muc 6.2.</field>
+      <field type="uint32_t" name="contract_ver">MAJOR*10000 + MINOR*100. Ban 0.8 = 800. Lech MAJOR -> muc 6.2.</field>
       <field type="int32_t" name="lat" units="degE7">Vi do cua vi tri HOP NHAT (EKF), quy tu khung ban do tag theo goc WGS84 cua ban do. Hieu luc theo GLOBAL_POS_VALID.</field>
       <field type="int32_t" name="lon" units="degE7">Kinh do cua vi tri HOP NHAT (EKF). Hieu luc theo GLOBAL_POS_VALID.</field>
       <field type="int32_t" name="marker_id_tracking">Tag dang BAM. MARKER_VALID = 0 thi BO QUA truong, dung doc -1.</field>

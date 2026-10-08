@@ -15,6 +15,7 @@ import rclpy
 from mavros_msgs.msg import GPSRAW, DebugValue, State
 from nav_msgs.msg import Odometry
 from rclpy.experimental import EventsExecutor
+from rclpy.exceptions import ParameterUninitializedException
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.signals import SignalHandlerOptions
@@ -23,7 +24,7 @@ from sensor_msgs.msg import BatteryState
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 
 from drone_comms.qos import EVENT_QOS, SENSOR_QOS
-from drone_comms.tagmap import doc_goc, doc_known_tags, tagmap_crc
+from drone_comms.tagmap import doc_goc, doc_huong, doc_known_tags, tagmap_crc
 from drone_estimation.geo import map_to_lla, origin_from_params
 from drone_interfaces.msg import (EkfHealth, FailsafeEvent, GripperStatus, MarkerQuality,
                                   MissionState, TelemetryPacket)
@@ -44,8 +45,10 @@ class TelemetryAggregatorNode(Node):
         self.declare_parameter('publish_rate_hz', 2.0)
         # Qua han thi HA CO, khong giu gia tri cu: mot so cu 5 giay la mot loi noi doi (R3).
         self.declare_parameter('stale_s', 2.0)
-        self.declare_parameter('contract_ver', 700)     # ban 0.7 = 0*10000 + 7*100
+        self.declare_parameter('contract_ver', 800)     # ban 0.8 = 0*10000 + 8*100
         self.declare_parameter('known_tags', Parameter.Type.DOUBLE_ARRAY)
+        # Huong tag [id, do, ...] (ban 0.8). Rong / khong khai -> khong tag nao co huong.
+        self.declare_parameter('known_tags_heading', Parameter.Type.DOUBLE_ARRAY)
         # Goc WGS84 cua ban do (tags.yaml / tags_override.yaml) - vao CRC va de quy lat/lon.
         self.declare_parameter('geo_origin_valid', False)
         self.declare_parameter('geo_origin_lat', 0.0)
@@ -60,9 +63,14 @@ class TelemetryAggregatorNode(Node):
                       g('geo_origin_lon').value, g('geo_origin_alt').value,
                       g('geo_north_yaw_deg').value)
         try:
-            self.tagmap_crc = tagmap_crc(doc_known_tags(g('known_tags').value), goc)
+            try:
+                huong = doc_huong(g('known_tags_heading').value)
+            except ParameterUninitializedException:
+                huong = {}
+            self.tagmap_crc = tagmap_crc(doc_known_tags(g('known_tags').value), goc, huong)
             self.get_logger().info(f'tagmap_crc = 0x{self.tagmap_crc:08X}'
-                                   f'{" (co goc WGS84)" if goc else " (khong co goc WGS84)"}')
+                                   f'{" (co goc WGS84)" if goc else " (khong co goc WGS84)"}'
+                                   f', {len(huong)} tag co huong')
         except Exception as e:
             self.tagmap_crc = 0
             self.get_logger().error(f'khong tinh duoc tagmap_crc ({e}) - GCS se khoa nap ke hoach')

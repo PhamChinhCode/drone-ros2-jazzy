@@ -33,7 +33,8 @@ from std_msgs.msg import Bool
 from std_srvs.srv import Trigger
 
 from drone_comms.qos import EVENT_QOS, SENSOR_QOS
-from drone_comms.tagmap import doc_apriltag_declared, ghi_tags_override, tagmap_crc, to_ascii
+from drone_comms.tagmap import (TAG_NHO_IDS, doc_apriltag_declared, ghi_tags_override,
+                                tagmap_crc, to_ascii)
 from drone_interfaces.msg import (MissionPlan, MissionPlanAck, MissionWaypoint,
                                   TelemetryPacket)
 from drone_interfaces.srv import EmergencyDisarm
@@ -514,10 +515,24 @@ class GcsLinkNode(Node):
         """
         n = self.ban_do
         tags = {}
+        huong = {}
         for seq in sorted(n['tag']):
             it = n['tag'][seq]
             # NED mm tren day -> ENU m dung dinh dang tags.yaml: x = e, y = n, z = -d (muc 8.6).
             tags[it.tag_id] = (it.e_mm / 1000.0, it.n_mm / 1000.0, -it.d_mm / 1000.0)
+            # Huong (ext 0.8). GCS cu khong gui -> yaw_valid doc ra 0 -> tag khong co huong.
+            if getattr(it, 'yaw_valid', 0):
+                if not -18000 <= it.yaw_cdeg <= 17999:
+                    self.ack_ban_do(n['crc'], self.d.DRONE_TAGMAP_ERR_YAW,
+                                    f'tag {it.tag_id}: yaw_cdeg {it.yaw_cdeg} ngoai -18000..17999')
+                    return
+                huong[it.tag_id] = it.yaw_cdeg / 100.0
+        tag_nho = sorted(tid for tid in tags if tid in TAG_NHO_IDS)
+        if tag_nho:
+            # Tag nho Pi tu suy tu tag to (muc 8.7, 0.8) - GCS gui la hai nguon cho cung mot tag.
+            self.ack_ban_do(n['crc'], self.d.DRONE_TAGMAP_ERR_RESERVED_TAG,
+                            f'tag {tag_nho[0]} thuoc dai 10-19 danh cho tag nho')
+            return
         try:
             khai_bao = doc_apriltag_declared(APRILTAG_YAML)
         except OSError as e:
@@ -531,12 +546,12 @@ class GcsLinkNode(Node):
             self.ack_ban_do(n['crc'], self.d.DRONE_TAGMAP_ERR_UNDECLARED_TAG,
                             f'tag {thieu[0]} khong co trong apriltag.yaml (tag.ids)')
             return
-        tinh_lai = tagmap_crc(tags, n['goc'])
+        tinh_lai = tagmap_crc(tags, n['goc'], huong)
         if tinh_lai != n['crc']:
             self.ack_ban_do(n['crc'], self.d.DRONE_TAGMAP_ERR_CRC,
                             f'CRC tinh lai 0x{tinh_lai:08X} khong khop 0x{n["crc"]:08X} da khai')
             return
-        ghi_tags_override(TAG_OVERRIDE_PATH, tags, khai_bao, n['goc'])
+        ghi_tags_override(TAG_OVERRIDE_PATH, tags, khai_bao, n['goc'], huong)
         # quy tac 3 (muc 8.7): ke hoach cu suy vi tri tu ban do cu - giu lai la giu mot ke hoach
         # co nghia khac voi luc nguoi ta soan no.
         self.xoa_ke_hoach_dang_nap()

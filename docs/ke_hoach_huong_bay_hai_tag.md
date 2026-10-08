@@ -96,9 +96,10 @@ WP0) → **WP4** (EKF yaw) → **WP6** → **WP7** → **WP8** → **WP9**.
 1. `DRONE_TAGMAP_ITEM`: thêm **sau `<extensions/>`** trường `int16_t yaw_cdeg` (hướng "trên" của
    tag trong hệ bản đồ, cdeg, chiều theo quy ước ENU của bản đồ) và `uint8_t yaw_valid`
    (R3b: yaw = 0 là hướng thật, nên cần cờ riêng).
-2. `tagmap_crc`: bản ghi tag thêm `yaw_cdeg` **chỉ khi cả bản đồ có yaw** (giống cách nối bản ghi
-   gốc ở 0.7) → bản đồ cũ giữ nguyên CRC. Cập nhật docstring `tagmap.py` (lý do cũ "yaw vô nghĩa"
-   không còn đúng khi yaw đi từ tag).
+2. `tagmap_crc`: nối bản ghi `(tag_id, yaw_cdeg)` **cho từng tag có hướng**, sau bản ghi gốc →
+   bản đồ không hướng giữ nguyên CRC (đã viết vào giao ước 8.6, vectơ `0xD3A58731`). Cập nhật
+   docstring `tagmap.py` (lý do cũ "yaw vô nghĩa" không còn đúng khi yaw đi từ tag). Thêm mã
+   `ERR_RESERVED_TAG` (dải 10–19) và `ERR_YAW`.
 3. `DRONE_MISSION_STATE`: thêm `ALIGN_HEADING=11`, `PAD_ALIGN=12`, `FINAL_APPROACH=13` (MINOR —
    GCS cũ bỏ qua giá trị lạ theo R1).
 4. Tham số mẫu bãi (Q5) **không** đi qua dây: nằm trong `tags.yaml` của Pi. GCS chỉ cần biết để
@@ -110,9 +111,10 @@ CRC khớp ở cả hai bên.
 
 ### WP2 — Bản đồ tag có hướng trên Pi
 
-- `tags.yaml`: thêm `known_tags_yaw_deg: [...]` song song `known_tags` (giữ định dạng 4 phần tử
-  cũ để không vỡ các bộ đọc khác), và khối mẫu bãi:
-  `pad_small_tag: {id_offset: 10, size: 0.10, forward_m: 0.22}`.
+- `tags.yaml`: thêm `known_tags_heading: [id, độ, ...]` (hướng từ trục N bản đồ, chiều kim đồng
+  hồ — cùng quy ước trên dây; chỉ tag có hướng), giữ nguyên `known_tags` 4 phần tử để không vỡ các
+  bộ đọc khác, và mẫu bãi `pad_small_tag_id_offset: 10`, `pad_small_tag_size_m: 0.10`,
+  `pad_small_tag_forward_m: 0.22`.
 - Hàm thuần mới (pytest): đọc tag + yaw → **suy vị trí/hướng tag nhỏ** = tâm tag to + xoay
   (0,22 m) theo yaw_pad.
 - Sửa các bộ đọc: `estimation_math.parse_known_tags`, `drone_comms.tagmap` (đọc, CRC, ghi

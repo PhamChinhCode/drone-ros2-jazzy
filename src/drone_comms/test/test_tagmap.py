@@ -149,3 +149,65 @@ def test_ghi_tags_override_tao_thu_muc_neu_chua_co(tmp_path):
     duong = tmp_path / 'chua_ton_tai' / 'sau' / 'tags_override.yaml'
     ghi_tags_override(str(duong), {0: (0.0, 0.0, 0.0)}, {0: 'pad_home'})
     assert duong.exists()
+
+
+# --------------------------------------------------- huong tag (ban 0.8, muc 8.6/8.7)
+
+HUONG = {0: 90.0, 1: -45.0}
+
+
+def test_khong_huong_thi_crc_nhu_0_7():
+    """Ban do khong tag nao co huong giu NGUYEN CRC cu - GCS/Pi 0.7 khong bi anh huong."""
+    assert tagmap_crc(doc_known_tags(TAGS_YAML), None, {}) == 0x6BDEA0A6
+    assert tagmap_crc(doc_known_tags(TAGS_YAML), GOC, None) == 0xA35B41F9
+
+
+def test_vecto_kiem_co_huong():
+    """Vecto kiem 0.8 trong giao uoc 8.6 - GCS tinh lai doc lap phai ra dung cac so nay.
+
+    8 byte noi them: 0000 2823 0100 6cee (tag 0: 9000 cdeg, tag 1: -4500 cdeg).
+    """
+    tags = doc_known_tags(TAGS_YAML)
+    assert tagmap_crc(tags, None, HUONG) == 0xD3A58731
+    assert tagmap_crc(tags, None, {0: 90.0}) == 0xAADD4B3C
+    assert tagmap_crc(tags, GOC, HUONG) == 0x6D6CED89      # goc truoc, huong sau
+
+
+def test_huong_dang_chuan_tac():
+    """180 do va -180 do la mot huong: phai cung ra -18000, khong thi CRC hai ben lech."""
+    from drone_comms.tagmap import huong_cdeg
+    assert huong_cdeg(180.0) == -18000
+    assert huong_cdeg(-180.0) == -18000
+    assert huong_cdeg(359.99) == -1
+    assert huong_cdeg(-90.0) == -9000
+    assert huong_cdeg(179.99) == 17999
+    tags = doc_known_tags(TAGS_YAML)
+    assert tagmap_crc(tags, None, {0: 180.0}) == tagmap_crc(tags, None, {0: -180.0})
+
+
+def test_doi_huong_mot_cdeg_thi_crc_doi():
+    tags = doc_known_tags(TAGS_YAML)
+    assert tagmap_crc(tags, None, {0: 90.0}) != tagmap_crc(tags, None, {0: 90.01})
+
+
+def test_doc_huong():
+    from drone_comms.tagmap import doc_huong
+    assert doc_huong([0.0, 90.0, 1.0, -45.0]) == HUONG
+    assert doc_huong([]) == {}
+    with pytest.raises(ValueError):
+        doc_huong([0.0, 90.0, 1.0])
+
+
+def test_ghi_override_co_huong_doc_lai_ra_dung_crc(tmp_path):
+    import yaml
+    from drone_comms.tagmap import doc_huong, ghi_tags_override
+    duong = tmp_path / 'tags_override.yaml'
+    tags = doc_known_tags(TAGS_YAML)
+    ghi_tags_override(str(duong), tags, {0: 'home', 1: 'a'}, None, HUONG)
+    p = yaml.safe_load(duong.read_text())['/**']['ros__parameters']
+    assert tagmap_crc(doc_known_tags(p['known_tags']), None,
+                      doc_huong(p['known_tags_heading'])) == 0xD3A58731
+    ghi_tags_override(str(duong), tags, {0: 'home', 1: 'a'})
+    p = yaml.safe_load(duong.read_text())['/**']['ros__parameters']
+    assert p['known_tags_heading'] == []
+
