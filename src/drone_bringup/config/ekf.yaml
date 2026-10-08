@@ -88,3 +88,16 @@ ekf_filter_node:
     # ekf_health_node ep /set_pose ve GPS (gps_reset_*).
     pose1_rejection_threshold: 5.0
     pose1_queue_size: 5
+    # Do cao laser ToF (range_vertical_node, bu nghieng) quy thanh z ban do - CHI z. Truoc 10-08 EKF
+    # khong co z tuyet doi giua hai bai (chi vz FC + IMU, troi dan). Gia dinh mat dat phang z = 0
+    # (range_vertical_node ground_z_m). Bay qua vat cao laser bao thap: 4 sigma chan buoc nhay dot
+    # ngot. Lech chuan 3 cm < marker (10 cm) nen gan mat dat laser quyet dinh z.
+    pose2: /range/pose_z
+    pose2_config: [false, false, true,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false]
+    pose2_differential: false
+    pose2_rejection_threshold: 4.0
+    pose2_queue_size: 5

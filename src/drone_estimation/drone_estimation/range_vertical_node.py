@@ -5,6 +5,12 @@ nguon do cao laser DUY NHAT cho cac node Pi (optical flow, dieu khien, nhiem vu)
 
 Khong hop le (FC bao mat laser - hop dong 1.6 gui 0 -, nghieng qua nguong, hoac IMU qua han) ->
 range = NaN: moi node dung kiem min_range <= range <= max_range nen tu loai, khong phai sua them.
+
+/range/pose_z (2026-10-08): cung do cao do, quy thanh z trong khung ban do cho EKF (pose2, CHI z).
+Truoc do EKF khong co nguon z tuyet doi nao giua hai bai: chi vz cua FC + IMU nen z troi dan.
+Gia dinh MAT DAT PHANG tai z = ground_z_m (ban do tag dat tren nen phang, tag ~ z 0). Bay qua vat
+cao (ban, thung, bac) thi laser bao thap hon that - pose2_rejection_threshold chan buoc nhay dot
+ngot, nhung doan dai tren vat cao van keo z xuong. Vi tri lap laser chua do: coi nhu o tam than.
 """
 
 from concurrent.futures import ThreadPoolExecutor
@@ -16,6 +22,7 @@ import rclpy
 from rclpy.experimental import EventsExecutor
 from rclpy.node import Node
 from rclpy.signals import SignalHandlerOptions
+from geometry_msgs.msg import PoseWithCovarianceStamped
 from sensor_msgs.msg import Imu, Range
 
 from drone_estimation.estimation_math import tilt_cos_from_quaternion, vertical_range
@@ -30,6 +37,11 @@ class RangeVerticalNode(Node):
         self.declare_parameter('max_tilt_deg', 25.0)
         self.declare_parameter('tilt_hyst_deg', 3.0)
         self.declare_parameter('imu_timeout_s', 0.2)
+        # z ban do = ground_z_m + do cao laser. Lech chuan: luong tu 1 cm + sai so do ~1 cm + mat
+        # dat khong phang hoan toan -> 3 cm (EKF tin hon z marker, phuong sai 0,01 m^2).
+        self.declare_parameter('ground_z_m', 0.0)
+        self.declare_parameter('z_stdev_m', 0.03)
+        self.declare_parameter('map_frame', 'odom')
 
         self.tilt_cos = None
         self.imu_stamp_s = None
@@ -38,6 +50,7 @@ class RangeVerticalNode(Node):
         self.create_subscription(Imu, '/mavros/imu/data', self.on_imu, SENSOR_QOS)
         self.create_subscription(Range, '/mavros/mtf01p', self.on_range, SENSOR_QOS)
         self.pub = self.create_publisher(Range, '/range/vertical', SENSOR_QOS)
+        self.pub_z = self.create_publisher(PoseWithCovarianceStamped, '/range/pose_z', SENSOR_QOS)
 
     def now_s(self):
         return self.get_clock().now().nanoseconds / 1e9
@@ -67,7 +80,22 @@ class RangeVerticalNode(Node):
                 out.range = h
                 out.min_range = msg.min_range * self.tilt_cos
                 out.max_range = msg.max_range * self.tilt_cos
+                self.publish_pose_z(msg.header.stamp, h)
         self.pub.publish(out)
+
+    def publish_pose_z(self, stamp, h):
+        """Chi z co nghia; x, y, huong de phuong sai rat lon (ekf.yaml pose2_config chi bat z)."""
+        p = PoseWithCovarianceStamped()
+        p.header.stamp = stamp
+        p.header.frame_id = self.get_parameter('map_frame').value
+        p.pose.pose.position.z = self.get_parameter('ground_z_m').value + h
+        p.pose.pose.orientation.w = 1.0
+        cov = [0.0] * 36
+        for i in (0, 7, 21, 28, 35):
+            cov[i] = 1e6
+        cov[14] = self.get_parameter('z_stdev_m').value ** 2
+        p.pose.covariance = cov
+        self.pub_z.publish(p)
 
 
 def main(args=None):
