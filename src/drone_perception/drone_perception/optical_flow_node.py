@@ -7,11 +7,16 @@ Ba nguyen tac bat buoc (muc 1.4 tai lieu huong dan):
   3. phat hien lai dac trung dinh ky de khong bam mai diem da troi khoi khung hinh.
 """
 
+from concurrent.futures import ThreadPoolExecutor
+import signal
+import threading
+
 import rclpy
 from cv_bridge import CvBridge
 from geometry_msgs.msg import TwistWithCovarianceStamped
 from rclpy.experimental import EventsExecutor
 from rclpy.node import Node
+from rclpy.signals import SignalHandlerOptions
 from rclpy.time import Time
 from sensor_msgs.msg import CameraInfo, Image, Range
 
@@ -121,16 +126,28 @@ class OpticalFlowNode(Node):
 
 
 def main(args=None):
-    rclpy.init(args=args)
+    rclpy.init(args=args, signal_handler_options=SignalHandlerOptions.NO)
     node = OpticalFlowNode()
     # EventsExecutor: tren Pi 4 executor mac dinh cua rclpy ton phan lon CPU de dung lai wait-set
     # moi lan thuc day (do 09-14: mission_manager_node 45-50 % -> 13,5 %).
     executor = EventsExecutor()
     executor.add_node(node)
-    try:
-        executor.spin()
-    except KeyboardInterrupt:
+    # Tu bat SIGINT/SIGTERM (init voi SignalHandlerOptions.NO): handler mac dinh cua rclpy tat
+    # context ngay trong luc EventsExecutor con chay callback -> publish vao context da chet,
+    # spin() nem loi, node thoat code 1 moi lan tat dich vu (2026-10-08). Dung executor TRUOC roi
+    # moi tat context. Loi trong callback van lam node chet nhu cu (spin.result() nem lai).
+    # Cho CO timeout: tin hieu roi vao luong khac thi wait() vo han khong bao gio thuc de
+    # chay handler -> node treo toi khi bi SIGKILL (gap 1 lan khi tat dich vu).
+    stop = threading.Event()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, lambda *_: stop.set())
+    spin = ThreadPoolExecutor(1).submit(executor.spin)
+    spin.add_done_callback(lambda _: stop.set())
+    while not stop.wait(0.5):
         pass
+    executor.shutdown()
+    try:
+        spin.result()
     finally:
         node.destroy_node()
-        rclpy.try_shutdown()
+        rclpy.shutdown()

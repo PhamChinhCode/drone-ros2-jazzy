@@ -36,7 +36,9 @@ def _plugin_param_script():
             style = '"' if isinstance(value, str) else None
             text = yaml.safe_dump(value, default_style=style, width=1 << 20)
             text = shlex.quote(text.strip().removesuffix('...').strip())
-            cmds.append(f'until ros2 param set {node} {name} {text}; do sleep 1; done')
+            # timeout: 'ros2 param set' goi qua som luc node vua len co the treo vinh vien du tham
+            # so da dat (Pi 5, 2026-10-08) -> giet roi dat lai, dat trung gia tri vo hai.
+            cmds.append(f'until timeout 10 ros2 param set {node} {name} {text}; do sleep 1; done')
     return '; '.join(cmds)
 
 

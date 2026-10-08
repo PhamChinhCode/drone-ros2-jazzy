@@ -9,9 +9,14 @@ xac nhan, du de chay het chuoi ACTUATE_GRIPPER trong Gazebo. Muon thu duong THAT
 khong xac nhan -> failsafe FS_GRIP_CONFIRM_FAIL) thi khong chay node nay.
 """
 
+from concurrent.futures import ThreadPoolExecutor
+import signal
+import threading
+
 import rclpy
 from rclpy.experimental import EventsExecutor
 from rclpy.node import Node
+from rclpy.signals import SignalHandlerOptions
 
 from drone_interfaces.msg import GripperCommand, GripperStatus
 from drone_mission.qos import EVENT_QOS
@@ -107,16 +112,28 @@ class GripperControllerNode(Node):
 
 
 def main(args=None):
-    rclpy.init(args=args)
+    rclpy.init(args=args, signal_handler_options=SignalHandlerOptions.NO)
     node = GripperControllerNode()
     # EventsExecutor: executor mac dinh cua rclpy dung lai wait-set moi lan thuc day, ton phan
     # lon CPU tren Pi 4 (xem mission_manager_node).
     executor = EventsExecutor()
     executor.add_node(node)
-    try:
-        executor.spin()
-    except KeyboardInterrupt:
+    # Tu bat SIGINT/SIGTERM (init voi SignalHandlerOptions.NO): handler mac dinh cua rclpy tat
+    # context ngay trong luc EventsExecutor con chay callback -> publish vao context da chet,
+    # spin() nem loi, node thoat code 1 moi lan tat dich vu (2026-10-08). Dung executor TRUOC roi
+    # moi tat context. Loi trong callback van lam node chet nhu cu (spin.result() nem lai).
+    # Cho CO timeout: tin hieu roi vao luong khac thi wait() vo han khong bao gio thuc de
+    # chay handler -> node treo toi khi bi SIGKILL (gap 1 lan khi tat dich vu).
+    stop = threading.Event()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, lambda *_: stop.set())
+    spin = ThreadPoolExecutor(1).submit(executor.spin)
+    spin.add_done_callback(lambda _: stop.set())
+    while not stop.wait(0.5):
         pass
+    executor.shutdown()
+    try:
+        spin.result()
     finally:
         node.destroy_node()
-        rclpy.try_shutdown()
+        rclpy.shutdown()

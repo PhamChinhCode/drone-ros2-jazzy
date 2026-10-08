@@ -6,7 +6,10 @@ Publish o TAN SO CO DINH bang timer (mac dinh 2 Hz), KHONG publish theo su kien 
 nguon - tranh lam ngap kenh 4G/radio bang thong hep.
 """
 
+from concurrent.futures import ThreadPoolExecutor
 import math
+import signal
+import threading
 
 import rclpy
 from mavros_msgs.msg import GPSRAW, DebugValue, State
@@ -14,6 +17,7 @@ from nav_msgs.msg import Odometry
 from rclpy.experimental import EventsExecutor
 from rclpy.node import Node
 from rclpy.parameter import Parameter
+from rclpy.signals import SignalHandlerOptions
 from sensor_msgs.msg import BatteryState
 
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
@@ -237,16 +241,28 @@ class TelemetryAggregatorNode(Node):
 
 
 def main(args=None):
-    rclpy.init(args=args)
+    rclpy.init(args=args, signal_handler_options=SignalHandlerOptions.NO)
     node = TelemetryAggregatorNode()
     # EventsExecutor: executor mac dinh cua rclpy dung lai wait-set moi lan thuc day, ton phan
     # lon CPU tren Pi 4 (xem mission_manager_node).
     executor = EventsExecutor()
     executor.add_node(node)
-    try:
-        executor.spin()
-    except KeyboardInterrupt:
+    # Tu bat SIGINT/SIGTERM (init voi SignalHandlerOptions.NO): handler mac dinh cua rclpy tat
+    # context ngay trong luc EventsExecutor con chay callback -> publish vao context da chet,
+    # spin() nem loi, node thoat code 1 moi lan tat dich vu (2026-10-08). Dung executor TRUOC roi
+    # moi tat context. Loi trong callback van lam node chet nhu cu (spin.result() nem lai).
+    # Cho CO timeout: tin hieu roi vao luong khac thi wait() vo han khong bao gio thuc de
+    # chay handler -> node treo toi khi bi SIGKILL (gap 1 lan khi tat dich vu).
+    stop = threading.Event()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, lambda *_: stop.set())
+    spin = ThreadPoolExecutor(1).submit(executor.spin)
+    spin.add_done_callback(lambda _: stop.set())
+    while not stop.wait(0.5):
         pass
+    executor.shutdown()
+    try:
+        spin.result()
     finally:
         node.destroy_node()
-        rclpy.try_shutdown()
+        rclpy.shutdown()

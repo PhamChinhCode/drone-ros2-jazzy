@@ -7,11 +7,15 @@ Khong hop le (FC bao mat laser - hop dong 1.6 gui 0 -, nghieng qua nguong, hoac 
 range = NaN: moi node dung kiem min_range <= range <= max_range nen tu loai, khong phai sua them.
 """
 
+from concurrent.futures import ThreadPoolExecutor
 import math
+import signal
+import threading
 
 import rclpy
 from rclpy.experimental import EventsExecutor
 from rclpy.node import Node
+from rclpy.signals import SignalHandlerOptions
 from sensor_msgs.msg import Imu, Range
 
 from drone_estimation.estimation_math import tilt_cos_from_quaternion, vertical_range
@@ -67,14 +71,26 @@ class RangeVerticalNode(Node):
 
 
 def main(args=None):
-    rclpy.init(args=args)
+    rclpy.init(args=args, signal_handler_options=SignalHandlerOptions.NO)
     node = RangeVerticalNode()
     executor = EventsExecutor()
     executor.add_node(node)
-    try:
-        executor.spin()
-    except KeyboardInterrupt:
+    # Tu bat SIGINT/SIGTERM (init voi SignalHandlerOptions.NO): handler mac dinh cua rclpy tat
+    # context ngay trong luc EventsExecutor con chay callback -> publish vao context da chet,
+    # spin() nem loi, node thoat code 1 moi lan tat dich vu (2026-10-08). Dung executor TRUOC roi
+    # moi tat context. Loi trong callback van lam node chet nhu cu (spin.result() nem lai).
+    # Cho CO timeout: tin hieu roi vao luong khac thi wait() vo han khong bao gio thuc de
+    # chay handler -> node treo toi khi bi SIGKILL (gap 1 lan khi tat dich vu).
+    stop = threading.Event()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, lambda *_: stop.set())
+    spin = ThreadPoolExecutor(1).submit(executor.spin)
+    spin.add_done_callback(lambda _: stop.set())
+    while not stop.wait(0.5):
         pass
+    executor.shutdown()
+    try:
+        spin.result()
     finally:
         node.destroy_node()
-        rclpy.try_shutdown()
+        rclpy.shutdown()
