@@ -5,18 +5,39 @@ moi lan them mot nguon thi kiem `/odometry/filtered` khong co buoc nhay dot ngot
 """
 
 import os
+import shlex
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import ExecuteProcess, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
+import yaml
 
 BRINGUP = get_package_share_directory('drone_bringup')
 CONFIG = os.path.join(BRINGUP, 'config')
+MAVROS_PLUGINS_YAML = os.path.join(CONFIG, 'mavros_plugins.yaml')
 # Uu tien ban da nap qua day (giao uoc GCS 8.7, P31) neu co, khong thi dung ban dong bo trong repo.
 _TAGS_OVERRIDE = os.path.expanduser('~/.config/drone_ros2_jazzy/tags_override.yaml')
 TAGS_YAML = _TAGS_OVERRIDE if os.path.isfile(_TAGS_OVERRIDE) else os.path.join(CONFIG, 'tags.yaml')
+
+
+def _plugin_param_script():
+    """Lenh shell 'ros2 param set' tung tham so trong mavros_plugins.yaml, lap den khi node len.
+
+    Khong dung 'ros2 param load': tren Pi 5 no crash (assert PyUnicode_Check) voi tham so chuoi.
+    Chuoi dump YAML mot dong co nhay kep de 'ros2 param set' doc lai dung kieu string.
+    """
+    with open(MAVROS_PLUGINS_YAML) as f:
+        nodes = yaml.safe_load(f)
+    cmds = []
+    for node, section in nodes.items():
+        for name, value in section['ros__parameters'].items():
+            style = '"' if isinstance(value, str) else None
+            text = yaml.safe_dump(value, default_style=style, width=1 << 20)
+            text = shlex.quote(text.strip().removesuffix('...').strip())
+            cmds.append(f'until ros2 param set {node} {name} {text}; do sleep 1; done')
+    return '; '.join(cmds)
 
 
 def generate_launch_description():
@@ -25,9 +46,17 @@ def generate_launch_description():
             os.path.join(BRINGUP, 'launch', 'perception.launch.py'))),
 
         # KHONG dat name=: no remap ten MOI node con trong process (router, tung plugin) thanh
-        # 'mavros' -> plugin de topic cua nhau va crash. Chi dat namespace, giong mavros/node.launch.
-        Node(package='mavros', executable='mavros_node', namespace='mavros',
-             parameters=[os.path.join(CONFIG, 'mavros.yaml')], output='screen'),
+        # 'mavros' -> plugin de topic cua nhau va crash.
+        # KHONG dat namespace= (MAVROS 2.15): plugin nam duoi ten DAY DU cua node UAS, namespace
+        # 'mavros' bien no thanh /mavros/mavros -> moi topic doi sang /mavros/mavros/... va khong
+        # node Pi nao nghe/gui duoc (2026-10-08). De mac dinh: UAS = /mavros, topic /mavros/<...>.
+        Node(package='mavros', executable='mavros_node',
+             parameters=[os.path.join(CONFIG, 'mavros.yaml'), MAVROS_PLUGINS_YAML],
+             output='screen'),
+
+        # MAVROS 2.15.1 khong dua --params-file toi node plugin (mavlink/mavros#2294) -> dat lai
+        # tham so plugin khi node da len. Thieu: IMU covariance mac dinh, laser khong phat.
+        ExecuteProcess(cmd=[_plugin_param_script()], shell=True, output='screen'),
 
         # Vi tri lap camera tren khung drone - DO THAT roi sua sau day.
         # Sai transform nay gay trieu chung "thay dung marker nhung bay lech tam".

@@ -1030,6 +1030,15 @@ Ba điểm dễ sai đã gặp:
   trùng tên, plugin đè topic nhau và **crash**: `create_subscription() called for existing
   topic name rt/mavros/mavros/local with incompatible type`. Thêm namespace mà vẫn giữ
   `name=` thì **vẫn crash**. *(Đã sửa `estimation.launch.py` 2026-09-13.)*
+  **Cập nhật 2026-10-08 (MAVROS 2.15.1 trên Pi 5): KHÔNG đặt cả `namespace=`.** Plugin giờ
+  nằm dưới tên đầy đủ của node UAS, nên `namespace='mavros'` đẩy mọi topic sang
+  `/mavros/mavros/...` và không node Pi nào nghe/gửi được (kể cả `setpoint_raw/local` tới FC).
+  Để mặc định: UAS = `/mavros`, topic `/mavros/<...>` như cũ.
+- **MAVROS 2.15.1: `--params-file` không tới node plugin** (upstream mavlink/mavros#2294, sửa
+  trên nhánh `ros2` 2026-09-27, chưa có gói apt). Hậu quả đo 2026-10-08: IMU chạy covariance
+  mặc định (`orientation_stdev` 1,0 rad), laser `DS: Plugin not configured!`. Tham số plugin
+  để ở `config/mavros_plugins.yaml` (khoá tên đầy đủ `/mavros/<plugin>`), `estimation.launch.py`
+  `ros2 param set` lại sau khi plugin lên. Không dùng `ros2 param load` — crash với tham số chuỗi.
 - **`distance_sensor` cần khối `config` riêng, và topic KHÔNG nằm dưới `distance_sensor/`.**
   Không khai `id` thì plugin không phát gì (`DS: no mapping for sensor id`). Topic lấy tên
   từ khoá cấu hình, đặt thẳng dưới namespace: khoá `mtf01p` → **`/mavros/mtf01p`**. Cấu hình

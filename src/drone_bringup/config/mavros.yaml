@@ -6,17 +6,6 @@
     gcs_url: ""                          # de trong: GCS di duong rieng qua gcs_link_node
     target_system_id: 1
     target_component_id: 1
-    # Covariance IMU - KHONG de MAVROS dung mac dinh hardcode. Mac dinh cua no la
-    # orientation_stdev=1.0 rad (57 do) va linear_acceleration_stdev=0.0003 m/s^2,
-    # khien EKF bo qua goc nghieng cua FC va tin tuyet doi vao gia toc tho - nguoc hoan toan.
-    # orientation: phia FC chot 1 do cho roll/pitch (2026-09-12). KHONG dung so tu
-    # ekf_attitude_uncertainty_deg() hay nhieu ngan han do duoc - do la bo loc tu cham diem
-    # chinh no, khong mo hinh hoa lech lap dat / troi bias / rung dong co.
-    # accel + gyro: do that 896 mau/20s luc drone dung im tren ban.
-    # CANH BAO: hai so nay la SAN khi dung im. Co rung dong co phai do lai (muc C).
-    orientation_stdev: 0.01745          # 1 do
-    linear_acceleration_stdev: 0.0185   # m/s^2, do tren ban
-    angular_velocity_stdev: 0.00183     # rad/s, do tren ban
     plugin_allowlist:
       # 09-14 bo 'setpoint_position', 'vfr_hud', 'local_position': khong node Pi nao dung (VFR_HUD chi
       # hien thi; LOCAL_POSITION_NED trung ODOMETRY). Do: MAVROS 72 % -> 52 % CPU (GIAO_UOC 11.1 #14).
@@ -33,15 +22,4 @@
     # KHONG bat 'landing_target': LANDING_TARGET (149) phe bo tu hop dong 1.4 - FC khong xu ly,
     # Pi tu dong vong van toc theo marker (GIAO_UOC 11.1 #12, #13c).
 
-# Laser MTF01P: FC phat id=0, PITCH_270, 20 Hz (GIAO_UOC muc 11.2). Plugin chi phat topic cho id da
-# khai o day. send_tf=false: chua do vi tri lap laser tren khung - khong bia TF.
-# min_distance = 15 cm tu FC (chot 09-13, laser doc ~17 cm khi nam dat - GIAO_UOC 11.2).
-/**/distance_sensor:
-  ros__parameters:
-    config: |
-      mtf01p:
-        id: 0
-        frame_id: "mtf01p_laser"
-        orientation: PITCH_270
-        field_of_view: 0.0
-        send_tf: false
+# Tham so cua tung plugin (covariance IMU, cau hinh laser) nam o mavros_plugins.yaml - xem ly do o do.

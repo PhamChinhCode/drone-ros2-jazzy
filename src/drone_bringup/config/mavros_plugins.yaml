@@ -1,0 +1,34 @@
+# Tham so cho node PLUGIN cua MAVROS (/mavros/<plugin>). Tach khoi mavros.yaml vi:
+# MAVROS 2.15.1 (apt) tao node plugin voi use_global_arguments(false) -> --params-file KHONG toi plugin
+# (upstream mavlink/mavros#2294, da sua tren nhanh ros2 2026-09-27, chua ra goi). Pi 5 2026-10-08:
+# IMU chay covariance mac dinh, laser 'DS: Plugin not configured!'. estimation.launch.py doc file nay
+# va 'ros2 param set' tung tham so sau khi plugin len (plugin theo doi tham so nen ap dung ngay); van
+# truyen qua parameters= de khi MAVROS da sua thi tu ap dung luc khoi tao.
+# Khoa phai la ten DAY DU cua node plugin (/mavros/<plugin>), khong dung wildcard.
+
+# Covariance IMU - KHONG de MAVROS dung mac dinh hardcode. Mac dinh cua no la
+# orientation_stdev=1.0 rad (57 do) va linear_acceleration_stdev=0.0003 m/s^2,
+# khien EKF bo qua goc nghieng cua FC va tin tuyet doi vao gia toc tho - nguoc hoan toan.
+# orientation: phia FC chot 1 do cho roll/pitch (2026-09-12). KHONG dung so tu
+# ekf_attitude_uncertainty_deg() hay nhieu ngan han do duoc - do la bo loc tu cham diem
+# chinh no, khong mo hinh hoa lech lap dat / troi bias / rung dong co.
+# accel + gyro: do that 896 mau/20s luc drone dung im tren ban.
+# CANH BAO: hai so nay la SAN khi dung im. Co rung dong co phai do lai (muc C).
+/mavros/imu:
+  ros__parameters:
+    orientation_stdev: 0.01745          # 1 do
+    linear_acceleration_stdev: 0.0185   # m/s^2, do tren ban
+    angular_velocity_stdev: 0.00183     # rad/s, do tren ban
+
+# Laser MTF01P: FC phat id=0, PITCH_270, 20 Hz (GIAO_UOC muc 11.2). Plugin chi phat topic cho id da
+# khai o day. send_tf=false: chua do vi tri lap laser tren khung - khong bia TF.
+# min_distance = 15 cm tu FC (chot 09-13, laser doc ~17 cm khi nam dat - GIAO_UOC 11.2).
+/mavros/distance_sensor:
+  ros__parameters:
+    config: |
+      mtf01p:
+        id: 0
+        frame_id: "mtf01p_laser"
+        orientation: PITCH_270
+        field_of_view: 0.0
+        send_tf: false
