@@ -62,13 +62,14 @@ def generate_launch_description():
 
         # Vi tri lap camera tren khung drone - DO THAT roi sua sau day.
         # Sai transform nay gay trieu chung "thay dung marker nhung bay lech tam".
-        # Do 09-14: truoc tam 6 cm, cao ngang cam bien ToF (lay z = 0), mat camera nghieng 20 do so
-        # voi mat ban (theo ban ve), nhin ve phia truoc -> truc nhin lech 20 do khoi phuong thang
+        # Do lai 10-08: truoc tam 90 mm (09-14 ghi 6 cm), cao ngang cam bien ToF (lay z = 0),
+        # mat camera nghieng 20 do so voi mat ban (theo ban ve, user xac nhan 10-08), nhin ve
+        # phia truoc -> truc nhin lech 20 do khoi phuong thang
         # dung: pitch = 90 - 20 = 70 do. Tag do sau hieu chinh 640x400 cho 17-23 do. Tham so:
         # x y z yaw pitch roll.
         Node(package='tf2_ros', executable='static_transform_publisher',
              name='base_to_camera',
-             arguments=['0.06', '0', '0', '0', '1.2217', '0', 'base_link', 'camera_link']),
+             arguments=['0.09', '0', '0', '0', '1.2217', '0', 'base_link', 'camera_link']),
 
         # Noi hai quy uoc truc (REP 103): camera_link la x-tien, z-len; con
         # camera_optical_frame la x-phai, y-xuong, z-theo huong nhin. camera.yaml dat

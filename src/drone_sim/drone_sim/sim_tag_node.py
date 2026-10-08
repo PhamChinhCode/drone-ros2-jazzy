@@ -31,7 +31,7 @@ from tf2_ros import StaticTransformBroadcaster, TransformBroadcaster
 from drone_control.qos import SENSOR_QOS
 
 # Lay tu estimation.launch.py - phai khop voi drone that.
-BASE_TO_CAM_XYZ = (0.06, 0.0, 0.0)
+BASE_TO_CAM_XYZ = (0.09, 0.0, 0.0)          # do 2026-10-08: truoc tam 90 mm
 BASE_TO_CAM_RPY = (0.0, 1.2217, 0.0)        # yaw, pitch, roll (pitch 70 do)
 CAM_TO_OPTICAL_RPY = (-1.5708, 0.0, -1.5708)
 

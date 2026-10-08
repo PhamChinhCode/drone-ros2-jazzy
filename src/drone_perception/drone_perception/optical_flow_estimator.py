@@ -1,15 +1,13 @@
 """Logic optical flow thuan, tach khoi ROS de pytest duoc khong can khoi dong node."""
 
 import cv2
-import numpy as np
 
 
 class OpticalFlowEstimator:
     """Lucas-Kanade thua: nhe CPU hon Farneback day, dung lam diem xuat phat tren Pi 4."""
 
-    def __init__(self, focal_px, max_corners=100, quality_level=0.3,
+    def __init__(self, max_corners=100, quality_level=0.3,
                  min_distance=7, min_tracked_features=8, max_lk_error=20.0):
-        self.focal_px = focal_px
         self.max_corners = max_corners
         self.quality_level = quality_level
         self.min_distance = min_distance
@@ -28,16 +26,16 @@ class OpticalFlowEstimator:
             gray, maxCorners=self.max_corners, qualityLevel=self.quality_level,
             minDistance=self.min_distance)
 
-    def process(self, gray, dt, altitude_m):
-        """Tra ve (vel_xy_mps, n_tracked). vel None nghia la KHONG duoc publish gi ca."""
-        # Khung dau tien chua co gi de so sanh -> chi phat hien dac trung. Phai xet TRUOC
-        # dt vi khung dau tien luon co dt=0, chan o day thi khong bao gio bat dau duoc.
+    def track(self, gray):
+        """Tra ve ((diem_cu Nx2, diem_moi Nx2), n_tracked); cap None = KHONG duoc publish gi ca.
+
+        Chi bam diem tren anh; doi sang van toc that (nghieng camera, tu the, do cao) la viec
+        cua flow_geometry.base_velocity.
+        """
+        # Khung dau tien chua co gi de so sanh -> chi phat hien dac trung.
         if self.prev_gray is None or self.prev_pts is None:
             self.prev_gray = gray
             self.prev_pts = self._detect_features(gray)
-            return None, 0
-
-        if dt <= 0.0:
             return None, 0
 
         new_pts, status, err = cv2.calcOpticalFlowPyrLK(
@@ -60,10 +58,6 @@ class OpticalFlowEstimator:
             self.reset()
             return None, n_tracked
 
-        # median chong nhieu hon mean: mot vai dac trung bam nham khong keo lech ket qua.
-        flow_px = np.median(good_new - good_old, axis=0)
-        vel = flow_px * altitude_m / self.focal_px / dt
-
         self.prev_gray = gray
         self.prev_pts = good_new.reshape(-1, 1, 2)
-        return vel, n_tracked
+        return (good_old, good_new), n_tracked

@@ -8,6 +8,10 @@ optical_flow_node:
     refresh_interval_s: 1.5
     process_every_n_frames: 2    # bo bot khung neu CPU khong kip
     base_covariance: 0.05
+    # Hinh hoc camera nghieng (flow_geometry, 2026-10-08):
+    max_ray_angle_deg: 65.0      # bo tia lech phuong thang dung qua goc nay (giao mat dat qua xa)
+    max_imu_gap_s: 0.05          # IMU gan stamp anh nhat phai trong khoang nay
+    altitude_filter_tau_s: 0.2   # loc laser luong tu 1 cm (nhay 1 cm = 0,05 m/s vx gia)
 
 marker_quality_node:
   ros__parameters:

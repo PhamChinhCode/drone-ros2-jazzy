@@ -5,12 +5,18 @@ Ba nguyen tac bat buoc (muc 1.4 tai lieu huong dan):
   1. covariance ti le nghich voi so dac trung bam duoc - do la cach bao chat luong thap cho EKF;
   2. duoi nguong dac trung toi thieu thi KHONG publish gi ca;
   3. phat hien lai dac trung dinh ky de khong bam mai diem da troi khoi khung hinh.
+
+Camera lap truoc tam 90 mm, nghieng 20 do ve phia truoc (KHONG nhin thang xuong): pixel duoc doi
+sang van toc bang flow_geometry (chieu tia nhin xuong mat dat theo TF lap dat + tu the IMU luc
+chup moi khung), phat trong base_link. Xem docstring flow_geometry ve sai so cua cach cu.
 """
 
+import collections
 from concurrent.futures import ThreadPoolExecutor
 import signal
 import threading
 
+import numpy as np
 import rclpy
 from cv_bridge import CvBridge
 from geometry_msgs.msg import TwistWithCovarianceStamped
@@ -18,8 +24,10 @@ from rclpy.experimental import EventsExecutor
 from rclpy.node import Node
 from rclpy.signals import SignalHandlerOptions
 from rclpy.time import Time
-from sensor_msgs.msg import CameraInfo, Image, Range
+from sensor_msgs.msg import CameraInfo, Image, Imu, Range
+from tf2_ros import Buffer, TransformException, TransformListener
 
+from drone_perception.flow_geometry import base_velocity, quat_to_matrix
 from drone_perception.optical_flow_estimator import OpticalFlowEstimator
 from drone_perception.qos import SENSOR_QOS
 
@@ -37,44 +45,103 @@ class OpticalFlowNode(Node):
         self.declare_parameter('process_every_n_frames', 2)
         self.declare_parameter('base_covariance', 0.05)
         self.declare_parameter('max_lk_error', 20.0)
+        # Tia nhin lech phuong thang dung qua goc nay bi bo (giao mat dat xa, nhay sai so do cao).
+        self.declare_parameter('max_ray_angle_deg', 65.0)
+        # IMU (MAVROS ~30 Hz) gan stamp anh nhat phai cach khong qua muc nay, khong thi bo khung.
+        self.declare_parameter('max_imu_gap_s', 0.05)
+        self.declare_parameter('altitude_filter_tau_s', 0.2)
 
         self.bridge = CvBridge()
-        self.estimator = None          # tao sau khi co focal length tu camera_info
+        self.estimator = None          # tao sau khi co camera_info
+        self.K = self.D = None         # noi tai + meo tu camera_info - khong bao gio do tay
+        self.R_bo = self.p_cam_b = None  # TF lap dat base_link -> camera_optical_frame
         self.altitude_m = None         # chua co do cao thi chua quy doi duoc pixel -> met
-        self.last_stamp = None
+        self.altitude_t = None         # stamp mau laser cuoi (cho bo loc)
+        self.imu = collections.deque(maxlen=60)   # (t, R_wb, omega_b), ~2 s
+        self.prev_view = None          # (t, R_wb, h_cam) cua khung xu ly truoc
         self.last_refresh = None
         self.frame_counter = 0
+
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self, spin_thread=True)
 
         self.create_subscription(CameraInfo, '/camera/camera_info', self.on_camera_info, SENSOR_QOS)
         self.create_subscription(Image, '/camera/image_raw', self.on_image, SENSOR_QOS)
         # Do cao lay tu laser MTF01P (20 Hz, ngang tam camera) thay /mavros/global_position/rel_alt:
         # relative_alt chua duoc giao uoc kiem (12.A1) va de FC giam GLOBAL_POSITION_INT (11.1 #14).
         self.create_subscription(Range, '/range/vertical', self.on_altitude, SENSOR_QOS)
+        self.create_subscription(Imu, '/mavros/imu/data', self.on_imu, SENSOR_QOS)
 
         self.pub_velocity = self.create_publisher(
             TwistWithCovarianceStamped, '/optical_flow/velocity', SENSOR_QOS)
 
     def on_camera_info(self, msg):
-        """Lay focal length tu ma tran noi tai da hieu chinh - khong bao gio do tay."""
+        """Lay noi tai + he so meo da hieu chinh - khong bao gio do tay."""
         if self.estimator is None:
+            self.K = np.array(msg.k, np.float64).reshape(3, 3)
+            self.D = np.array(msg.d, np.float64)
             self.estimator = OpticalFlowEstimator(
-                focal_px=msg.k[0],
                 max_corners=self.get_parameter('max_corners').value,
                 quality_level=self.get_parameter('quality_level').value,
                 min_distance=self.get_parameter('min_distance').value,
                 min_tracked_features=self.get_parameter('min_tracked_features').value,
                 max_lk_error=self.get_parameter('max_lk_error').value)
-            self.get_logger().info(f'Nhan focal length tu camera_info: {msg.k[0]:.1f} px')
+            self.get_logger().info(
+                f'Nhan camera_info: fx {msg.k[0]:.1f} px, {len(msg.d)} he so meo')
 
     def on_altitude(self, msg):
         # Ngoai [min_range, max_range] la khong do duoc -> khong quy doi, khong publish.
         ok = msg.min_range <= msg.range <= msg.max_range
-        self.altitude_m = msg.range if ok else None
+        if not ok:
+            self.altitude_m = self.altitude_t = None
+            return
+        # Loc thong thap: laser luong tu 1 cm, ma camera nhin chech truoc nen chenh do cao giua
+        # hai khung bi hieu thanh di toi (~tan20 = 0,36 lan) - nhay 1 cm = 0,05 m/s vx gia khi
+        # dung yen (do 10-08). EMA van bam dung toc do leo/xuong deu, chi tre gia tri tuyet doi.
+        t = Time.from_msg(msg.header.stamp).nanoseconds * 1e-9
+        if self.altitude_m is None or self.altitude_t is None or t <= self.altitude_t:
+            self.altitude_m = msg.range
+        else:
+            tau = self.get_parameter('altitude_filter_tau_s').value
+            a = 1.0 - np.exp(-(t - self.altitude_t) / tau) if tau > 0.0 else 1.0
+            self.altitude_m += a * (msg.range - self.altitude_m)
+        self.altitude_t = t
+
+    def on_imu(self, msg):
+        q = msg.orientation
+        w = msg.angular_velocity
+        self.imu.append((Time.from_msg(msg.header.stamp).nanoseconds * 1e-9,
+                         quat_to_matrix(q.x, q.y, q.z, q.w), np.array([w.x, w.y, w.z])))
+
+    def _imu_at(self, t):
+        """(R_wb, omega_b) cua mau IMU gan t nhat, hoac None neu lech qua max_imu_gap_s."""
+        if not self.imu:
+            return None
+        best = min(self.imu, key=lambda m: abs(m[0] - t))
+        if abs(best[0] - t) > self.get_parameter('max_imu_gap_s').value:
+            return None
+        return best[1], best[2]
+
+    def _lookup_mount(self):
+        """TF lap dat camera (tinh) - lay mot lan tu estimation.launch.py, khong chep so."""
+        try:
+            tf = self.tf_buffer.lookup_transform('base_link', 'camera_optical_frame', Time())
+        except TransformException:
+            self.get_logger().warn('Chua co TF base_link -> camera_optical_frame',
+                                   throttle_duration_sec=5.0)
+            return False
+        r, p = tf.transform.rotation, tf.transform.translation
+        self.R_bo = quat_to_matrix(r.x, r.y, r.z, r.w)
+        self.p_cam_b = np.array([p.x, p.y, p.z])
+        self.get_logger().info(f'TF lap dat camera: vi tri {self.p_cam_b.round(3).tolist()} m')
+        return True
 
     def on_image(self, msg):
         # Chua co camera_info (thieu focal length) hoac chua co do cao thi khong quy doi
         # duoc pixel -> met. Im lang cho, khong doan bua.
         if self.estimator is None or self.altitude_m is None:
+            return
+        if self.R_bo is None and not self._lookup_mount():
             return
 
         self.frame_counter += 1
@@ -94,27 +161,39 @@ class OpticalFlowNode(Node):
             self.estimator.reset()
             self.last_refresh = stamp
 
-        dt = 0.0 if self.last_stamp is None else (stamp - self.last_stamp).nanoseconds * 1e-9
-        self.last_stamp = stamp
-
-        vel_xy, n_tracked = self.estimator.process(gray, dt, self.altitude_m)
-        if vel_xy is None:
+        t = stamp.nanoseconds * 1e-9
+        att = self._imu_at(t)
+        pairs, _ = self.estimator.track(gray)
+        if att is None:
+            # Khong biet tu the luc chup thi khong chieu duoc xuong dat; bam lai tu khung sau.
+            self.estimator.reset()
+            self.prev_view = None
             return
-        self.publish_velocity(vel_xy, n_tracked, msg.header.stamp)
+        R_wb, omega_b = att
+        # Do cao camera = do cao laser (thang dung) + do lech dung cua camera theo tu the.
+        # Gia dinh laser o tam than (vi tri lap laser chua do - mavros.yaml send_tf=false).
+        h_cam = self.altitude_m + float((R_wb @ self.p_cam_b)[2])
+        prev, self.prev_view = self.prev_view, (t, R_wb, h_cam)
+        if pairs is None or prev is None:
+            return
 
-    def publish_velocity(self, vel_xy, n_tracked, stamp):
+        vel, n_ok = base_velocity(
+            pairs[0], pairs[1], self.K, self.D, self.R_bo, self.p_cam_b, prev[1], R_wb,
+            prev[2], h_cam, t - prev[0], omega_b, self.get_parameter('max_ray_angle_deg').value)
+        if vel is None or n_ok < self.get_parameter('min_tracked_features').value:
+            return
+        self.publish_velocity(vel, n_ok, msg.header.stamp)
+
+    def publish_velocity(self, vel_b, n_tracked, stamp):
         msg = TwistWithCovarianceStamped()
         msg.header.stamp = stamp
-        # Phat trong khung QUANG HOC; robot_localization tu xoay ve base_link qua TF
-        # (chuoi base_link -> camera_link -> camera_optical_frame trong estimation.launch.py).
-        msg.header.frame_id = 'camera_optical_frame'
-
-        # DAU: estimator tra ve van toc cua CANH VAT tren anh. Camera di sang phai thi
-        # canh vat troi sang trai, nen van toc CAMERA nguoc dau voi flow.
-        # >>> Day la cho dao dau DUY NHAT. Phai xac nhan bang phep do thuc te (di chuyen
-        # camera mot quang da biet) truoc khi cho EKF dung - sai dau se gay troi vi tri.
-        msg.twist.twist.linear.x = float(-vel_xy[0])
-        msg.twist.twist.linear.y = float(-vel_xy[1])
+        # Van toc THAN MAY (FLU) tinh tu hinh hoc mat dat - dau suy ra tu hinh hoc, khong con
+        # buoc dao dau tay. Van phai xac nhan bang phep do thuc te (dich drone mot quang da
+        # biet) truoc khi bay. EKF chi dung vx, vy (ekf.yaml twist0_config).
+        msg.header.frame_id = 'base_link'
+        msg.twist.twist.linear.x = float(vel_b[0])
+        msg.twist.twist.linear.y = float(vel_b[1])
+        msg.twist.twist.linear.z = float(vel_b[2])
 
         # Covariance ti le nghich voi so dac trung bam duoc: bam duoc it -> bao chat luong
         # thap cho EKF thay vi giau di (nguyen tac 1).
