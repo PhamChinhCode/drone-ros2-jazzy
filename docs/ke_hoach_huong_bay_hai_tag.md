@@ -118,8 +118,9 @@ thấy tag suốt đường thì phải **đi vào từ phía SAU bãi, dọc tr
 5. Tới khoảng cách ngang < `acceptance` trên tâm bãi → `FINAL_APPROACH` (tag nhỏ).
 
 **Trường hợp drone tới từ PHÍA TRƯỚC bãi** (đích nằm ngược hướng bãi): G ở sau bãi nên drone phải
-vòng qua — bay vòng cung bán kính ≥ 1,5 m quanh tâm bãi tới G (mũi hướng theo đường đi, tag có thể
-ra khỏi khung một lúc, EKF giữ vị trí); tới G quay về `yaw_pad` thì tag lại ngay phía trước. Gợi ý
+vòng qua — bay vòng cung bán kính ≥ 1,5 m quanh tâm bãi tới G, **mũi luôn nhìn tâm bãi** (tag trong
+khung suốt vòng; tới G mũi đã đúng `yaw_pad` — mô phỏng cho thấy để mũi theo đường đi thì tới G
+không kịp quay, mất tag khi vào hành lang). Gợi ý
 khi đặt bãi: cho mũi tên TRÊN chỉ **theo hướng drone thường bay tới** thì luôn vào thẳng, không vòng.
 
 **Hệ quả lên các trạng thái 0.8:** `PAD_ALIGN` (12) đổi nghĩa thành **"tiếp cận thẳng hàng trục bãi"**
