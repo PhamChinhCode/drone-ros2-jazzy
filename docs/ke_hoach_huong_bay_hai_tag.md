@@ -99,9 +99,9 @@ thấy tag suốt đường thì phải **đi vào từ phía SAU bãi, dọc tr
                [tag nhỏ]
                [ TAG TO ]  ← tới đây ở ~1,1 m, mũi đã đúng hướng → FINAL_APPROACH
                    ▲
-                   │  bay thẳng + hạ dốc ~24°, mũi = yaw_pad, tag luôn ở phía trước
+                   │  bay thẳng + hạ dốc ~31°, mũi = yaw_pad, tag luôn ở phía trước
                    │
-                 (G) cổng tiếp cận: 2,0 m SAU tâm bãi, độ cao 2,0 m
+                 (G) cổng tiếp cận: 1,5 m SAU tâm bãi, độ cao 2,0 m
                  ╱
    ENROUTE ─────╯  (mũi luôn hướng tới đích đang nhắm: G rồi tâm bãi)
 ```
@@ -118,13 +118,20 @@ thấy tag suốt đường thì phải **đi vào từ phía SAU bãi, dọc tr
 5. Tới khoảng cách ngang < `acceptance` trên tâm bãi → `FINAL_APPROACH` (tag nhỏ).
 
 **Trường hợp drone tới từ PHÍA TRƯỚC bãi** (đích nằm ngược hướng bãi): G ở sau bãi nên drone phải
-vòng qua — bay vòng cung bán kính ≥ 2,0 m quanh tâm bãi tới G (mũi hướng theo đường đi, tag có thể
+vòng qua — bay vòng cung bán kính ≥ 1,5 m quanh tâm bãi tới G (mũi hướng theo đường đi, tag có thể
 ra khỏi khung một lúc, EKF giữ vị trí); tới G quay về `yaw_pad` thì tag lại ngay phía trước. Gợi ý
 khi đặt bãi: cho mũi tên TRÊN chỉ **theo hướng drone thường bay tới** thì luôn vào thẳng, không vòng.
 
 **Hệ quả lên các trạng thái 0.8:** `PAD_ALIGN` (12) đổi nghĩa thành **"tiếp cận thẳng hàng trục bãi"**
 (bước 2–3, bao cả đoạn vòng), không còn là treo tại chỗ rồi quay. Quy tắc user đã chốt giữ nguyên:
 hết thời hạn mà chưa thẳng hàng → hạ tiếp bằng tag to. `ALIGN_HEADING` (11) vẫn dùng sau cất cánh.
+
+**Thân nghiêng (bổ sung 10-08):** camera gắn cứng nên tăng tốc/hãm làm vùng nhìn đổi (ngóc mũi 5° →
+tag to mất từ 1,08 m thay vì 0,74 m). Đã làm: (a) `landing_target_bridge_node` phát đích trong hệ
+**thân phẳng** `base_level` (bỏ roll/pitch) — trước đó nghiêng 5–10° ở 1 m tạo lệch ngang giả 9–17 cm;
+(b) mô phỏng có quán tính + nghiêng theo gia tốc + chiếu 4 góc tag vào ảnh thật
+(`test_approach_visibility`) — bắt được cổng 2,0 m làm mất tag khi bắt đầu tiến (chúc mũi ~7°) → cổng
+dời về **1,5 m**. Chưa làm: giới hạn gia tốc gần bãi; nới dải chuyển giao (tag nhỏ 12 cm) — chờ user.
 
 **Cần có trước:** WP0 (yaw FC), WP4 (yaw từ tag — để trục bãi đo được chính xác), WP5 (điều khiển
 yaw), WP6 (đích hạ cánh từ hai tag). Luật dẫn viết thành hàm thuần (pytest) trong WP7.
@@ -226,7 +233,7 @@ thật, tâm bãi báo ra khớp thước ±2 cm khi chỉ thấy tag nhỏ.
 - 3 trạng thái mới + `TRANSITIONS` + `MissionState.msg` + `mission_manager_node` (phát setpoint
   yaw).
 - `ENROUTE` → `PAD_ALIGN` theo luật dẫn mục 2b (hàm thuần, pytest): đích trung gian là cổng G
-  (2,0 m sau tâm bãi, 2,0 m cao), tính lại mỗi chu kỳ từ vị trí + hướng tag; trộn hướng mũi theo
+  (1,5 m sau tâm bãi, 2,0 m cao), tính lại mỗi chu kỳ từ vị trí + hướng tag; trộn hướng mũi theo
   khoảng cách; bám trục bãi; ràng buộc |mũi − phương vị tag| < 35°; vòng cung khi tới từ phía trước.
 - `PRECISION_LAND` (cũ) giữ cho bãi KHÔNG có hướng (không có tag nhỏ); `PRECISION_BLIND_BELOW_M`
   thay bằng ngưỡng hạ mù của `FINAL_APPROACH` (~0,15 m) và **tính từ hình học** thay vì hằng số.

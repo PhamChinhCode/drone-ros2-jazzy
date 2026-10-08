@@ -93,7 +93,7 @@ class MissionManagerNode(Node):
         self.create_subscription(BatteryState, '/mavros/battery', self.on_battery, SENSOR_QOS)
         self.create_subscription(Odometry, '/odometry/filtered', self.on_odom, SENSOR_QOS)
         self.create_subscription(Bool, '/landing_target/lost', self.on_target_lost, EVENT_QOS)
-        # Pose tag da xac thuc ID (base_link) - FSM chi can do lech ngang de quyet dinh xuong.
+        # Pose tag da xac thuc ID (base_level: than bo nghieng) - FSM chi can do lech ngang.
         self.create_subscription(
             PoseStamped, '/landing_target/pose', self.on_landing_target_pose, SENSOR_QOS)
         self.create_subscription(GripperStatus, '/gripper/status', self.on_gripper, EVENT_QOS)

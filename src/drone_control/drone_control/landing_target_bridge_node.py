@@ -9,6 +9,11 @@ FC bam vao mot vi tri cu da khong con dung con nguy hiem hon la khong co du lieu
 Pose tag lay qua TF (apriltag_ros phat khung anh -> ten trong tag.frames), tra TF MOI NHAT va dung
 stamp cua chinh TF do: khi CPU day tai /tf toi sau ban tin detections >100 ms (do 09-14, xem
 marker_pose_republisher_node). Ten khung theo ID lay tu config/tags.yaml.
+
+Phat trong he THAN PHANG base_level (2026-10-08, drone_control.level_frame): goc + huong mui cua
+base_link nhung bo roll/pitch. Camera gan cung than: than nghieng 5-10 do (tang toc, ham) thi tag
+ngay duoi bi bao lech ngang 9-17 cm o 1 m trong base_link -> dieu khien ha canh sua theo lech gia.
+Roll/pitch lay tu TF world_frame -> base_link (EKF, nguon IMU); vi tri EKF khong anh huong.
 """
 
 from concurrent.futures import ThreadPoolExecutor
@@ -27,6 +32,7 @@ from rclpy.time import Time
 from std_msgs.msg import Bool, Int32
 from tf2_ros import Buffer, TransformException, TransformListener
 
+from drone_control.level_frame import to_level
 from drone_control.qos import EVENT_QOS, SENSOR_QOS
 from drone_control.target_tracker import TargetTracker
 
@@ -41,6 +47,8 @@ class LandingTargetBridgeNode(Node):
         self.declare_parameter('timeout_s', 0.7)
         self.declare_parameter('publish_rate_hz', 25.0)     # 20-30 Hz trong pha bam marker
         self.declare_parameter('target_frame', 'base_link')
+        # Khung the gioi cua EKF - chi lay roll/pitch cua base_link trong khung nay.
+        self.declare_parameter('world_frame', 'odom')
         # Ban do tag dung chung (config/tags.yaml): chi can ID -> ten khung TF.
         self.declare_parameter('known_tags', Parameter.Type.DOUBLE_ARRAY)
         self.declare_parameter('tag_frames', Parameter.Type.STRING_ARRAY)
@@ -97,6 +105,8 @@ class LandingTargetBridgeNode(Node):
         target = self.get_parameter('target_frame').value
         try:
             t = self.tf_buffer.lookup_transform(target, frame, Time())
+            att = self.tf_buffer.lookup_transform(
+                self.get_parameter('world_frame').value, target, Time()).transform.rotation
         except TransformException:
             return
         stamp = Time.from_msg(t.header.stamp)
@@ -105,13 +115,15 @@ class LandingTargetBridgeNode(Node):
             return      # TF cu hoac da dung - khong phat lai gia tri cu (nguyen tac o dau file)
         self.last_tf_stamp = stamp
 
+        tr, rq = t.transform.translation, t.transform.rotation
+        pos, quat = to_level((att.x, att.y, att.z, att.w), (tr.x, tr.y, tr.z),
+                             (rq.x, rq.y, rq.z, rq.w))
         out = PoseStamped()
         out.header.stamp = t.header.stamp
-        out.header.frame_id = target
-        out.pose.position.x = t.transform.translation.x
-        out.pose.position.y = t.transform.translation.y
-        out.pose.position.z = t.transform.translation.z
-        out.pose.orientation = t.transform.rotation
+        out.header.frame_id = 'base_level'      # khong co TF ten nay - xem docstring dau file
+        out.pose.position.x, out.pose.position.y, out.pose.position.z = pos
+        (out.pose.orientation.x, out.pose.orientation.y, out.pose.orientation.z,
+         out.pose.orientation.w) = quat
         self.pub_target.publish(out)
         self.publish_event(self.tracker.seen(self.now_s()))
 

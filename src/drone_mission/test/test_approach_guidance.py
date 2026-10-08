@@ -12,10 +12,10 @@ YAW_PAD = math.radians(90)          # phia TREN cua bai huong Bac (+y ENU)
 
 
 def test_tren_truc_sau_bai_thi_bam_truc_mui_dung_huong():
-    g = guide((5.0, 3.0 - 1.5, 1.8), YAW_PAD, PAD, YAW_PAD)
+    g = guide((5.0, 3.0 - 1.0, 1.8), YAW_PAD, PAD, YAW_PAD)
     assert g.phase == 'final'
     assert g.target[0] == pytest.approx(5.0)
-    assert 3.0 - 1.5 < g.target[1] <= 3.0                    # carrot tien ve tam bai
+    assert 3.0 - 1.0 < g.target[1] <= 3.0                    # carrot tien ve tam bai
     assert g.yaw == pytest.approx(YAW_PAD)
     assert P.final_alt < g.target[2] < P.gate_alt            # dang ha doc
 

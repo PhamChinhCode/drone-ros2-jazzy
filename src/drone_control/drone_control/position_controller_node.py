@@ -240,7 +240,8 @@ class PositionControllerNode(Node):
         else:
             xy = z = SOURCE_NONE
         if self.landing_stamp_s is not None and now_s - self.landing_stamp_s <= LANDING_STALE_S:
-            # Tag trong base_link (FLU): tag phia truoc (+x) -> bay toi (+vx); sai so = vi tri tag.
+            # Tag trong base_level (FLU, bo roll/pitch - landing_target_bridge_node): tag phia truoc
+            # (+x) -> bay toi (+vx); sai so = vi tri tag.
             xy = SOURCE_LANDING
             tag = self.landing_target.pose.position
             errors[SOURCE_LANDING] = (tag.x, tag.y)

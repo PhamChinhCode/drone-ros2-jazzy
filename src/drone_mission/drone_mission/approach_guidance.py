@@ -21,7 +21,10 @@ import math
 
 @dataclass(frozen=True)
 class ApproachParams:
-    gate_dist: float = 2.0          # m sau tam bai (tag 25 cm doc duoc toi ~3 m o 25 px)
+    # m sau tam bai. 2,0 m lam mat tag tai cong khi bat dau tien (chuc mui ~7 do thi mep tren anh
+    # ha xuong, tag 2 m truoc o do cao 2 m = 45 do ra khoi khung - test_approach_visibility). Giu
+    # canh xa tag duoi ~41 do de con thay khi chuc mui 10 do: o 2 m cao -> <= 1,6 m.
+    gate_dist: float = 1.5
     gate_alt: float = 2.0           # m tren mat bai tai cong G
     final_alt: float = 1.1          # m tren tam bai khi toi noi (dai chuyen giao tag to -> nho)
     corridor_deg: float = 25.0      # nua goc hanh lang sau bai coi la "da thang hang"
