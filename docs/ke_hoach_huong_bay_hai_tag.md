@@ -68,20 +68,66 @@ Ba trạng thái mới (Q6), nối vào bảng `TRANSITIONS` hiện có:
 | Trạng thái | Giá trị | Làm gì | Xong khi |
 |---|---|---|---|
 | `ALIGN_HEADING` | 11 | Treo tại chỗ (đang neo trên tag), quay mũi về **phương vị tới điểm kế tiếp** | \|lệch yaw\| ≤ 5° giữ 1 s |
-| `PAD_ALIGN` | 12 | Đã căn tâm trên tag to ở độ cao tiếp cận, quay mũi theo **yaw_pad** | \|lệch yaw\| ≤ 5° và tag to vẫn thấy |
+| `PAD_ALIGN` | 12 | **Tiếp cận thẳng hàng trục bãi** (mục 2b): qua cổng G sau bãi, mũi = **yaw_pad**, hạ dốc | tới trên tâm bãi ~1,1 m, \|lệch yaw\| ≤ 5° |
 | `FINAL_APPROACH` | 13 | Hạ từ dải chuyển giao xuống, căn tâm theo **tag nhỏ** (quy về tâm bãi), hạ mù đoạn cuối | chạm đất → `ACTUATE_GRIPPER` |
 
 Chuỗi một chặng (home → A):
 
 ```
-TAKEOFF (neo bằng tag home) → ALIGN_HEADING (mũi về A) → ENROUTE (bay cao 3–5 m, mũi luôn về A;
-gần A thì hạ xuống 2,5 m) → MARKER_SEARCH (bắt tag to A) → PRECISION_LAND (căn tâm ở 2,5 m rồi hạ
-xuống ~1,2 m) → PAD_ALIGN (quay theo yaw_pad A) → PRECISION_LAND (hạ tiếp tới dải chuyển giao)
-→ FINAL_APPROACH (tag nhỏ, hạ mù < 0,15 m) → ACTUATE_GRIPPER → TAKEOFF → ALIGN_HEADING (mũi về B) → …
+TAKEOFF (neo bằng tag home) → ALIGN_HEADING (mũi về cổng G của A) → ENROUTE (bay cao theo alt_m,
+mũi luôn về G; thấy tag A → neo, tính lại G) → PAD_ALIGN (vào thẳng trục bãi qua G, hạ dốc tới
+~1,1 m, mũi = yaw_pad — mục 2b) → FINAL_APPROACH (tag nhỏ, hạ mù < 0,15 m) → ACTUATE_GRIPPER →
+TAKEOFF → ALIGN_HEADING (mũi về cổng G của B) → …
+(Không thấy tag khi tới G → MARKER_SEARCH như cũ.)
 ```
 
 Các quy tắc giữ nguyên tinh thần FSM hiện tại: mất tag **trên** ngưỡng hạ mù vẫn là một lần thất
 bại (về `MARKER_SEARCH`), không hạ mù sớm; mỗi lần thử có giới hạn.
+
+## 2b. Tiếp cận mượt — bổ sung 2026-10-08 (THAY cách "treo rồi quay" ở `PAD_ALIGN`)
+
+**Yêu cầu user:** trong lúc bay, camera liên tục tìm tag đích; thấy đúng tag thì dùng vị trí đọc từ
+tag cập nhật quỹ đạo liên tục, để **tới nơi đã đúng hướng bãi** — không quay mũi khi đã ở trên bãi
+(quay lúc đó làm camera quay theo, mất tag).
+
+**Ràng buộc hình học** (camera nghiêng 20°, lệch 90 mm, tag to 25 cm đọc tới ~3,0 m ở 25 px):
+camera chỉ thấy tới 16° **sau** phương thẳng đứng, ngang ±47°. Muốn tới nơi đúng hướng bãi mà vẫn
+thấy tag suốt đường thì phải **đi vào từ phía SAU bãi, dọc trục bãi** (như máy bay vào đường băng).
+
+```
+                    ▲ hướng bãi (yaw_pad, phía "TRÊN")
+               [tag nhỏ]
+               [ TAG TO ]  ← tới đây ở ~1,1 m, mũi đã đúng hướng → FINAL_APPROACH
+                   ▲
+                   │  bay thẳng + hạ dốc ~24°, mũi = yaw_pad, tag luôn ở phía trước
+                   │
+                 (G) cổng tiếp cận: 2,0 m SAU tâm bãi, độ cao 2,0 m
+                 ╱
+   ENROUTE ─────╯  (mũi luôn hướng tới đích đang nhắm: G rồi tâm bãi)
+```
+
+**Luật dẫn (chạy liên tục, không có điểm dừng quay):**
+1. `ENROUTE`: mũi = phương vị tới **cổng G** (không phải tới tâm bãi); độ cao bay xa theo `alt_m`.
+   Camera nhìn trước nên thấy tag đích sớm nhất có thể; thấy đúng ID → EKF neo theo tag (vị trí +
+   hướng, WP4) → G và trục bãi được tính lại theo số đo tag mới nhất ở MỖI chu kỳ.
+2. Cách G ~1,5 m: **trộn dần** hướng mũi từ "phương vị tới G" sang `yaw_pad` theo khoảng cách, và
+   bám **đường thẳng trục bãi** (sai lệch ngang so với trục → vận tốc ngang sửa dần, như ILS).
+3. Qua G: mũi = `yaw_pad`, đi dọc trục về tâm bãi, hạ dốc tới ~1,1 m (dải chuyển giao 0,73–1,1 m).
+4. Ràng buộc mọi lúc: |hướng mũi − phương vị tới tag| < 35° (trong FOV ±47° có biên); vượt thì
+   giảm tốc ngang, ưu tiên quay mũi giữ tag; tốc độ quay ≤ 30 °/s.
+5. Tới khoảng cách ngang < `acceptance` trên tâm bãi → `FINAL_APPROACH` (tag nhỏ).
+
+**Trường hợp drone tới từ PHÍA TRƯỚC bãi** (đích nằm ngược hướng bãi): G ở sau bãi nên drone phải
+vòng qua — bay vòng cung bán kính ≥ 2,0 m quanh tâm bãi tới G (mũi hướng theo đường đi, tag có thể
+ra khỏi khung một lúc, EKF giữ vị trí); tới G quay về `yaw_pad` thì tag lại ngay phía trước. Gợi ý
+khi đặt bãi: cho mũi tên TRÊN chỉ **theo hướng drone thường bay tới** thì luôn vào thẳng, không vòng.
+
+**Hệ quả lên các trạng thái 0.8:** `PAD_ALIGN` (12) đổi nghĩa thành **"tiếp cận thẳng hàng trục bãi"**
+(bước 2–3, bao cả đoạn vòng), không còn là treo tại chỗ rồi quay. Quy tắc user đã chốt giữ nguyên:
+hết thời hạn mà chưa thẳng hàng → hạ tiếp bằng tag to. `ALIGN_HEADING` (11) vẫn dùng sau cất cánh.
+
+**Cần có trước:** WP0 (yaw FC), WP4 (yaw từ tag — để trục bãi đo được chính xác), WP5 (điều khiển
+yaw), WP6 (đích hạ cánh từ hai tag). Luật dẫn viết thành hàm thuần (pytest) trong WP7.
 
 ## 3. Gói việc
 
@@ -179,10 +225,11 @@ thật, tâm bãi báo ra khớp thước ±2 cm khi chỉ thấy tag nhỏ.
 
 - 3 trạng thái mới + `TRANSITIONS` + `MissionState.msg` + `mission_manager_node` (phát setpoint
   yaw).
-- `ENROUTE`: yaw = phương vị tới đích khi còn > 1,5 m (đứng gần thì giữ yaw để không quay vòng);
-  hạ xuống độ cao tiếp cận khi còn trong bán kính tiếp cận (tham số, đề xuất 5 m).
-- `PRECISION_LAND` hai pha quanh `PAD_ALIGN`; `PRECISION_BLIND_BELOW_M` thay bằng ngưỡng hạ mù
-  của `FINAL_APPROACH` (~0,15 m) và **tính từ hình học** thay vì hằng số.
+- `ENROUTE` → `PAD_ALIGN` theo luật dẫn mục 2b (hàm thuần, pytest): đích trung gian là cổng G
+  (2,0 m sau tâm bãi, 2,0 m cao), tính lại mỗi chu kỳ từ vị trí + hướng tag; trộn hướng mũi theo
+  khoảng cách; bám trục bãi; ràng buộc |mũi − phương vị tag| < 35°; vòng cung khi tới từ phía trước.
+- `PRECISION_LAND` (cũ) giữ cho bãi KHÔNG có hướng (không có tag nhỏ); `PRECISION_BLIND_BELOW_M`
+  thay bằng ngưỡng hạ mù của `FINAL_APPROACH` (~0,15 m) và **tính từ hình học** thay vì hằng số.
 - `MARKER_SEARCH`: thêm **quét bằng quay mũi** (camera nhìn trước nên quay 360° phủ vòng quanh)
   trước khi bay mẫu tìm.
 - pytest cho từng chuyển trạng thái mới (bộ test FSM hiện có làm khung).
@@ -228,7 +275,7 @@ WP1–WP4 và WP6 **không cần** WP0 — làm được ngay trong lúc chờ s
 | R1 | Yaw FC vẫn yếu → quay chậm/lắc, tag nhỏ không vào khung | WP0 trước; phương án 4 tag nhỏ quanh tag to (quay tối đa 45°) giữ làm dự phòng |
 | R2 | Lệch 90°/180° do hiểu sai hướng "trên" của tag | M6 + test xoay tay ở WP9.1 |
 | R3 | Yaw IMU và yaw tag giằng nhau trong EKF | Đo M4 trước khi bật (WP4.1) |
-| R4 | Gió ngoài trời đẩy lệch khi quay mũi ở độ cao thấp | Quay ở 1,2 m (`PAD_ALIGN`) khi tag to còn neo vị trí; giới hạn 30 °/s |
+| R4 | Gió ngoài trời đẩy lệch khi đang tiếp cận | Bám trục bãi bằng vị trí tag (cập nhật liên tục); không quay mũi khi đã trên bãi; giới hạn 30 °/s |
 | R5 | `decimate: 2` giảm một nửa độ phân giải dò tag → cự ly thực ngắn hơn số tính | Đo M5; nếu thiếu, giảm `decimate` khi thấp (đổi tham số động) |
 | R6 | Optical flow chưa thử chuyển động thật, tần số ~1 Hz (`quality_level`) | Thử dịch quãng đã biết trước WP9.3; xem lại `quality_level` |
 | R7 | Đổi giao ước làm lệch CRC hai bên | Bản đồ không yaw giữ CRC cũ; thử bằng `gcs_sim.py` trước Pi thật |

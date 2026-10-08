@@ -89,7 +89,7 @@
         <description>Ban 0.8. Dang treo tren tag (da neo), quay mui ve phuong vi toi diem ke tiep truoc khi bay.</description>
       </entry>
       <entry value="12" name="DRONE_STATE_PAD_ALIGN">
-        <description>Ban 0.8. Da can tam tren tag to cua bai, quay mui theo huong bai (yaw_cdeg cua tag) de tag nho vao khung hinh khi ha thap.</description>
+        <description>Ban 0.8. Tiep can THANG HANG truc bai: qua cong G (sau bai, nguoc huong yaw_cdeg) roi bay doc truc bai, mui = huong bai, ha doc toi tren tam bai - toi noi da dung huong, khong quay tai cho (tag nho vao khung khi ha thap). Het thoi han chua thang hang -> ha tiep bang tag to.</description>
       </entry>
       <entry value="13" name="DRONE_STATE_FINAL_APPROACH">
         <description>Ban 0.8. Ha doan cuoi theo tag nho cua bai (tag to da ra khoi khung hinh), ha mu doan sat dat.</description>

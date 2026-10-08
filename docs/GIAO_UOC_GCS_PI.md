@@ -962,9 +962,11 @@ bốn, không sửa gì.**
 (`docs/ke_hoach_huong_bay_hai_tag.md` phía Pi):
 
 - `ALIGN_HEADING` — đang treo trên tag (đã neo), quay mũi về phương vị tới điểm kế tiếp rồi mới bay.
-- `PAD_ALIGN` — đã căn tâm trên tag to của bãi, quay mũi theo hướng bãi (`yaw_cdeg`, 8.7) để tag nhỏ
-  vào khung hình khi hạ thấp. Hết thời hạn mà chưa quay xong thì **hạ tiếp bằng tag to**, không tính
-  là thất bại.
+- `PAD_ALIGN` — **tiếp cận thẳng hàng trục bãi**: qua cổng tiếp cận phía SAU bãi (ngược hướng
+  `yaw_cdeg`, 8.7) rồi bay dọc trục bãi với mũi đã đúng hướng bãi, hạ dốc tới trên tâm bãi — tới nơi
+  không phải quay tại chỗ (quay lúc đó làm camera mất tag). Hết thời hạn mà chưa thẳng hàng thì **hạ
+  tiếp bằng tag to**, không tính là thất bại. *(Sửa nghĩa 2026-10-08 trước khi 0.8 lên dây; bản đầu
+  là "treo rồi quay tại chỗ".)*
 - `FINAL_APPROACH` — hạ đoạn cuối theo tag nhỏ (tag to đã ra khỏi khung hình), hạ mù đoạn sát đất.
 
 GCS cũ (< 0.8) không biết ba giá trị này: theo R1 phải hiện "không rõ" chứ không được crash.
