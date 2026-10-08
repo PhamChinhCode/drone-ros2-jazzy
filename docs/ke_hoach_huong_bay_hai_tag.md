@@ -1,6 +1,10 @@
 # Kế hoạch: bay quay mũi về đích và hạ cánh bằng hai tag
 
-*Lập 2026-10-08. Trạng thái: **ĐỀ XUẤT** — chưa viết code. Người làm: Pi + GCS (Claude), FC (user).*
+*Lập 2026-10-08. Người làm: Pi + GCS (Claude), FC (user).*
+
+**Tiến độ (2026-10-08):** WP1 ✅ (giao ước 0.8, CRC_EXTRA không đổi) · WP2 ✅ (Pi: bản đồ có hướng,
+tag nhỏ tự suy; sửa lỗi `tag_frames` lệch `apriltag.yaml` từ 09-17) · WP3 ✅ (GCS: ô "Đã đo hướng",
+migration cột `yaw_valid`; thử trên dây với Pi miền ROS riêng: CRC khớp). Còn: WP0 (user), WP4–WP9.
 
 ## 0. Tóm tắt
 
