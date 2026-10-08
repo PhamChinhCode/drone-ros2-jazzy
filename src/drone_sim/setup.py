@@ -13,6 +13,7 @@ setup(
         ('share/' + package_name, ['package.xml', 'README.md']),
         ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
         ('share/' + package_name + '/worlds', glob('worlds/*.sdf')),
+        ('share/' + package_name + '/config', ['config/sim_tags.yaml']),
         ('share/' + package_name + '/config/missions', glob('config/missions/*.yaml')),
     ],
     install_requires=['setuptools'],

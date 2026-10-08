@@ -24,11 +24,13 @@ import rclpy
 from apriltag_msgs.msg import AprilTagDetection, AprilTagDetectionArray
 from geometry_msgs.msg import TransformStamped
 from nav_msgs.msg import Odometry
+from rclpy.exceptions import ParameterUninitializedException
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from tf2_ros import StaticTransformBroadcaster, TransformBroadcaster
 
 from drone_control.qos import SENSOR_QOS
+from drone_estimation.pad_map import build_pad_map, parse_headings
 
 # Lay tu estimation.launch.py - phai khop voi drone that.
 BASE_TO_CAM_XYZ = (0.09, 0.0, 0.0)          # do 2026-10-08: truoc tam 90 mm
@@ -74,22 +76,46 @@ class SimTagNode(Node):
         super().__init__('sim_tag_node')
         self.declare_parameter('odom_topic', '/model/X3/odometry')
         self.declare_parameter('publish_rate_hz', 30.0)      # apriltag that do duoc ~29 Hz (7.1)
-        # Nua goc FOV suy tu hieu chinh 640x400 (fx 323.62, fy 320.33): atan(320/fx), atan(200/fy)
-        self.declare_parameter('hfov_half_deg', 44.7)
-        self.declare_parameter('vfov_half_deg', 32.0)
+        # Chieu bang noi tai THAT (camera_info Pi 5, 2026-10-08): cy = 180 nen FOV doc LECH - nhin
+        # xuong 36,3 do nhung chi len 31,1 do so voi truc quang. Hinh chop doi xung +-32 do cu (fx
+        # 323,6) cho thay tag gan duoi than lau hon thuc te.
+        self.declare_parameter('fx', 299.94)
+        self.declare_parameter('fy', 298.75)
+        self.declare_parameter('cx', 321.58)
+        self.declare_parameter('cy', 180.21)
+        self.declare_parameter('image_width', 640)
+        self.declare_parameter('image_height', 400)
+        # Ca tag (canh tag_size_m; tag nho: pad_small_tag_size_m) phai nam trong anh va canh
+        # >= min_tag_px moi tinh la thay.
+        self.declare_parameter('tag_size_m', 0.25)
+        self.declare_parameter('min_tag_px', 20.0)
         self.declare_parameter('max_range_m', 8.0)
         self.declare_parameter('min_range_m', 0.15)
         self.declare_parameter('noise_m', 0.0)               # nhieu pose tag, gia lap sai so PnP
         self.declare_parameter('dropout_prob', 0.0)          # ti le khung bi mat detection
         self.declare_parameter('known_tags', Parameter.Type.DOUBLE_ARRAY)
         self.declare_parameter('tag_frames', Parameter.Type.STRING_ARRAY)
+        # Bai hai tag (tags.yaml): bai co huong thi co tag nho id + offset, truoc tam forward_m.
+        self.declare_parameter('known_tags_heading', Parameter.Type.DOUBLE_ARRAY)
+        self.declare_parameter('pad_small_tag_id_offset', 10)
+        self.declare_parameter('pad_small_tag_forward_m', 0.22)
+        self.declare_parameter('pad_small_tag_size_m', 0.10)
 
-        flat = self.get_parameter('known_tags').value
-        frames = self.get_parameter('tag_frames').value
-        self.tags = {int(flat[i * 4]): (np.array(flat[i * 4 + 1:i * 4 + 4]), frames[i])
-                     for i in range(len(frames))}
-        self.get_logger().info(
-            'tag mo phong: ' + ', '.join(f'{i} @ {tuple(p)} ({f})' for i, (p, f) in self.tags.items()))
+        g = self.get_parameter
+        try:
+            headings = parse_headings(g('known_tags_heading').value)
+        except ParameterUninitializedException:
+            headings = {}
+        pads = build_pad_map(g('known_tags').value, g('tag_frames').value, headings,
+                             g('pad_small_tag_id_offset').value, g('pad_small_tag_forward_m').value)
+        # id -> (vi tri, ten khung, canh, ma tran xoay tag -> the gioi theo huong bai)
+        self.tags = {i: (np.array(t.pos), t.frame,
+                         g('pad_small_tag_size_m').value if t.small else g('tag_size_m').value,
+                         rpy_to_mat(t.yaw or 0.0, 0.0, 0.0))
+                     for i, t in pads.items()}
+        self.get_logger().info('tag mo phong: ' + ', '.join(
+            f'{i} @ {tuple(np.round(p, 3))} ({f}, {s:.2f} m)'
+            for i, (p, f, s, _) in self.tags.items()))
 
         # base_link -> camera_optical_frame, gop san (khong doi trong luc chay).
         r_cam = rpy_to_mat(*BASE_TO_CAM_RPY)
@@ -123,17 +149,25 @@ class SimTagNode(Node):
     def on_odom(self, msg):
         self.odom = msg
 
-    def visible(self, v_opt):
-        """v_opt: vi tri tag trong khung anh (x phai, y xuong, z theo huong nhin)."""
+    def visible(self, v_opt, size_m):
+        """v_opt: vi tri tag trong khung anh (x phai, y xuong, z theo huong nhin).
+
+        Chieu tam tag bang K that; tag thay duoc khi ca o vuong canh = kich thuoc tag (theo pixel)
+        nam trong anh va du lon. Gan dung: bo qua meo ong kinh va do nghieng cua mat tag.
+        """
+        g = self.get_parameter
         z = v_opt[2]
         if z <= 0.0:
             return False                      # tag o phia sau camera
         d = float(np.linalg.norm(v_opt))
-        if not (self.get_parameter('min_range_m').value <= d
-                <= self.get_parameter('max_range_m').value):
+        if not (g('min_range_m').value <= d <= g('max_range_m').value):
             return False
-        return (abs(v_opt[0]) <= math.tan(math.radians(self.get_parameter('hfov_half_deg').value)) * z
-                and abs(v_opt[1]) <= math.tan(math.radians(self.get_parameter('vfov_half_deg').value)) * z)
+        u = g('cx').value + g('fx').value * v_opt[0] / z
+        v = g('cy').value + g('fy').value * v_opt[1] / z
+        half = 0.5 * g('fx').value * size_m / d
+        return (2.0 * half >= g('min_tag_px').value
+                and half <= u <= g('image_width').value - half
+                and half <= v <= g('image_height').value - half)
 
     def tick(self):
         if self.odom is None:
@@ -150,10 +184,10 @@ class SimTagNode(Node):
         det_msg.header.stamp = stamp
         det_msg.header.frame_id = 'camera_optical_frame'
         tfs = []
-        for tag_id, (p_tag_w, frame) in self.tags.items():
+        for tag_id, (p_tag_w, frame, size_m, r_w_tag) in self.tags.items():
             v_base = r_wb.T @ (p_tag_w - p_w)                 # tag trong base_link
             v_opt = self.r_base_opt.T @ (v_base - self.t_base_opt)
-            if not self.visible(v_opt) or random.random() < dropout:
+            if not self.visible(v_opt, size_m) or random.random() < dropout:
                 continue
             if noise > 0.0:
                 v_opt = v_opt + np.array([random.gauss(0.0, noise) for _ in range(3)])
@@ -161,7 +195,7 @@ class SimTagNode(Node):
             det.id = tag_id
             det_msg.detections.append(det)
             tfs.append(self.make_tf('camera_optical_frame', frame, v_opt,
-                                    self.r_base_opt.T @ r_wb.T))
+                                    self.r_base_opt.T @ r_wb.T @ r_w_tag))
         if tfs:
             self.tf_bc.sendTransform(tfs)
         self.pub_det.publish(det_msg)

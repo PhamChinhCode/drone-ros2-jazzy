@@ -1,0 +1,9 @@
+# Nhiem vu mo phong hai chang: gap tai pad_a (tag 1, x = 10 m) roi bay ve tha tai pad_home (tag 0).
+# Gui: ros2 run drone_mission send_mission_plan $(ros2 pkg prefix drone_sim)/share/drone_sim/config/missions/sim_pick_drop.yaml
+mission_id: 902
+plan_name: sim_pick_drop
+max_retries: 2
+search_timeout_s: 10.0
+waypoints:
+  - {marker_id: 1, action: pickup,  alt_m: 2.0, acceptance_radius_m: 0.5, max_vel_mps: 1.9, loiter_s: 1.0}
+  - {marker_id: 0, action: dropoff, alt_m: 2.0, acceptance_radius_m: 0.5, max_vel_mps: 1.9, loiter_s: 1.0}

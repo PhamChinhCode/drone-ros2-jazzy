@@ -1,5 +1,7 @@
 """Kiem lop FC cua MissionFsm (giao uoc 6.2, 6.3, P2/P10) bang Snapshot tu dung."""
 
+import math
+
 import pytest
 
 from drone_mission import mission_fsm as m
@@ -895,3 +897,87 @@ def test_abort_giua_luc_giu_MISSION_COMPLETE_khong_lam_fsm_ket():
     assert fsm.state == m.IDLE and fsm.abort_requested is False
     fsm.step(snap(2.4, armed=False, landed=True))
     assert fsm.state == m.IDLE
+
+
+# ---- WP7: tiep can thang hang bai co huong (PAD_ALIGN) + yaw (WP5) ---------------------------
+
+PAD_YAWS = {1: math.pi / 2}           # tag 1 tai (10, 0) quay Bac: phia "tren" = +y
+
+
+def fsm_bay_toi_bai_co_huong(yaw_control=True):
+    fsm = m.MissionFsm(params=m.Params(takeoff_alt_m=1.0, yaw_control=yaw_control))
+    assert fsm.load_plan(1, [wp(0, marker=1, alt_m=2.0, max_vel_mps=1.5)], 0, 0.0, TAGS,
+                         PAD_YAWS) == ''
+    fsm.request_start(0.0)
+    fsm.step(snap(0.0, arm_ready=True))
+    fsm.step(snap(0.5, armed=True))
+    fsm.step(snap(0.6, armed=True, range_m=1.0))
+    assert fsm.state == m.ENROUTE
+    return fsm
+
+
+def test_tat_yaw_control_thi_bay_nhu_cu():
+    fsm = fsm_bay_toi_bai_co_huong(yaw_control=False)
+    act = fsm.step(snap(0.8, armed=True, range_m=1.0, position=(0.0, 0.0, 2.0), yaw=0.0))
+    assert act.yaw_target is None
+    fsm.step(snap(1.0, armed=True, range_m=1.0, position=(9.9, 0.0, 2.0), yaw=0.0))
+    assert fsm.state == m.MARKER_SEARCH                 # khong qua PAD_ALIGN
+
+
+def test_enroute_mui_theo_duong_bay_gan_bai_thi_vao_pad_align():
+    fsm = fsm_bay_toi_bai_co_huong()
+    act = fsm.step(snap(0.8, armed=True, range_m=1.0, position=(0.0, -10.0, 2.0), yaw=0.0))
+    assert act.yaw_target == pytest.approx(math.atan2(10.0, 10.0))
+    fsm.step(snap(1.0, armed=True, range_m=1.0, position=(7.0, 0.0, 2.0), yaw=0.0))
+    assert fsm.state == m.PAD_ALIGN
+    act = fsm.step(snap(1.2, armed=True, range_m=1.0, position=(7.0, 0.0, 2.0), yaw=0.0))
+    assert act.position_target is not None and act.yaw_target is not None
+    assert act.expected_marker_id == -1                 # pose tag se cuop truc ngang cua luat dan
+    assert act.max_vel_mps == m.APPROACH_MAX_VEL_MPS
+
+
+def test_pad_align_toi_noi_dung_huong_roi_tim_tag_tai_cho():
+    """Dong hoc don gian: bam diem dich toc do han che, quay mui 30 do/s - toi noi truoc han."""
+    fsm = fsm_bay_toi_bai_co_huong()
+    x, y, z, yaw = 7.0, 1.0, 2.0, 0.0                  # tu phia ben canh bai
+    fsm.step(snap(1.0, armed=True, range_m=1.0, position=(x, y, z), yaw=yaw))
+    assert fsm.state == m.PAD_ALIGN
+    t, dt = 1.0, 0.2
+    while fsm.state == m.PAD_ALIGN:
+        t += dt
+        assert t < 1.0 + m.PAD_ALIGN_TIMEOUT_S, 'khong toi noi truoc han'
+        act = fsm.step(snap(t, armed=True, range_m=z, position=(x, y, z), yaw=yaw))
+        if fsm.state != m.PAD_ALIGN:
+            break
+        tx, ty, tz = act.position_target
+        d = math.dist((x, y, z), (tx, ty, tz))
+        k = min(1.0, act.max_vel_mps * dt / d) if d > 1e-9 else 0.0
+        x, y, z = x + k * (tx - x), y + k * (ty - y), z + k * (tz - z)
+        e = math.atan2(math.sin(act.yaw_target - yaw), math.cos(act.yaw_target - yaw))
+        yaw += max(-math.radians(30) * dt, min(math.radians(30) * dt, e))
+    assert fsm.state == m.MARKER_SEARCH and act.expected_marker_id == 1
+    assert fsm.search_target == pytest.approx((10.0, 0.0, m.APPROACH.final_alt))
+    act = fsm.step(snap(t + dt, armed=True, range_m=z, position=(x, y, z), yaw=yaw))
+    assert act.position_target == fsm.search_target     # giu tai cho, khong leo lai alt_m
+    assert act.yaw_target == pytest.approx(math.pi / 2)
+    act = fsm.step(snap(t + 2 * dt, armed=True, range_m=z, position=(x, y, z), yaw=yaw,
+                        target_offset_m=0.05))
+    assert fsm.state == m.PRECISION_LAND and act.yaw_target == pytest.approx(math.pi / 2)
+
+
+def test_pad_align_qua_han_thi_ha_bang_tag_to():
+    fsm = fsm_bay_toi_bai_co_huong()
+    fsm.step(snap(1.0, armed=True, range_m=1.0, position=(7.0, 0.0, 2.0), yaw=0.0))
+    assert fsm.state == m.PAD_ALIGN
+    act = fsm.step(snap(1.0 + m.PAD_ALIGN_TIMEOUT_S, armed=True, range_m=1.0,
+                        position=(12.0, 3.0, 2.0), yaw=0.0))
+    assert fsm.state == m.MARKER_SEARCH and act.expected_marker_id == 1
+    assert fsm.search_target is None                    # tim tai diem cua waypoint nhu cu
+
+
+def test_pad_align_mat_vi_tri_thi_giu():
+    fsm = fsm_bay_toi_bai_co_huong()
+    fsm.step(snap(1.0, armed=True, range_m=1.0, position=(7.0, 0.0, 2.0), yaw=0.0))
+    act = fsm.step(snap(1.2, armed=True, range_m=1.0, position=None, yaw=None))
+    assert fsm.state == m.PAD_ALIGN and act.velocity_up_mps == 0.0
+    assert act.position_target is None

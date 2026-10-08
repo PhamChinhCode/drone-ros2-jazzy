@@ -1,0 +1,11 @@
+# Nhiem vu mo phong 3 bai (config/sim_tags.yaml): cat canh o home (tag 0), gap hang tai pad_a
+# (tag 1, x = 10 m), tha hang tai pad_b (tag 2, (5, -6)), ve ha o home. Moi bai co tag nho.
+# Gui: ros2 run drone_mission send_mission_plan $(ros2 pkg prefix drone_sim)/share/drone_sim/config/missions/sim_ba_bai.yaml
+mission_id: 903
+plan_name: sim_ba_bai
+max_retries: 2
+search_timeout_s: 10.0
+waypoints:
+  - {marker_id: 1, action: pickup,  alt_m: 2.0, acceptance_radius_m: 0.5, max_vel_mps: 1.9, loiter_s: 1.0}
+  - {marker_id: 2, action: dropoff, alt_m: 2.0, acceptance_radius_m: 0.5, max_vel_mps: 1.9, loiter_s: 1.0}
+  - {marker_id: 0, action: none,    alt_m: 2.0, acceptance_radius_m: 0.5, max_vel_mps: 1.9, loiter_s: 1.0}

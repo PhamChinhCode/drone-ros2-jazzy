@@ -29,7 +29,8 @@ from drone_safety.qos import EVENT_QOS, SENSOR_QOS
 
 STATE_NAMES = {getattr(MissionState, n): n for n in (
     'IDLE', 'TAKEOFF', 'ENROUTE', 'MARKER_SEARCH', 'PRECISION_LAND', 'ACTUATE_GRIPPER',
-    'RETRY_LOITER', 'RTH', 'EMERGENCY_LAND', 'MISSION_COMPLETE', 'FAILSAFE')}
+    'RETRY_LOITER', 'RTH', 'EMERGENCY_LAND', 'MISSION_COMPLETE', 'FAILSAFE', 'ALIGN_HEADING',
+    'PAD_ALIGN', 'FINAL_APPROACH')}
 PHOTO_MAX_AGE_S = 1.0          # anh cu hon muc nay khong con la anh "tai thoi diem" gap/tha
 
 

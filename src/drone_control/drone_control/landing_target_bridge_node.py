@@ -14,6 +14,12 @@ Phat trong he THAN PHANG base_level (2026-10-08, drone_control.level_frame): goc
 base_link nhung bo roll/pitch. Camera gan cung than: than nghieng 5-10 do (tang toc, ham) thi tag
 ngay duoi bi bao lech ngang 9-17 cm o 1 m trong base_link -> dieu khien ha canh sua theo lech gia.
 Roll/pitch lay tu TF world_frame -> base_link (EKF, nguon IMU); vi tri EKF khong anh huong.
+
+Bai hai tag (giao uoc GCS 0.8, docs/ke_hoach_huong_bay_hai_tag.md): xuong thap thi tag to ra khoi
+khung (camera nghieng, lap truoc tam), tag nho id + offset nam forward_m ve phia "tren" bai con
+thay. Thay tag to thi dung tag to; chi thay tag nho thi suy TAM BAI tu tag nho - dau ra van la
+tam bai, mission/controller khong can biet dang bam tag nao. Bai khong khai huong: khong co tag
+nho.
 """
 
 from concurrent.futures import ThreadPoolExecutor
@@ -32,9 +38,10 @@ from rclpy.time import Time
 from std_msgs.msg import Bool, Int32
 from tf2_ros import Buffer, TransformException, TransformListener
 
-from drone_control.level_frame import to_level
+from drone_control.level_frame import small_to_pad_center, to_level, yaw_of
 from drone_control.qos import EVENT_QOS, SENSOR_QOS
 from drone_control.target_tracker import TargetTracker
+from drone_estimation.pad_map import build_pad_map, parse_headings
 
 
 class LandingTargetBridgeNode(Node):
@@ -52,17 +59,25 @@ class LandingTargetBridgeNode(Node):
         # Ban do tag dung chung (config/tags.yaml): chi can ID -> ten khung TF.
         self.declare_parameter('known_tags', Parameter.Type.DOUBLE_ARRAY)
         self.declare_parameter('tag_frames', Parameter.Type.STRING_ARRAY)
+        self.declare_parameter('known_tags_heading', Parameter.Type.DOUBLE_ARRAY)
+        self.declare_parameter('pad_small_tag_id_offset', 10)
+        self.declare_parameter('pad_small_tag_forward_m', 0.22)
+        self.forward_m = self.get_parameter('pad_small_tag_forward_m').value
 
         try:
-            flat = self.get_parameter('known_tags').value
-            frames = self.get_parameter('tag_frames').value
-            ids = [int(flat[i]) for i in range(0, len(flat), 4)]
-            if len(ids) != len(frames):
-                raise ValueError(f'tag_frames co {len(frames)} ten, known_tags co {len(ids)} tag')
-            self.tag_frames = dict(zip(ids, frames))
+            headings = parse_headings(self.get_parameter('known_tags_heading').value)
         except ParameterUninitializedException:
-            self.tag_frames = {}
+            headings = {}
+        try:
+            self.pads = build_pad_map(
+                self.get_parameter('known_tags').value, self.get_parameter('tag_frames').value,
+                headings, self.get_parameter('pad_small_tag_id_offset').value, self.forward_m)
+        except ParameterUninitializedException:
+            self.pads = {}
             self.get_logger().error('chua nap config/tags.yaml - khong bam duoc tag nao')
+        self.tag_frames = {i: t.frame for i, t in self.pads.items() if not t.small}
+        self.small_of = {t.pad_id: i for i, t in self.pads.items() if t.small}   # id to -> id nho
+        self.source = None              # tag dang bam: 'to' | 'nho' (chi de ghi log khi doi)
 
         self.expected_id = -1
         self.tracker = TargetTracker(self.get_parameter('timeout_s').value)
@@ -98,9 +113,16 @@ class LandingTargetBridgeNode(Node):
             self.get_logger().warning(f'tag {msg.data} khong co trong config/tags.yaml')
 
     def on_detections(self, msg):
-        """Chi xu ly detection co ID == expected_id; chuyen pose tag sang target_frame qua TF."""
-        frame = self.tag_frames.get(self.expected_id)
-        if frame is None or not any(d.id == self.expected_id for d in msg.detections):
+        """Chi xu ly tag to expected_id hoac tag nho cua chinh bai do; ra tam bai qua TF."""
+        if self.expected_id not in self.tag_frames:
+            return
+        seen = {d.id for d in msg.detections}
+        small_id = self.small_of.get(self.expected_id)
+        if self.expected_id in seen:
+            small, frame = False, self.tag_frames[self.expected_id]
+        elif small_id is not None and small_id in seen:
+            small, frame = True, self.pads[small_id].frame
+        else:
             return
         target = self.get_parameter('target_frame').value
         try:
@@ -116,8 +138,15 @@ class LandingTargetBridgeNode(Node):
         self.last_tf_stamp = stamp
 
         tr, rq = t.transform.translation, t.transform.rotation
-        pos, quat = to_level((att.x, att.y, att.z, att.w), (tr.x, tr.y, tr.z),
-                             (rq.x, rq.y, rq.z, rq.w))
+        q_wb = (att.x, att.y, att.z, att.w)
+        pos, quat = to_level(q_wb, (tr.x, tr.y, tr.z), (rq.x, rq.y, rq.z, rq.w))
+        if small:
+            pos = small_to_pad_center(pos, yaw_of(q_wb), self.pads[small_id].yaw, self.forward_m)
+        source = 'nho' if small else 'to'
+        if source != self.source:
+            self.get_logger().info(f'bai {self.expected_id}: bam theo tag {source} '
+                                   f'(id {small_id if small else self.expected_id})')
+            self.source = source
         out = PoseStamped()
         out.header.stamp = t.header.stamp
         out.header.frame_id = 'base_level'      # khong co TF ten nay - xem docstring dau file

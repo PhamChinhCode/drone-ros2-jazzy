@@ -6,6 +6,16 @@
 tag nhỏ tự suy; sửa lỗi `tag_frames` lệch `apriltag.yaml` từ 09-17) · WP3 ✅ (GCS: ô "Đã đo hướng",
 migration cột `yaw_valid`; thử trên dây với Pi miền ROS riêng: CRC khớp). Còn: WP0 (user), WP4–WP9.
 
+**Tiến độ (2026-10-08, tối):**
+- WP6 ✅ (code + Gazebo). `landing_target_bridge_node` chuyển tag to → tag nhỏ, đầu ra vẫn là tâm bãi.
+  Chưa làm: phát `yaw_pad`; thử tay trên bãi in.
+- WP5 🟡 chỉ mô phỏng. `/mission/yaw` → vòng P yaw 30 °/s trong `position_controller_node`.
+  Cờ `mission.yaml yaw_control` để **false** trên drone thật cho tới khi xong WP0.
+- WP7 🟡. `PAD_ALIGN` (12) dùng `approach_guidance`; quá 60 s thì hạ bằng tag to; MARKER_SEARCH giữ
+  tại điểm tới nơi.
+  Gazebo `sim_ba_bai.yaml`: ba bãi quay W/N/S, mũi khớp hướng bãi 0,0°, lệch tâm 0,2 cm.
+  Chưa làm: ALIGN_HEADING/FINAL_APPROACH (11/13), quét bằng quay mũi, ngưỡng hạ mù tính từ hình học.
+
 ## 0. Tóm tắt
 
 Drone cất cánh tại home, neo vị trí bằng tag, **quay mũi về điểm đến** rồi bay tới với camera

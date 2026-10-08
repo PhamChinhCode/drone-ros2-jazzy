@@ -42,6 +42,7 @@ from drone_control.pid import PID, check_gain_param
 from drone_control.qos import EVENT_QOS, SENSOR_QOS
 from drone_control.setpoint_limits import limit_velocity
 from drone_control.setpoint_ramp import SetpointRamp
+from drone_control.yaw_control import yaw_rate_command
 from drone_interfaces.msg import MissionState
 
 FRAME_BODY_NED = 8
@@ -52,6 +53,7 @@ LANDING_STALE_S = 0.5           # pose tag ~25 Hz; bridge ngung phat khi mat tag
 # mission_manager_node phat /mission/setpoint 5 Hz chi trong trang thai can bay toi diem; qua han
 # -> bo, khong bam mai diem den cu sau khi nhiem vu da doi trang thai.
 MISSION_SETPOINT_STALE_S = 0.5
+YAW_SETPOINT_STALE_S = 0.5      # /mission/yaw 5 Hz; im = FSM khong muon quay mui -> yaw_rate 0
 
 # Nguon van toc: truc ngang (xy) va truc dung + yaw (z) tach rieng vi tag chi thay xy.
 SOURCE_NONE = 'none'
@@ -77,6 +79,9 @@ class PositionControllerNode(Node):
         self.declare_parameter('ramp_duration_s', 0.8)
         # mission_manager_node phat /mission/state 5 Hz bang timer: 1 s = mat 5 ban lien tiep.
         self.declare_parameter('mission_timeout_s', 1.0)
+        # Vong yaw (WP5): chi chay khi mission phat /mission/yaw (mission.yaml yaw_control).
+        self.declare_parameter('yaw.kp', 1.0)                # 1/s
+        self.declare_parameter('yaw.max_rate_dps', 30.0)
 
         self.pids = {phase: {axis: self._make_pid(phase, axis) for axis in ('x', 'y', 'z')}
                      for phase in ('cruise', 'landing')}
@@ -98,11 +103,14 @@ class PositionControllerNode(Node):
         self.range_stamp_s = None
         self.velocity_setpoint = None
         self.velocity_stamp_s = None
+        self.yaw_setpoint = None
+        self.yaw_stamp_s = None
 
         self.create_subscription(Odometry, '/odometry/filtered', self.on_odom, SENSOR_QOS)
         self.create_subscription(Range, '/range/vertical', self.on_range, SENSOR_QOS)
         self.create_subscription(PoseStamped, '/mission/setpoint', self.on_mission_setpoint, EVENT_QOS)
         self.create_subscription(Float32, '/mission/max_vel', self.on_max_vel, EVENT_QOS)
+        self.create_subscription(Float32, '/mission/yaw', self.on_yaw_setpoint, EVENT_QOS)
         # Lenh van toc FLU truc tiep (cat/ha canh) - uu tien hon duong vi tri khi con moi.
         self.create_subscription(
             TwistStamped, '/mission/velocity_setpoint', self.on_velocity_setpoint, SENSOR_QOS)
@@ -169,6 +177,10 @@ class PositionControllerNode(Node):
             return vx, vy
         k = self.max_vel_mps / speed
         return vx * k, vy * k
+
+    def on_yaw_setpoint(self, msg):
+        self.yaw_setpoint = msg.data
+        self.yaw_stamp_s = self.get_clock().now().nanoseconds / 1e9
 
     def on_velocity_setpoint(self, msg):
         self.velocity_setpoint = msg
@@ -260,6 +272,12 @@ class PositionControllerNode(Node):
             vy = self.pids[xy]['y'].update(errors[xy][1], dt)
         if xy == SOURCE_CRUISE:
             vx, vy = self.limit_waypoint_speed(now_s, vx, vy)
+        if (self.odom is not None and self.yaw_stamp_s is not None
+                and now_s - self.yaw_stamp_s <= YAW_SETPOINT_STALE_S):
+            q = self.odom.pose.pose.orientation
+            yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+            yaw_rate = yaw_rate_command(self.yaw_setpoint, yaw, self.get_parameter('yaw.kp').value,
+                                        math.radians(self.get_parameter('yaw.max_rate_dps').value))
 
         vx, vy, vz, yaw_rate = self.ramp.apply(now_s, (xy, z), (vx, vy, vz, yaw_rate))
         vx, vy, vz, yaw_rate = limit_velocity(vx, vy, vz, yaw_rate, self.current_range_m())

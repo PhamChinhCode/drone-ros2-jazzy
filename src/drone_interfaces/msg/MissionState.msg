@@ -11,6 +11,11 @@ uint8 RTH=7
 uint8 EMERGENCY_LAND=8
 uint8 MISSION_COMPLETE=9
 uint8 FAILSAFE=10
+# Ban 0.8 (giao uoc GCS, docs/ke_hoach_huong_bay_hai_tag.md). Hien chi PAD_ALIGN duoc dung: tag nho
+# do landing_target_bridge_node tu doi trong PRECISION_LAND nen chua can FINAL_APPROACH rieng.
+uint8 ALIGN_HEADING=11
+uint8 PAD_ALIGN=12               # tiep can thang hang truc bai qua cong G
+uint8 FINAL_APPROACH=13
 
 # Ket qua cua chuyen bay GAN NHAT da ket thuc. CHOT lai: giu nguyen sau khi ve IDLE cho toi
 # khi cat canh chuyen moi, nen GCS khoi dong lai luc nao cung hoi lai duoc (giao uoc GCS R5).

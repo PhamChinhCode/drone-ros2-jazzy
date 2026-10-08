@@ -57,7 +57,9 @@ def generate_launch_description():
              name='mission_manager_node',
              parameters=[os.path.join(CONFIG, 'mission.yaml'), TAGS_YAML,
                          {'takeoff_alt_m': ParameterValue(LaunchConfiguration('takeoff_alt_m'),
-                                                          value_type=float)},
+                                                          value_type=float),
+                          # X3 quay yaw duoc: thu WP5 + PAD_ALIGN truoc khi yaw FC that dat WP0.
+                          'yaw_control': True},
                          SIM_TIME],
              output='screen'),
         Node(package='drone_estimation', executable='ekf_health_node', name='ekf_health_node',

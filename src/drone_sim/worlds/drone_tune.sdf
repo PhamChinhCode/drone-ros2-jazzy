@@ -66,26 +66,68 @@
       </link>
     </model>
 
-    <!-- Bai dap pad_home: CHI de nhin, khop config/tags.yaml (khong co tag that - chua gia lap camera) -->
+    <!-- Bai dap pad_home: tag 0 CHI de nhin, khop config/sim_tags.yaml (o den = tag to 25 cm + tag nho 10 cm ve phia "tren" = +x cua model, yaw model = huong bai ENU) -->
     <model name="pad_home">
       <static>true</static>
-      <pose>0 0 0.005 0 0 0</pose>
+      <pose>0 0 0.005 0 0 3.14159</pose>
       <link name="link">
         <visual name="visual">
-          <geometry><box><size>0.5 0.5 0.01</size></box></geometry>
+          <geometry><box><size>0.75 0.5 0.01</size></box></geometry>
           <material><ambient>0.1 0.6 0.1 1</ambient><diffuse>0.1 0.6 0.1 1</diffuse></material>
+        </visual>
+        <visual name="tag_to">
+          <pose>0 0 0.006 0 0 0</pose>
+          <geometry><box><size>0.25 0.25 0.001</size></box></geometry>
+          <material><ambient>0 0 0 1</ambient><diffuse>0 0 0 1</diffuse></material>
+        </visual>
+        <visual name="tag_nho">
+          <pose>0.22 0 0.006 0 0 0</pose>
+          <geometry><box><size>0.10 0.10 0.001</size></box></geometry>
+          <material><ambient>0 0 0 1</ambient><diffuse>0 0 0 1</diffuse></material>
         </visual>
       </link>
     </model>
 
-    <!-- Bai dap pad_a: CHI de nhin, khop config/tags.yaml (khong co tag that - chua gia lap camera) -->
+    <!-- Bai dap pad_a: tag 1 CHI de nhin, khop config/sim_tags.yaml (o den = tag to 25 cm + tag nho 10 cm ve phia "tren" = +x cua model, yaw model = huong bai ENU) -->
     <model name="pad_a">
       <static>true</static>
-      <pose>10 0 0.005 0 0 0</pose>
+      <pose>10 0 0.005 0 0 1.5708</pose>
       <link name="link">
         <visual name="visual">
-          <geometry><box><size>0.5 0.5 0.01</size></box></geometry>
+          <geometry><box><size>0.75 0.5 0.01</size></box></geometry>
           <material><ambient>0.1 0.2 0.8 1</ambient><diffuse>0.1 0.2 0.8 1</diffuse></material>
+        </visual>
+        <visual name="tag_to">
+          <pose>0 0 0.006 0 0 0</pose>
+          <geometry><box><size>0.25 0.25 0.001</size></box></geometry>
+          <material><ambient>0 0 0 1</ambient><diffuse>0 0 0 1</diffuse></material>
+        </visual>
+        <visual name="tag_nho">
+          <pose>0.22 0 0.006 0 0 0</pose>
+          <geometry><box><size>0.10 0.10 0.001</size></box></geometry>
+          <material><ambient>0 0 0 1</ambient><diffuse>0 0 0 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Bai dap pad_b: tag 2 CHI de nhin, khop config/sim_tags.yaml (o den = tag to 25 cm + tag nho 10 cm ve phia "tren" = +x cua model, yaw model = huong bai ENU) -->
+    <model name="pad_b">
+      <static>true</static>
+      <pose>5 -6 0.005 0 0 -1.5708</pose>
+      <link name="link">
+        <visual name="visual">
+          <geometry><box><size>0.75 0.5 0.01</size></box></geometry>
+          <material><ambient>0.8 0.5 0.1 1</ambient><diffuse>0.8 0.5 0.1 1</diffuse></material>
+        </visual>
+        <visual name="tag_to">
+          <pose>0 0 0.006 0 0 0</pose>
+          <geometry><box><size>0.25 0.25 0.001</size></box></geometry>
+          <material><ambient>0 0 0 1</ambient><diffuse>0 0 0 1</diffuse></material>
+        </visual>
+        <visual name="tag_nho">
+          <pose>0.22 0 0.006 0 0 0</pose>
+          <geometry><box><size>0.10 0.10 0.001</size></box></geometry>
+          <material><ambient>0 0 0 1</ambient><diffuse>0 0 0 1</diffuse></material>
         </visual>
       </link>
     </model>

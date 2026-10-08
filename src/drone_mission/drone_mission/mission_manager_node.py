@@ -23,6 +23,7 @@ from std_msgs.msg import Bool, Float32, Int32
 from std_srvs.srv import Trigger
 
 from drone_interfaces.msg import (EkfHealth, FailsafeEvent, GripperCommand, GripperStatus, MissionPlan, MissionPlanAck, MissionState)
+from drone_estimation.pad_map import heading_to_enu_yaw, parse_headings
 from drone_interfaces.srv import Arm, FcSimpleCommand, GotoWaypoint, Takeoff
 from drone_mission import fc_link, mission_fsm
 from drone_mission.fc_command_bridge_node import NAMED_VALUE_QOS
@@ -55,6 +56,9 @@ class MissionManagerNode(Node):
         self.declare_parameter('state_publish_rate_hz', 5.0)
         # Ban do tag dung chung (config/tags.yaml). Khong co GPS: vi tri waypoint suy tu day.
         self.declare_parameter('known_tags', Parameter.Type.DOUBLE_ARRAY)
+        # Huong "tren" cua bai (tags.yaml, giao uoc GCS 0.8) - bai co huong moi tiep can thang hang.
+        self.declare_parameter('known_tags_heading', Parameter.Type.DOUBLE_ARRAY)
+        self.declare_parameter('yaw_control', False)
 
         self.fsm = mission_fsm.MissionFsm(params=mission_fsm.Params(
             search_timeout_s=self.get_parameter('search_timeout_s').value,
@@ -63,7 +67,8 @@ class MissionManagerNode(Node):
             pre_dropoff_settle_s=self.get_parameter('pre_dropoff_settle_s').value,
             takeoff_alt_m=self.get_parameter('takeoff_alt_m').value,
             anchor_margin_m=self.get_parameter('anchor_margin_m').value,
-            anchor_wait_s=self.get_parameter('anchor_wait_s').value))
+            anchor_wait_s=self.get_parameter('anchor_wait_s').value,
+            yaw_control=self.get_parameter('yaw_control').value))
 
         self.snapshot = mission_fsm.Snapshot()
         try:
@@ -72,6 +77,11 @@ class MissionManagerNode(Node):
             self.known_tags = {}
             self.get_logger().warning(
                 'chua nap config/tags.yaml (known_tags) - moi ke hoach se bi tu choi')
+        try:
+            self.pad_yaws = {i: heading_to_enu_yaw(h) for i, h in
+                             parse_headings(self.get_parameter('known_tags_heading').value).items()}
+        except ParameterUninitializedException:
+            self.pad_yaws = {}
         self.plan = None
         self.gripper_seq = 0
         self.landing_detector = LandingDetector()
@@ -85,6 +95,7 @@ class MissionManagerNode(Node):
         self.target_stamp_s = None
         self.position = None
         self.position_stamp_s = None
+        self.yaw = None
         self.arm_future = None           # moi luc chi mot lenh ARM/DISARM dang cho ACK
         self.last_detail = ''
 
@@ -114,6 +125,9 @@ class MissionManagerNode(Node):
         # Tran toc do ngang cua waypoint dang bay toi, di kem /mission/setpoint. Tach topic
         # rieng thay vi them truong vao MissionState: MissionState nam trong giao uoc FC/GCS.
         self.pub_max_vel = self.create_publisher(Float32, '/mission/max_vel', EVENT_QOS)
+        # Yaw mong muon (ENU, rad) cho vong yaw cua position_controller_node (WP5); chi phat khi
+        # FSM muon quay mui - im thi controller giu yaw_rate = 0.
+        self.pub_yaw = self.create_publisher(Float32, '/mission/yaw', EVENT_QOS)
         # Phan quyet ve ke hoach, cho gcs_link_node dich thanh DRONE_MISSION_ACK (muc 3.2).
         self.pub_plan_ack = self.create_publisher(
             MissionPlanAck, '/mission/plan_ack', EVENT_QOS)
@@ -150,7 +164,7 @@ class MissionManagerNode(Node):
                     acceptance_radius_m=w.acceptance_radius_m, max_vel_mps=w.max_vel_mps,
                     loiter_s=w.loiter_s) for w in msg.waypoints]
         refusal = self.fsm.load_plan(msg.mission_id, raw, msg.max_retries, msg.search_timeout_s,
-                                     self.known_tags)
+                                     self.known_tags, self.pad_yaws)
         ack = MissionPlanAck()
         ack.mission_id = msg.mission_id
         ack.accepted = not refusal
@@ -227,8 +241,9 @@ class MissionManagerNode(Node):
         self.snapshot.battery_pct = msg.percentage * 100.0
 
     def on_odom(self, msg):
-        p = msg.pose.pose.position
+        p, q = msg.pose.pose.position, msg.pose.pose.orientation
         self.position = (p.x, p.y, p.z)
+        self.yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
         self.position_stamp_s = self.now_s()
 
     def on_fc_odom(self, msg):
@@ -281,6 +296,7 @@ class MissionManagerNode(Node):
         snap.target_offset_m = self.target_offset_m if target_fresh else None
         odom_fresh = self.position_stamp_s is not None and now - self.position_stamp_s <= ODOM_STALE_S
         snap.position = self.position if odom_fresh else None
+        snap.yaw = self.yaw if odom_fresh else None
 
         prev_state = self.fsm.state
         action = self.fsm.step(snap)
@@ -310,6 +326,8 @@ class MissionManagerNode(Node):
             self.pub_setpoint.publish(msg)
             if action.max_vel_mps is not None:
                 self.pub_max_vel.publish(Float32(data=float(action.max_vel_mps)))
+        if action.yaw_target is not None:
+            self.pub_yaw.publish(Float32(data=float(action.yaw_target)))
         self.publish_mission_state(action.detail, action.expected_marker_id)
 
     def send_gripper(self, lenh):
