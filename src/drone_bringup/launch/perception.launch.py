@@ -87,6 +87,12 @@ def generate_launch_description():
              name='marker_quality_node',
              parameters=[os.path.join(CONFIG, 'perception.yaml')], output='screen'),
 
+        # Sensor khong co auto-exposure: node nay giu do sang ~60 trong nha lan ngoai troi,
+        # exposure/gain tu camera_v4l2_setup.sh (CAM_PROFILE) chi con la diem xuat phat.
+        Node(package='drone_perception', executable='auto_exposure_node',
+             name='auto_exposure_node',
+             parameters=[os.path.join(CONFIG, 'perception.yaml')], output='screen'),
+
         # Optical flow doc anh THO (khong rectify): sai so meo anh nho so voi sai so optical flow.
         # OV9281 la sensor mono nen anh da la mono8 san - khong ton buoc cvtColor.
         Node(package='drone_perception', executable='optical_flow_node',

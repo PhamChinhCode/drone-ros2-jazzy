@@ -20,8 +20,9 @@ CAM_WIDTH=640
 CAM_HEIGHT=400
 CAM_VBLANK=3957       # 30 FPS (đo 09-14). Toàn hệ thống trên Pi 4 bão hoà CPU: ở 60 FPS apriltag chỉ
                       # 3,9 Hz, ở 30 FPS lên 15-16 Hz. KHÔNG dùng 110 (246 FPS).
-# Sensor KHÔNG có auto-exposure: chọn bộ số theo chỗ bay rồi `sudo systemctl restart drone-startup`.
-# Đổi tức thì không cần khởi động lại: v4l2-ctl -d /dev/v4l-subdev0 --set-ctrl=exposure=40,analogue_gain=16
+# Sensor KHÔNG có auto-exposure; từ 2026-10-08 auto_exposure_node tự chỉnh, bộ số dưới đây chỉ là
+# điểm xuất phát (chọn đúng chỗ bay thì ảnh đúng ngay từ khung đầu, sai thì node kéo về trong ~1-2 s).
+# Đổi tức thì không cần khởi động lại (Pi 5: subdev2): v4l2-ctl -d /dev/v4l-subdev2 --set-ctrl=exposure=40,analogue_gain=16
 #   trong_nha : 300/32 - đo 09-14 trong phòng, sáng TB ~60 (800/120 cháy sáng, tag không bắt được).
 #   ngoai_troi: 40/16  - đo 09-19 ngoài trời: 300/32 cho sáng TB 235, 72 % điểm cháy, 0 tag; 40/16 cho
 #               TB 63-67, cháy 0-0,2 %, tag mọi khung. 10/16 quá tối (tag 0,18/khung), 80/16 cháy 23 %.

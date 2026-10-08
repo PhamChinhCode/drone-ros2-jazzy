@@ -14,3 +14,17 @@ marker_quality_node:
     publish_rate_hz: 10.0
     visible_timeout_s: 0.5
     expected_marker_id: -1       # -1 = chap nhan moi ID; mission_manager se ghi de khi bay
+
+# Tu phoi sang (sensor khong co AE). Muc 60: do 09-14 trong nha va 09-19 ngoai troi, mean 60-67
+# cho apriltag bat tag moi khung. exposure tinh theo dong: 30 FPS ~7,65 us/dong -> 500 = 3,8 ms,
+# bay 1 m/s o 0,7 m nhoe ~1,6 px. gain 16 = 1x; tran 128 (8x) vi gain cao them nhieu cho flow.
+auto_exposure_node:
+  ros__parameters:
+    target_mean: 60.0
+    deadband: 0.15
+    max_saturated: 0.02          # 80/16 ngoai troi chay 23 % -> tag mat; 40/16 chay 0-0,2 %
+    exposure_min: 4
+    exposure_max: 500
+    gain_min: 16
+    gain_max: 128
+    rate_hz: 5.0

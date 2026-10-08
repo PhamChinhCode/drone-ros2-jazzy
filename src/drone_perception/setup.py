@@ -20,6 +20,7 @@ setup(
         'console_scripts': [
             'optical_flow_node = drone_perception.optical_flow_node:main',
             'marker_quality_node = drone_perception.marker_quality_node:main',
+            'auto_exposure_node = drone_perception.auto_exposure_node:main',
         ],
     },
 )
