@@ -32,7 +32,8 @@ from rclpy.time import Time
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from drone_estimation.estimation_math import drone_position_from_tag
-from drone_estimation.pad_map import build_pad_map, parse_headings
+from drone_estimation.pad_map import (build_pad_map, parse_headings, small_to_center,
+                                      SMALL_FRAME_SUFFIX)
 from drone_estimation.qos import SENSOR_QOS
 
 # TF tag cu hon muc nay (so voi dong ho node) thi bo - pose da troi, EKF khong nen nhan.
@@ -67,10 +68,19 @@ class MarkerPoseRepublisherNode(Node):
             self.get_parameter('known_tags').value, self.get_parameter('tag_frames').value,
             headings, self.get_parameter('pad_small_tag_id_offset').value,
             self.get_parameter('pad_small_tag_forward_m').value)
-        self.known_tags = {i: t.pos for i, t in pads.items()}
-        self.tag_frames = {i: t.frame for i, t in pads.items()}
-        self.get_logger().info(f'ban do: {len(pads)} tag ({sum(t.small for t in pads.values())} '
-                               f'tag nho tu suy), khung {sorted(self.tag_frames.values())}')
+        # Tag nho cua MOI bai (10-09): tam bai suy tu truc TREN DO DUOC cua chinh tag nho
+        # (pad_map.small_to_center) roi neo theo vi tri tag TO - dung ca khi bai dat lech/quay khac
+        # huong khai bao, hoac chua khai huong. Truoc do chi bai co huong moi co tag nho, vi tri
+        # tag nho tinh theo huong khai bao -> bai dat sai huong la EKF neo lech toi 2 x 0,21 m.
+        self.known_tags = {i: t.pos for i, t in pads.items() if not t.small}
+        self.tag_frames = {i: t.frame for i, t in pads.items() if not t.small}
+        off = self.get_parameter('pad_small_tag_id_offset').value
+        self.small_of = {i + off: i for i in self.known_tags}      # id tag nho -> id tag to
+        for small, big in self.small_of.items():
+            self.tag_frames[small] = self.tag_frames[big] + SMALL_FRAME_SUFFIX
+        self.forward_m = self.get_parameter('pad_small_tag_forward_m').value
+        self.get_logger().info(f'ban do: {len(self.known_tags)} bai (+ tag nho), khung '
+                               f'{sorted(self.tag_frames.values())}')
         self.warned = set()
         self.last_tag_stamp = {}         # tag id -> stamp TF da dung, tranh phat trung
 
@@ -90,7 +100,7 @@ class MarkerPoseRepublisherNode(Node):
         var = self.get_parameter('pos_covariance').value
         now = self.get_clock().now()
         for det in msg.detections:
-            if det.id not in self.known_tags:
+            if det.id not in self.tag_frames:
                 continue
             try:
                 # TF tag moi nhat (base_link -> camera la TF tinh nen luon ghep duoc).
@@ -106,7 +116,13 @@ class MarkerPoseRepublisherNode(Node):
                 continue
             self.last_tag_stamp[det.id] = tag_stamp
             tr, q = t_tag.transform.translation, t_att.transform.rotation
-            pos = drone_position_from_tag(self.known_tags[det.id], (tr.x, tr.y, tr.z),
+            tag_in_base = (tr.x, tr.y, tr.z)
+            big = self.small_of.get(det.id, det.id)
+            if det.id in self.small_of:
+                qt = t_tag.transform.rotation
+                tag_in_base = small_to_center(tag_in_base, (qt.x, qt.y, qt.z, qt.w),
+                                              self.forward_m)
+            pos = drone_position_from_tag(self.known_tags[big], tag_in_base,
                                           (q.x, q.y, q.z, q.w))
             if not all(math.isfinite(v) for v in pos):
                 continue

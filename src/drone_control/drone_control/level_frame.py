@@ -44,14 +44,3 @@ def to_level(q_wb, pos_body, quat_body):
     q = tilt_only(q_wb)
     return rotate(q, pos_body), quat_mul(q, quat_body)
 
-
-def small_to_pad_center(pos_small, yaw_body, yaw_pad, forward_m):
-    """Vi tri tag NHO trong base_level -> vi tri TAM BAI (tag to) trong base_level.
-
-    Tag nho nam forward_m ve phia "tren" cua bai (yaw_pad, ENU) - tren than phang phia do lech
-    yaw_pad - yaw_body so voi mui. Dung huong bai khai bao + yaw EKF (khong dung huong tag uoc
-    luong tu anh): sai yaw 10 do chi lech tam ~4 cm voi forward 0,22 m.
-    """
-    d = yaw_pad - yaw_body
-    return (pos_small[0] - forward_m * math.cos(d), pos_small[1] - forward_m * math.sin(d),
-            pos_small[2])

@@ -28,6 +28,7 @@ from drone_interfaces.srv import Arm, FcSimpleCommand, GotoWaypoint, Takeoff
 from drone_mission import fc_link, mission_fsm
 from drone_mission.fc_command_bridge_node import NAMED_VALUE_QOS
 from drone_mission.landing_detector import LandingDetector
+from drone_mission.pad_obs import PadObsFilter
 from drone_mission.qos import EVENT_QOS, SENSOR_QOS
 
 # ODOMETRY cua FC: covariance vz = 1e6 nghia la van toc dung khong hop le (giao uoc 11.2).
@@ -96,6 +97,9 @@ class MissionManagerNode(Node):
         self.position = None
         self.position_stamp_s = None
         self.yaw = None
+        # Tu the bai do tu tag cua DIEM HIEN TAI; dat lai khi doi (mission_id, diem).
+        self.pad_filter = PadObsFilter()
+        self.pad_filter_key = None
         self.arm_future = None           # moi luc chi mot lenh ARM/DISARM dang cho ACK
         self.last_detail = ''
 
@@ -108,6 +112,9 @@ class MissionManagerNode(Node):
         self.create_subscription(
             PoseStamped, '/landing_target/pose', self.on_landing_target_pose, SENSOR_QOS)
         self.create_subscription(GripperStatus, '/gripper/status', self.on_gripper, EVENT_QOS)
+        # Tu the bai (tam + huong) DO tu tag - landing_target_bridge_node, cho cong G / truc bai.
+        self.create_subscription(
+            PoseStamped, '/landing_target/pad_odom', self.on_pad_odom, SENSOR_QOS)
         # Chi de biet odom da neo theo bang tag chua - FSM can truoc khi chot "nha" cho RTH.
         self.create_subscription(EkfHealth, '/ekf/health', self.on_ekf_health, EVENT_QOS)
         self.create_subscription(FailsafeEvent, '/failsafe_event', self.on_failsafe, EVENT_QOS)
@@ -121,6 +128,8 @@ class MissionManagerNode(Node):
 
         self.pub_state = self.create_publisher(MissionState, '/mission/state', EVENT_QOS)
         self.pub_expected_id = self.create_publisher(Int32, '/mission/expected_marker_id', EVENT_QOS)
+        # Bai dang bay toi / tiep can: bridge do tu the bai nay (khong phat pose bam tag).
+        self.pub_approach_id = self.create_publisher(Int32, '/mission/approach_pad_id', EVENT_QOS)
         self.pub_setpoint = self.create_publisher(PoseStamped, '/mission/setpoint', EVENT_QOS)
         # Tran toc do ngang cua waypoint dang bay toi, di kem /mission/setpoint. Tach topic
         # rieng thay vi them truong vao MissionState: MissionState nam trong giao uoc FC/GCS.
@@ -230,6 +239,19 @@ class MissionManagerNode(Node):
         self.target_offset_m = math.hypot(msg.pose.position.x, msg.pose.position.y)
         self.target_stamp_s = self.now_s()
 
+    def pad_key(self):
+        return (self.fsm.mission_id, self.fsm.current_wp_index)
+
+    def on_pad_odom(self, msg):
+        wp = self.fsm.current_waypoint()
+        if wp is None:
+            return
+        if self.pad_key() != self.pad_filter_key:
+            self.pad_filter.reset()
+            self.pad_filter_key = self.pad_key()
+        p, q = msg.pose.position, msg.pose.orientation
+        self.pad_filter.update(p.x, p.y, p.z, 2.0 * math.atan2(q.z, q.w), wp.pad[:2])
+
     def on_named_value(self, msg):
         self.fc_status.update(msg.name, msg.value_int, self.now_s())
 
@@ -297,6 +319,8 @@ class MissionManagerNode(Node):
         odom_fresh = self.position_stamp_s is not None and now - self.position_stamp_s <= ODOM_STALE_S
         snap.position = self.position if odom_fresh else None
         snap.yaw = self.yaw if odom_fresh else None
+        snap.pad_obs = (self.pad_filter.value() if self.pad_filter_key == self.pad_key()
+                        else None)
 
         prev_state = self.fsm.state
         action = self.fsm.step(snap)
@@ -311,6 +335,11 @@ class MissionManagerNode(Node):
         if action.gripper_command in ('open', 'close'):
             self.send_gripper(action.gripper_command)
         self.pub_expected_id.publish(Int32(data=action.expected_marker_id))
+        wp = self.fsm.current_waypoint()
+        dang_toi = self.fsm.state in (mission_fsm.ENROUTE, mission_fsm.PAD_ALIGN,
+                                      mission_fsm.MARKER_SEARCH, mission_fsm.RETRY_LOITER,
+                                      mission_fsm.PRECISION_LAND)
+        self.pub_approach_id.publish(Int32(data=wp.marker_id if wp and dang_toi else -1))
         if action.velocity_up_mps is not None:
             msg = TwistStamped()
             msg.header.stamp = self.get_clock().now().to_msg()

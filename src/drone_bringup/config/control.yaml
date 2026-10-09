@@ -28,7 +28,9 @@ position_controller_node:
     mission_timeout_s: 1.0       # watchdog P6: /mission/state im qua muc nay -> ngung phat setpoint
     # Giu cho mac dinh khi OFFBOARD (drone_control/hold.py): FC chi bam van toc, khong keo ve.
     position_hold: true          # chot vi tri EKF (da neo) khi FSM chi ra lenh vz - dung PID cruise
-    heading_hold: false          # chot huong - BAT sau khi thu dau yaw_rate tren ban (WP5)
+    # chot huong khi FSM khong ra lenh yaw. BAT 2026-10-09 sau khi kiem dau yaw_rate tren ban
+    # (mission.yaml yaw_control: lech trai 30 do -> FC -29,96 do/s, dung dau).
+    heading_hold: true
     # Bu troi ngang dung chung (drift_comp.py) - khau I MOT cho cruise / giu cho / bam tag, khong
     # xoa khi doi nguon; chi hoc khi gan dich (window_m), dich dung yen va gan dung yen. Gazebo 10-09
     # (camera that, troi 6 cm/s, odom tre 0,1 s + nhieu 3 cm): chi khau P lech 12-15 cm; ki 0,3 vot

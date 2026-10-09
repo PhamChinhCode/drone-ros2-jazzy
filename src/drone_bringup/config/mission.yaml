@@ -8,9 +8,10 @@ mission_manager_node:
     anchor_margin_m: 0.5          # leo them sau khi neo (EkfHealth.anchored) truoc khi roi TAKEOFF
     anchor_wait_s: 10.0           # cham tran ma chua neo thi lo lung cho ngan nay giay roi EMERGENCY_LAND
     state_publish_rate_hz: 5.0
-    # Pi dieu khien huong mui + tiep can thang hang bai co huong (PAD_ALIGN). TAT cho toi khi yaw FC
-    # dat nghiem thu WP0 (docs/ke_hoach_huong_bay_hai_tag.md); mo phong Gazebo bat san.
-    yaw_control: false
+    # Pi dieu khien huong mui + tiep can thang hang bai co huong (PAD_ALIGN). BAT 2026-10-09: yaw FC
+    # dat WP0 (log 074903) + kiem dau tren ban: muc tieu lech trai 30 do -> Pi +0,523 rad/s FLU ->
+    # FC OB_T_YAWR -29,96 do/s (FC + = phai) - dung dau, dung do lon.
+    yaw_control: true
 
 gripper_controller_node:
   ros__parameters:

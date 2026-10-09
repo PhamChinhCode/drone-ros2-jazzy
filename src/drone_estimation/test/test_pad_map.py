@@ -92,3 +92,30 @@ def test_co_tag_nho_trong_apriltag_yaml_dung_kich_thuoc():
         small = big + t['pad_small_tag_id_offset']
         if small in co:
             assert math.isclose(co[small], t['pad_small_tag_size_m'])
+
+
+def q_yaw(yaw):
+    return (0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2))
+
+
+def q_tag_world(pad_yaw):
+    """Tag nam ngua tren dat, phia TREN chi pad_yaw (ENU): khung tag = Rz(pad_yaw - 90 do)."""
+    return q_yaw(pad_yaw - math.pi / 2)
+
+
+@pytest.mark.parametrize('pad_yaw', [0.0, 1.0, math.pi / 2, -2.5, math.pi])
+def test_up_yaw_doc_dung_huong_bai(pad_yaw):
+    from drone_estimation.pad_map import up_yaw
+    got = up_yaw(q_tag_world(pad_yaw))
+    assert math.isclose(math.atan2(math.sin(got - pad_yaw), math.cos(got - pad_yaw)), 0.0,
+                        abs_tol=1e-9)
+
+
+@pytest.mark.parametrize('pad_yaw', [0.0, 0.7, -1.9, math.pi])
+def test_tam_bai_tu_tag_nho_khong_can_huong_khai_bao(pad_yaw):
+    """Tag nho cach tam 0,21 m ve phia TREN; suy nguoc chi tu tu the do duoc cua tag nho."""
+    from drone_estimation.pad_map import small_to_center
+    center = (3.0, -2.0, 0.0)
+    small = (center[0] + 0.21 * math.cos(pad_yaw), center[1] + 0.21 * math.sin(pad_yaw), 0.0)
+    got = small_to_center(small, q_tag_world(pad_yaw), 0.21)
+    assert got == pytest.approx(center, abs=1e-9)

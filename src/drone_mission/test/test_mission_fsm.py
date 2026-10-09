@@ -95,12 +95,12 @@ def test_khong_biet_quyen_khi_arm_thi_giu_nguyen():
 
 def test_ha_canh_disarm_khi_cham_dat_va_ob_dis_rdy_thu_lai_3_giay():
     fsm = fsm_dang_ha_canh()
-    assert fsm.step(snap(2.0, armed=True)).velocity_up_mps == -m.LAND_DESCENT_MPS
+    assert fsm.step(snap(2.0, armed=True)).velocity_up_mps == -m.LAND_DESCENT_NEAR_MPS
     assert fsm.step(snap(2.1, armed=True, landed=True, disarm_ready=False)).fc_command == ''
     assert fsm.step(snap(2.2, armed=True, landed=True, disarm_ready=True)).fc_command == 'disarm'
     assert fsm.step(snap(3.0, armed=True, landed=True, disarm_ready=True)).fc_command == ''
     act = fsm.step(snap(5.3, armed=True, landed=True, disarm_ready=True))
-    assert act.fc_command == 'disarm' and act.velocity_up_mps == -m.LAND_DESCENT_MPS
+    assert act.fc_command == 'disarm' and act.velocity_up_mps == -m.LAND_DESCENT_NEAR_MPS
     fsm.step(snap(5.5, armed=False))
     assert fsm.state == m.MISSION_COMPLETE
     # Giu MISSION_COMPLETE du lau cho telemetry 2 Hz lay duoc mau (giao uoc 11.5 P30).
@@ -276,7 +276,17 @@ def test_chi_xuong_khi_vao_tam():
     act = fsm.step(snap(1.2, armed=True, range_m=1.0, target_offset_m=0.40))
     assert act.velocity_up_mps == 0.0 and 'can tam' in act.detail
     act = fsm.step(snap(1.3, armed=True, range_m=1.0, target_offset_m=0.30))
-    assert act.velocity_up_mps == -m.LAND_DESCENT_MPS
+    assert act.velocity_up_mps == -m.LAND_DESCENT_NEAR_MPS
+
+
+
+def test_toc_do_ha_xa_025_gan_010():
+    fsm = fsm_dang_ha_chinh_xac()
+    act = fsm.step(snap(1.2, armed=True, range_m=2.0, target_offset_m=0.1))
+    assert act.velocity_up_mps == -0.25
+    act = fsm.step(snap(1.3, armed=True, range_m=1.2, target_offset_m=0.1))
+    assert act.velocity_up_mps == -0.10
+    assert m.descent_mps(None) == 0.10                  # khong laser -> cham
 
 
 def test_mat_tag_giua_chung_thi_khong_ha_mu():
@@ -290,7 +300,7 @@ def test_sat_dat_xuong_tiep_khong_can_tag_roi_disarm_va_hoan_thanh():
     fsm = fsm_dang_ha_chinh_xac()
     low = m.PRECISION_BLIND_BELOW_M - 0.05
     act = fsm.step(snap(3.0, armed=True, range_m=low, target_offset_m=None))
-    assert fsm.state == m.PRECISION_LAND and act.velocity_up_mps == -m.LAND_DESCENT_MPS
+    assert fsm.state == m.PRECISION_LAND and act.velocity_up_mps == -m.LAND_DESCENT_NEAR_MPS
     act = fsm.step(snap(4.0, armed=True, range_m=0.18, landed=True, disarm_ready=True))
     assert act.fc_command == 'disarm'
     fsm.step(snap(4.5, armed=False, range_m=0.18))
@@ -981,3 +991,64 @@ def test_pad_align_mat_vi_tri_thi_giu():
     act = fsm.step(snap(1.2, armed=True, range_m=1.0, position=None, yaw=None))
     assert fsm.state == m.PAD_ALIGN and act.velocity_up_mps == 0.0
     assert act.position_target is None
+
+
+
+# ---- 10-09: tu the bai DO tu tag thay huong khai bao ----------------------------------------
+
+def test_pad_align_dung_tu_the_bai_do_duoc_thay_khai_bao():
+    """Khai Bac (90 do ENU) nhung tag cho thay bai quay Dong (0) -> cong G phai o phia Tay bai."""
+    fsm = fsm_bay_toi_bai_co_huong()
+    obs = (10.0, 0.0, 0.0, 0.0)
+    fsm.step(snap(1.0, armed=True, range_m=1.0, position=(7.0, 0.0, 2.0), yaw=0.0, pad_obs=obs))
+    assert fsm.state == m.PAD_ALIGN
+    act = fsm.step(snap(1.2, armed=True, range_m=1.0, position=(7.0, 0.0, 2.0), yaw=0.0,
+                        pad_obs=obs))
+    # Dang o ngay sau bai theo huong DO (x < 10, tren truc y = 0): bam truc, mui = 0 (Dong).
+    assert act.position_target[1] == pytest.approx(0.0, abs=1e-6)
+    assert act.yaw_target == pytest.approx(0.0, abs=1e-6)
+
+
+def fsm_tim_tag_bai_khong_huong():
+    fsm = m.MissionFsm(params=m.Params(takeoff_alt_m=1.0, yaw_control=True))
+    assert fsm.load_plan(1, [wp(0, marker=1, alt_m=2.0, max_vel_mps=1.5)], 0, 0.0, TAGS) == ''
+    fsm.request_start(0.0)
+    fsm.step(snap(0.0, arm_ready=True))
+    fsm.step(snap(0.5, armed=True))
+    fsm.step(snap(0.6, armed=True, range_m=1.0))
+    fsm.step(snap(0.8, armed=True, range_m=1.0, position=(10.0, 0.0, 2.0), yaw=0.0))
+    assert fsm.state == m.MARKER_SEARCH         # khong khai huong -> khong qua PAD_ALIGN som
+    return fsm
+
+
+def test_bai_khong_khai_huong_thay_tag_thi_tiep_can_theo_huong_do():
+    fsm = fsm_tim_tag_bai_khong_huong()
+    obs = (10.0, 0.0, 0.0, math.pi / 2)
+    fsm.step(snap(1.0, armed=True, range_m=1.0, position=(10.0, 0.0, 2.0), yaw=0.0,
+                  pad_obs=obs, target_offset_m=0.1))
+    assert fsm.state == m.PAD_ALIGN              # thay tag nhung chua thang hang: chua ha
+    act = fsm.step(snap(1.2, armed=True, range_m=1.0, position=(10.0, 0.0, 2.0), yaw=0.0,
+                        pad_obs=obs))
+    assert act.yaw_target is not None
+
+
+def test_da_thang_hang_thi_tim_tag_xong_ha_va_giu_mui_theo_huong_do():
+    fsm = fsm_tim_tag_bai_khong_huong()
+    obs = (10.0, 0.0, 0.0, math.pi / 2)
+    fsm.aligned = True
+    act = fsm.step(snap(1.0, armed=True, range_m=1.0, position=(10.0, 0.0, 1.1), yaw=math.pi / 2,
+                        pad_obs=obs, target_offset_m=0.05))
+    assert fsm.state == m.PRECISION_LAND
+    assert act.yaw_target == pytest.approx(math.pi / 2)
+
+
+def test_het_gio_pad_align_khong_quay_lai_pad_align():
+    fsm = fsm_tim_tag_bai_khong_huong()
+    obs = (10.0, 0.0, 0.0, math.pi / 2)
+    fsm.step(snap(1.0, armed=True, range_m=1.0, position=(10.0, 0.0, 2.0), yaw=0.0, pad_obs=obs))
+    assert fsm.state == m.PAD_ALIGN
+    fsm.step(snap(1.0 + m.PAD_ALIGN_TIMEOUT_S, armed=True, range_m=1.0, position=(13.0, 2.0, 2.0),
+                  yaw=0.0, pad_obs=obs))
+    assert fsm.state == m.MARKER_SEARCH
+    fsm.step(snap(62.0, armed=True, range_m=1.0, position=(13.0, 2.0, 2.0), yaw=0.0, pad_obs=obs))
+    assert fsm.state == m.MARKER_SEARCH          # khong vong lai PAD_ALIGN

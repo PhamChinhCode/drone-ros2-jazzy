@@ -18,11 +18,13 @@ Roll/pitch lay tu TF world_frame -> base_link (EKF, nguon IMU); vi tri EKF khong
 Bai hai tag (giao uoc GCS 0.8, docs/ke_hoach_huong_bay_hai_tag.md): xuong thap thi tag to ra khoi
 khung (camera nghieng, lap truoc tam), tag nho id + offset nam forward_m ve phia "tren" bai con
 thay. Thay tag to thi dung tag to; chi thay tag nho thi suy TAM BAI tu tag nho - dau ra van la
-tam bai, mission/controller khong can biet dang bam tag nao. Bai khong khai huong: khong co tag
-nho.
+tam bai, mission/controller khong can biet dang bam tag nao. Tam bai suy theo truc TREN DO DUOC
+cua tag nho (khong theo huong khai bao) nen bai quay bat ky huong nao van dung (10-09). Them
+/landing_target/pad_odom: tu the bai do duoc (tam + huong) cho cong G / truc bai cua mission.
 """
 
 from concurrent.futures import ThreadPoolExecutor
+import math
 import signal
 import threading
 
@@ -38,10 +40,11 @@ from rclpy.time import Time
 from std_msgs.msg import Bool, Int32
 from tf2_ros import Buffer, TransformException, TransformListener
 
-from drone_control.level_frame import small_to_pad_center, to_level, yaw_of
+from drone_control.level_frame import rotate, to_level
 from drone_control.qos import EVENT_QOS, SENSOR_QOS
 from drone_control.target_tracker import TargetTracker
-from drone_estimation.pad_map import build_pad_map, parse_headings
+from drone_estimation.pad_map import (build_pad_map, parse_headings, small_to_center,
+                                      SMALL_FRAME_SUFFIX, tag_up)
 
 
 class LandingTargetBridgeNode(Node):
@@ -76,10 +79,17 @@ class LandingTargetBridgeNode(Node):
             self.pads = {}
             self.get_logger().error('chua nap config/tags.yaml - khong bam duoc tag nao')
         self.tag_frames = {i: t.frame for i, t in self.pads.items() if not t.small}
-        self.small_of = {t.pad_id: i for i, t in self.pads.items() if t.small}   # id to -> id nho
+        # Tag nho cua MOI bai, ke ca bai chua khai huong: tam bai suy tu truc TREN DO DUOC cua tag
+        # nho (pad_map.small_to_center), khong can huong khai bao hay yaw la ban (10-09).
+        self.small_offset = self.get_parameter('pad_small_tag_id_offset').value
+        self.small_frame = {i: f + SMALL_FRAME_SUFFIX for i, f in self.tag_frames.items()}
         self.source = None              # tag dang bam: 'to' | 'nho' (chi de ghi log khi doi)
 
         self.expected_id = -1
+        # Bai dang TIEP CAN (cong G, truc bai - chua bam tag de ha): chi phat tu the bai, khong
+        # phat /landing_target/pose (pose do lam position_controller bo luat dan, bam tag).
+        self.approach_id = -1
+        self.last_pad_stamp = None
         self.tracker = TargetTracker(self.get_parameter('timeout_s').value)
         self.last_tf_stamp = None
 
@@ -91,11 +101,17 @@ class LandingTargetBridgeNode(Node):
             AprilTagDetectionArray, '/apriltag/detections', self.on_detections, SENSOR_QOS)
         self.create_subscription(
             Int32, '/mission/expected_marker_id', self.on_expected_id, EVENT_QOS)
+        self.create_subscription(
+            Int32, '/mission/approach_pad_id', self.on_approach_id, EVENT_QOS)
 
         # Topic NOI BO cho position_controller_node. KHONG gui LANDING_TARGET len FC: ban tin 149
         # phe bo tu giao uoc 1.4 - Pi tu dong vong van toc theo marker (11.1 #12, #13c).
         self.pub_target = self.create_publisher(PoseStamped, '/landing_target/pose', SENSOR_QOS)
         self.pub_lost = self.create_publisher(Bool, '/landing_target/lost', EVENT_QOS)
+        # Tu the bai DO tu tag trong khung the gioi (world_frame): vi tri tam + huong "tren" (yaw
+        # trong orientation). mission_manager dung thay huong khai bao cho cong G / truc bai /
+        # huong mui khi ha - bai dat quay bat ky huong nao van dung.
+        self.pub_pad = self.create_publisher(PoseStamped, '/landing_target/pad_odom', SENSOR_QOS)
 
         self.create_timer(1.0 / self.get_parameter('publish_rate_hz').value, self.check_timeout)
 
@@ -112,40 +128,65 @@ class LandingTargetBridgeNode(Node):
         if msg.data >= 0 and msg.data not in self.tag_frames:
             self.get_logger().warning(f'tag {msg.data} khong co trong config/tags.yaml')
 
-    def on_detections(self, msg):
-        """Chi xu ly tag to expected_id hoac tag nho cua chinh bai do; ra tam bai qua TF."""
-        if self.expected_id not in self.tag_frames:
-            return
-        seen = {d.id for d in msg.detections}
-        small_id = self.small_of.get(self.expected_id)
-        if self.expected_id in seen:
-            small, frame = False, self.tag_frames[self.expected_id]
-        elif small_id is not None and small_id in seen:
-            small, frame = True, self.pads[small_id].frame
+    def on_approach_id(self, msg):
+        if msg.data != self.approach_id:
+            self.approach_id = msg.data
+            self.last_pad_stamp = None
+
+    def measure(self, pad_id, seen):
+        """Tam bai pad_id trong target_frame tu tag to (uu tien) hoac tag nho.
+
+        Tra (TF tag, tam bai (x, y, z), quaternion target <- tag, la tag nho?) hoac None.
+        """
+        if pad_id in seen:
+            frame, small = self.tag_frames[pad_id], False
+        elif pad_id + self.small_offset in seen:
+            frame, small = self.small_frame[pad_id], True
         else:
-            return
-        target = self.get_parameter('target_frame').value
+            return None
         try:
-            t = self.tf_buffer.lookup_transform(target, frame, Time())
+            t = self.tf_buffer.lookup_transform(self.get_parameter('target_frame').value, frame,
+                                                Time())
+        except TransformException:
+            return None
+        tr, rq = t.transform.translation, t.transform.rotation
+        p, q = (tr.x, tr.y, tr.z), (rq.x, rq.y, rq.z, rq.w)
+        if small:
+            p = small_to_center(p, q, self.forward_m)
+        return t, p, q, small
+
+    def on_detections(self, msg):
+        """Tag to / tag nho cua bai expected_id -> /landing_target/pose (base_level); cua bai dang
+        tiep can (approach_id, khong co thi expected_id) -> /landing_target/pad_odom."""
+        seen = {d.id for d in msg.detections}
+        try:
             att = self.tf_buffer.lookup_transform(
-                self.get_parameter('world_frame').value, target, Time()).transform.rotation
+                self.get_parameter('world_frame').value,
+                self.get_parameter('target_frame').value, Time()).transform
         except TransformException:
             return
+        q_wb = (att.rotation.x, att.rotation.y, att.rotation.z, att.rotation.w)
+        if self.expected_id in self.tag_frames:
+            m = self.measure(self.expected_id, seen)
+            if m is not None:
+                self.publish_landing(m, q_wb)
+        pad_id = self.approach_id if self.approach_id in self.tag_frames else self.expected_id
+        if pad_id in self.tag_frames:
+            m = self.measure(pad_id, seen)
+            if m is not None:
+                self.publish_pad(m, q_wb, att.translation)
+
+    def publish_landing(self, m, q_wb):
+        t, p, q, small = m
         stamp = Time.from_msg(t.header.stamp)
         age_s = self.now_s() - stamp.nanoseconds / 1e9
         if stamp == self.last_tf_stamp or age_s > self.tracker.timeout_s:
             return      # TF cu hoac da dung - khong phat lai gia tri cu (nguyen tac o dau file)
         self.last_tf_stamp = stamp
-
-        tr, rq = t.transform.translation, t.transform.rotation
-        q_wb = (att.x, att.y, att.z, att.w)
-        pos, quat = to_level(q_wb, (tr.x, tr.y, tr.z), (rq.x, rq.y, rq.z, rq.w))
-        if small:
-            pos = small_to_pad_center(pos, yaw_of(q_wb), self.pads[small_id].yaw, self.forward_m)
+        pos, quat = to_level(q_wb, p, q)
         source = 'nho' if small else 'to'
         if source != self.source:
-            self.get_logger().info(f'bai {self.expected_id}: bam theo tag {source} '
-                                   f'(id {small_id if small else self.expected_id})')
+            self.get_logger().info(f'bai {self.expected_id}: bam theo tag {source}')
             self.source = source
         out = PoseStamped()
         out.header.stamp = t.header.stamp
@@ -155,6 +196,25 @@ class LandingTargetBridgeNode(Node):
          out.pose.orientation.w) = quat
         self.pub_target.publish(out)
         self.publish_event(self.tracker.seen(self.now_s()))
+
+    def publish_pad(self, m, q_wb, base_in_world):
+        """Tam bai + huong "tren" DO DUOC trong khung the gioi (yaw la ban gia dinh dung)."""
+        t, p, q, _ = m
+        stamp = Time.from_msg(t.header.stamp)
+        if stamp == self.last_pad_stamp or self.now_s() - stamp.nanoseconds / 1e9 > 0.5:
+            return
+        self.last_pad_stamp = stamp
+        c = rotate(q_wb, p)
+        up = rotate(q_wb, tag_up(q))
+        yaw = math.atan2(up[1], up[0])
+        out = PoseStamped()
+        out.header.stamp = t.header.stamp
+        out.header.frame_id = self.get_parameter('world_frame').value
+        out.pose.position.x = base_in_world.x + c[0]
+        out.pose.position.y = base_in_world.y + c[1]
+        out.pose.position.z = base_in_world.z + c[2]
+        out.pose.orientation.z, out.pose.orientation.w = math.sin(yaw / 2), math.cos(yaw / 2)
+        self.pub_pad.publish(out)
 
     def check_timeout(self):
         """Qua timeout_s khong thay -> /landing_target/lost = true dung mot lan."""

@@ -3,7 +3,7 @@
 Cham dat khi 1-3 cung dung lien tuc hold_s:
   1. laser <= moc mat dat + margin_m;
   2. |vz| < vz_still_mps (van toc tu ODOMETRY, covariance vz hop le);
-  3. Pi van dang ra lenh xuong (vz lenh <= -cmd_descend_mps).
+  3. Pi van dang ra lenh xuong (vz lenh <= -cmd_descend_mps; 0,05 < toc do ha gan dat 0,10).
 Dieu kien 3 loai truong hop bay ngang qua hop cao. KHONG dung ga (cham dat ga van ~27 %) va
 KHONG dung landed_state. Gui DISARM hay khong (OB_DIS_RDY) la viec cua noi goi.
 
@@ -20,7 +20,7 @@ GROUND_REF_DEFAULT_M = 0.17
 
 class LandingDetector:
 
-    def __init__(self, margin_m=0.05, vz_still_mps=0.05, cmd_descend_mps=0.1, hold_s=1.0,
+    def __init__(self, margin_m=0.05, vz_still_mps=0.05, cmd_descend_mps=0.05, hold_s=1.0,
                  ref_window_s=2.0, ref_min_m=0.15, ref_max_m=0.25):
         self.margin_m = margin_m
         self.vz_still_mps = vz_still_mps

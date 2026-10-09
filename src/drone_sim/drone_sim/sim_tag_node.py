@@ -112,7 +112,9 @@ class SimTagNode(Node):
         # id -> (vi tri, ten khung, canh, ma tran xoay tag -> the gioi theo huong bai)
         self.tags = {i: (np.array(t.pos), t.frame,
                          g('pad_small_tag_size_m').value if t.small else g('tag_size_m').value,
-                         rpy_to_mat(t.yaw or 0.0, 0.0, 0.0))
+                         # Khung tag nhu apriltag_ros: x phai, y = phia TREN, z ra khoi mat
+                         # tag -> Rz(huong bai - 90 do) (pad_map.TAG_UP_AXIS).
+                         rpy_to_mat((t.yaw or 0.0) - math.pi / 2, 0.0, 0.0))
                      for i, t in pads.items()}
         self.get_logger().info('tag mo phong: ' + ', '.join(
             f'{i} @ {tuple(np.round(p, 3))} ({f}, {s:.2f} m)'

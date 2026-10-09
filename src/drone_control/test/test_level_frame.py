@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from drone_control.level_frame import rotate, small_to_pad_center, to_level, yaw_of
+from drone_control.level_frame import rotate, to_level, yaw_of
 
 
 def q_rpy(roll=0.0, pitch=0.0, yaw=0.0):
@@ -51,15 +51,3 @@ def test_huong_tag_cung_bo_nghieng():
     _, qt = to_level(q, (0, 0, -1), q_rpy(0, 0, math.radians(5)))
     assert math.degrees(yaw_of(qt)) == pytest.approx(5.0, abs=1.0)
 
-
-@pytest.mark.parametrize('yaw_body,yaw_pad', [(0, 0), (0.5, 0.5), (0, math.pi / 2), (2.0, -1.0)])
-def test_tag_nho_suy_ve_tam_bai(yaw_body, yaw_pad):
-    """Than o goc, tam bai tai (1, 2) the gioi; tag nho cach tam 0,22 m theo yaw_pad."""
-    c, s = math.cos(yaw_body), math.sin(yaw_body)
-
-    def to_body(x, y):
-        return (c * x + s * y, -s * x + c * y, -1.0)
-
-    small_w = (1.0 + 0.22 * math.cos(yaw_pad), 2.0 + 0.22 * math.sin(yaw_pad))
-    got = small_to_pad_center(to_body(*small_w), yaw_body, yaw_pad, 0.22)
-    assert got == pytest.approx(to_body(1.0, 2.0), abs=1e-9)

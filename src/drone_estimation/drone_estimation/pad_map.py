@@ -13,6 +13,8 @@ DONG HO. Ban do la ENU (x = E, y = N) nen yaw ENU (tu truc x, nguoc kim) = 90 - 
 from dataclasses import dataclass
 import math
 
+from drone_estimation.estimation_math import rotate
+
 # Ten khung TF cua tag nho = ten khung tag to + hau to nay (apriltag.yaml tag.frames phai khop).
 SMALL_FRAME_SUFFIX = '_s'
 
@@ -70,3 +72,31 @@ def build_pad_map(known_tags_flat, frames, headings, id_offset, forward_m):
             (x + forward_m * math.cos(big.yaw), y + forward_m * math.sin(big.yaw), z),
             big.yaw, big.frame + SMALL_FRAME_SUFFIX, tag_id, True)
     return out
+
+
+# Khung tag cua apriltag_ros: x = phai, y = mep TREN anh tag (= phia "tren" bai), z ra khoi
+# mat tag.
+# Do 2026-10-09 trong Gazebo (camera that + apriltag_ros): bai home quay Tay -> truc y tag chi -x.
+TAG_UP_AXIS = (0.0, 1.0, 0.0)
+
+
+def tag_up(q_frame_tag):
+    """Huong "tren" cua tag (vecto don vi) bieu dien trong khung cha cua q (x, y, z, w)."""
+    return rotate(q_frame_tag, TAG_UP_AXIS)
+
+
+def small_to_center(p_small, q_small, forward_m):
+    """Tam bai tu tag NHO: lui forward_m nguoc truc TREN DO DUOC cua chinh tag nho.
+
+    Khong dung huong bai khai bao (GCS) cung khong dung yaw la ban - bai dat lech hay quay bat ky
+    huong nao van ra dung tam, mien to in dung mau (tag nho cung chieu, phia TREN tag to).
+    p_small, q_small: vi tri + huong tag nho trong cung mot khung (vd base_link).
+    """
+    u = tag_up(q_small)
+    return tuple(p_small[i] - forward_m * u[i] for i in range(3))
+
+
+def up_yaw(q_frame_tag):
+    """Yaw (rad) cua huong "tren" tag trong mat phang x-y khung cha (ENU: tu truc x, nguoc kim)."""
+    u = tag_up(q_frame_tag)
+    return math.atan2(u[1], u[0])
