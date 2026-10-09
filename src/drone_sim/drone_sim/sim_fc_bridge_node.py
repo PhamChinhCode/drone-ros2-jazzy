@@ -12,6 +12,7 @@ node nao. Logic FC nam trong sim_fc.py.
                                  service /mavros/cmd/command
 """
 
+import math
 import random
 from collections import deque
 
@@ -50,6 +51,12 @@ class SimFcBridgeNode(Node):
         # Gia lap EKF xau hon ground truth: tre (s) va nhieu vi tri Gauss (sigma, m).
         self.declare_parameter('odom_delay_s', 0.0)
         self.declare_parameter('odom_noise_m', 0.0)
+        # Gia lap sai so uoc luong van toc cua FC that (flow, gyro): FC tuong da bam dung lenh
+        # nhung than may that su troi them chung nay (he than FLU), chi khi da roi dat. De thu giu
+        # cho cua Pi (drone_control/hold.py) - FC khong keo ve khi OFFBOARD.
+        self.declare_parameter('drift_vx_mps', 0.0)
+        self.declare_parameter('drift_vy_mps', 0.0)
+        self.declare_parameter('drift_yaw_dps', 0.0)
 
         g = lambda name: self.get_parameter(name).value  # noqa: E731
         self.fc = sim_fc.SimFc(auto_arm=g('auto_arm'))
@@ -167,6 +174,12 @@ class SimFcBridgeNode(Node):
             self.pub_enable.publish(Bool(data=enable))
             self.get_logger().info(f'dong co {"BAT" if enable else "TAT"}')
             self.last_enable = enable
+        h = self.fc.height_m()
+        if enable and h is not None and h > 0.3:
+            g = self.get_parameter
+            vx += g('drift_vx_mps').value
+            vy += g('drift_vy_mps').value
+            yaw_rate += math.radians(g('drift_yaw_dps').value)
         twist = Twist()
         twist.linear.x, twist.linear.y, twist.linear.z = vx, vy, vz
         twist.angular.z = yaw_rate

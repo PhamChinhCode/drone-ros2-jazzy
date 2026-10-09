@@ -38,12 +38,14 @@ from rclpy.signals import SignalHandlerOptions
 from sensor_msgs.msg import Range
 from std_msgs.msg import Float32
 
+from drone_control.drift_comp import body_to_world, DriftCompensator, world_to_body
+from drone_control.hold import HeadingHold, MIN_AIRBORNE_RANGE_M, PositionHold
 from drone_control.pid import PID, check_gain_param
 from drone_control.qos import EVENT_QOS, SENSOR_QOS
 from drone_control.setpoint_limits import limit_velocity
 from drone_control.setpoint_ramp import SetpointRamp
 from drone_control.yaw_control import yaw_rate_command
-from drone_interfaces.msg import MissionState
+from drone_interfaces.msg import EkfHealth, MissionState
 
 FRAME_BODY_NED = 8
 TYPE_MASK_VELOCITY_YAWRATE = 0x07C7
@@ -53,6 +55,8 @@ LANDING_STALE_S = 0.5           # pose tag ~25 Hz; bridge ngung phat khi mat tag
 # mission_manager_node phat /mission/setpoint 5 Hz chi trong trang thai can bay toi diem; qua han
 # -> bo, khong bam mai diem den cu sau khi nhiem vu da doi trang thai.
 MISSION_SETPOINT_STALE_S = 0.5
+DRIFT_LEARN_MAX_SPEED_MPS = 0.25  # bu troi chi hoc khi toc do ngang duoi muc nay
+ODOM_STALE_S = 0.5              # EKF 30 Hz - giu cho chi chot/bam khi odom con moi
 YAW_SETPOINT_STALE_S = 0.5      # /mission/yaw 5 Hz; im = FSM khong muon quay mui -> yaw_rate 0
 
 # Nguon van toc: truc ngang (xy) va truc dung + yaw (z) tach rieng vi tag chi thay xy.
@@ -60,6 +64,10 @@ SOURCE_NONE = 'none'
 SOURCE_VELOCITY = 'velocity'
 SOURCE_CRUISE = 'cruise'
 SOURCE_LANDING = 'landing'
+# Giu cho mac dinh (drone_control/hold.py): khong nguon nao ra lenh truc ngang -> chot vi tri EKF,
+# bam bang chinh PID cruise.
+SOURCE_HOLD = 'hold'
+PID_PHASE = {SOURCE_CRUISE: 'cruise', SOURCE_LANDING: 'landing', SOURCE_HOLD: 'cruise'}
 
 
 class PositionControllerNode(Node):
@@ -82,6 +90,16 @@ class PositionControllerNode(Node):
         # Vong yaw (WP5): chi chay khi mission phat /mission/yaw (mission.yaml yaw_control).
         self.declare_parameter('yaw.kp', 1.0)                # 1/s
         self.declare_parameter('yaw.max_rate_dps', 30.0)
+        # Giu cho mac dinh khi OFFBOARD (FC tat moc vi tri + giu huong cua no luc do - hold.py).
+        # Giu vi tri dung lai PID cruise da bay. Giu huong gui yaw_rate != 0: chi bat sau khi thu
+        # dau tren ban (WP5).
+        self.declare_parameter('position_hold', True)
+        self.declare_parameter('heading_hold', False)
+        # Bu troi ngang dung chung (drift_comp.py): khau I MOT cho moi nguon truc ngang, khong xoa
+        # khi doi nguon. ki = 0 tat han.
+        self.declare_parameter('drift_comp.ki', 0.15)
+        self.declare_parameter('drift_comp.limit_mps', 0.3)
+        self.declare_parameter('drift_comp.window_m', 0.5)
 
         self.pids = {phase: {axis: self._make_pid(phase, axis) for axis in ('x', 'y', 'z')}
                      for phase in ('cruise', 'landing')}
@@ -89,6 +107,12 @@ class PositionControllerNode(Node):
         self.add_on_set_parameters_callback(self.on_set_parameters)
 
         self.odom = None
+        self.odom_stamp_s = None
+        self.anchored = False
+        self.pos_hold = PositionHold()
+        self.heading_hold = HeadingHold()
+        self.drift = DriftCompensator()
+        self.prev_cruise_target = None
         self.mission_setpoint = None
         self.mission_setpoint_stamp_s = None
         self.max_vel_mps = None
@@ -119,6 +143,8 @@ class PositionControllerNode(Node):
             PoseStamped, '/landing_target/pose', self.on_landing_target, SENSOR_QOS)
 
         self.create_subscription(MissionState, '/mission/state', self.on_mission_state, EVENT_QOS)
+        # Chi chot moc vi tri khi odom da NEO theo bang tag - truoc do vi tri se nhay khi neo.
+        self.create_subscription(EkfHealth, '/ekf/health', self.on_ekf_health, EVENT_QOS)
 
         self.pub_setpoint = self.create_publisher(
             PositionTarget, '/mavros/setpoint_raw/local', SENSOR_QOS)
@@ -145,6 +171,10 @@ class PositionControllerNode(Node):
 
     def on_odom(self, msg):
         self.odom = msg
+        self.odom_stamp_s = self.get_clock().now().nanoseconds / 1e9
+
+    def on_ekf_health(self, msg):
+        self.anchored = msg.anchored
 
     def on_range(self, msg):
         self.range_m = msg.range if msg.min_range <= msg.range <= msg.max_range else None
@@ -212,9 +242,9 @@ class PositionControllerNode(Node):
         tai de khong giat D). Ngo ra khong nhay nho SetpointRamp tron tu ngo ra cu."""
         prev_xy, prev_z = self.active_source
         xy, z = source
-        if xy != prev_xy and xy in (SOURCE_CRUISE, SOURCE_LANDING):
-            self.pids[xy]['x'].reset(errors[xy][0])
-            self.pids[xy]['y'].reset(errors[xy][1])
+        if xy != prev_xy and xy in PID_PHASE:
+            self.pids[PID_PHASE[xy]]['x'].reset(errors[xy][0])
+            self.pids[PID_PHASE[xy]]['y'].reset(errors[xy][1])
         if z != prev_z and z == SOURCE_CRUISE:
             self.pids['cruise']['z'].reset(errors['cruise'][2])
         self.active_source = source
@@ -226,6 +256,8 @@ class PositionControllerNode(Node):
         pose tag tu landing_target_bridge_node con moi (bridge chi phat khi mission dat
         expected_marker_id va thay dung ID) thi vx, vy = PID landing tren do lech tag trong
         base_link (SOURCE_LANDING, P1); vz van theo mission (vd PRECISION_LAND ra lenh xuong).
+        Khong nguon nao ra lenh truc ngang (FSM chi ra vz) -> giu vi tri EKF (SOURCE_HOLD), khong
+        ai ra lenh yaw -> giu huong (hold.py) - FC khong tu giu khi OFFBOARD.
         Chi PID cua nguon dang dung moi duoc update (khong tich phan ngam). Gain dang 0.0 - TUNE
         TRONG GAZEBO TRUOC.
         """
@@ -235,6 +267,7 @@ class PositionControllerNode(Node):
         dt = 1.0 / self.get_parameter('control_rate_hz').value
 
         errors = {}
+        target_still = False
         if self.velocity_stamp_s is not None and now_s - self.velocity_stamp_s <= VELOCITY_STALE_S:
             xy = z = SOURCE_VELOCITY
         elif (self.odom is not None and self.mission_setpoint_stamp_s is not None
@@ -242,6 +275,10 @@ class PositionControllerNode(Node):
             xy = z = SOURCE_CRUISE
             p = self.odom.pose.pose
             target = self.mission_setpoint.pose.position
+            tgt = (target.x, target.y)
+            target_still = (self.prev_cruise_target is not None
+                            and math.dist(tgt, self.prev_cruise_target) < 0.005)
+            self.prev_cruise_target = tgt
             # Sai so trong he odom (ENU) xoay ve he than FLU bang yaw.
             ex, ey = target.x - p.position.x, target.y - p.position.y
             q = p.orientation
@@ -258,6 +295,32 @@ class PositionControllerNode(Node):
             tag = self.landing_target.pose.position
             errors[SOURCE_LANDING] = (tag.x, tag.y)
 
+        # Giu cho mac dinh (hold.py): truc ngang / yaw khong ai ra lenh thi chot va giu.
+        odom_ok = self.odom_stamp_s is not None and now_s - self.odom_stamp_s <= ODOM_STALE_S
+        yaw = wz = pos = None
+        if odom_ok:
+            q, pp = self.odom.pose.pose.orientation, self.odom.pose.pose.position
+            yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+            wz = self.odom.twist.twist.angular.z
+            pos = (pp.x, pp.y)
+        rng = self.current_range_m()
+        airborne = rng is not None and rng > MIN_AIRBORNE_RANGE_M
+        cmd = self.velocity_setpoint.twist if z == SOURCE_VELOCITY else None
+        # Ranh = khong ai lai truc ngang. KHONG xet rieng lenh van toc: PRECISION_LAND gui vx = vy = 0
+        # (chi vz) trong luc truc ngang dang bam tag - 10-09 giu cho de len bam tag, ha lech 12-15 cm.
+        free_xy = (xy == SOURCE_NONE
+                   or (xy == SOURCE_VELOCITY and cmd.linear.x == 0.0 and cmd.linear.y == 0.0))
+        speed = (math.hypot(self.odom.twist.twist.linear.x, self.odom.twist.twist.linear.y)
+                 if odom_ok else 0.0)
+        hold = self.pos_hold.update(
+            pos, speed,
+            self.get_parameter('position_hold').value and free_xy and airborne and self.anchored)
+        if hold is not None:
+            xy = SOURCE_HOLD
+            ex, ey = hold[0] - pos[0], hold[1] - pos[1]
+            errors[SOURCE_HOLD] = (math.cos(yaw) * ex + math.sin(yaw) * ey,
+                                   -math.sin(yaw) * ex + math.cos(yaw) * ey)
+
         if (xy, z) != self.active_source:
             self.switch_source((xy, z), errors)
 
@@ -267,16 +330,39 @@ class PositionControllerNode(Node):
             vx, vy, vz, yaw_rate = t.linear.x, t.linear.y, t.linear.z, t.angular.z
         elif z == SOURCE_CRUISE:
             vz = self.pids['cruise']['z'].update(errors[SOURCE_CRUISE][2], dt)
-        if xy in (SOURCE_CRUISE, SOURCE_LANDING):
-            vx = self.pids[xy]['x'].update(errors[xy][0], dt)
-            vy = self.pids[xy]['y'].update(errors[xy][1], dt)
+        if xy in PID_PHASE:
+            vx = self.pids[PID_PHASE[xy]]['x'].update(errors[xy][0], dt)
+            vy = self.pids[PID_PHASE[xy]]['y'].update(errors[xy][1], dt)
+        # Bu troi: sai so cua nguon dang lai truc ngang -> he ban do -> tich; cong bias vao lenh.
+        if not airborne:
+            self.drift.reset()
+        elif xy in PID_PHASE and yaw is not None:
+            g = self.get_parameter
+            self.drift.ki = g('drift_comp.ki').value
+            self.drift.limit_mps = g('drift_comp.limit_mps').value
+            self.drift.window_m = g('drift_comp.window_m').value
+            # Chi hoc khi DICH DUNG YEN va may bay gan nhu dung yen. Dich dang chay (carrot PAD_ALIGN di
+            # truoc 0,5 m) thi sai so la do DAN DUONG, khong phai troi: Gazebo 10-09 hoc nham thanh
+            # +0,3 m/s ve phia truoc, sang bam tag thi bias day may bay lech 15-23 cm.
+            learn = speed <= DRIFT_LEARN_MAX_SPEED_MPS and (xy != SOURCE_CRUISE or target_still)
+            bias_w = (self.drift.update(body_to_world(errors[xy][:2], yaw), dt) if learn
+                      else self.drift.bias)
+            bias = world_to_body(bias_w, yaw)
+            vx, vy = vx + bias[0], vy + bias[1]
         if xy == SOURCE_CRUISE:
             vx, vy = self.limit_waypoint_speed(now_s, vx, vy)
-        if (self.odom is not None and self.yaw_stamp_s is not None
+        # Yaw: FSM ra lenh (/mission/yaw) > giu huong mac dinh > yaw_rate cua lenh van toc / 0.
+        if (yaw is not None and self.yaw_stamp_s is not None
                 and now_s - self.yaw_stamp_s <= YAW_SETPOINT_STALE_S):
-            q = self.odom.pose.pose.orientation
-            yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
-            yaw_rate = yaw_rate_command(self.yaw_setpoint, yaw, self.get_parameter('yaw.kp').value,
+            yaw_sp = self.yaw_setpoint
+            self.heading_hold.reset()               # FSM thoi ra lenh thi chot lai cho dang dung
+        else:
+            free_yaw = cmd is None or cmd.angular.z == 0.0
+            yaw_sp = self.heading_hold.update(
+                yaw, wz or 0.0, self.get_parameter('heading_hold').value and free_yaw and airborne,
+                dt)
+        if yaw_sp is not None:
+            yaw_rate = yaw_rate_command(yaw_sp, yaw, self.get_parameter('yaw.kp').value,
                                         math.radians(self.get_parameter('yaw.max_rate_dps').value))
 
         vx, vy, vz, yaw_rate = self.ramp.apply(now_s, (xy, z), (vx, vy, vz, yaw_rate))

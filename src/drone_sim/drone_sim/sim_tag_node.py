@@ -33,7 +33,8 @@ from drone_control.qos import SENSOR_QOS
 from drone_estimation.pad_map import build_pad_map, parse_headings
 
 # Lay tu estimation.launch.py - phai khop voi drone that.
-BASE_TO_CAM_XYZ = (0.09, 0.0, 0.0)          # do 2026-10-08: truoc tam 90 mm
+# z = -0,06: khop camera Gazebo gan duoi bung X3 (worlds/drone_tune.sdf, sim_launch.CAM_XYZ).
+BASE_TO_CAM_XYZ = (0.09, 0.0, -0.06)        # do 2026-10-08: truoc tam 90 mm
 BASE_TO_CAM_RPY = (0.0, 1.2217, 0.0)        # yaw, pitch, roll (pitch 70 do)
 CAM_TO_OPTICAL_RPY = (-1.5708, 0.0, -1.5708)
 

@@ -13,6 +13,8 @@ setup(
         ('share/' + package_name, ['package.xml', 'README.md']),
         ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
         ('share/' + package_name + '/worlds', glob('worlds/*.sdf')),
+        # Anh AprilTag dan len bai (tools/sim_tag_textures.py) - world tro duong dan tuong doi.
+        ('share/' + package_name + '/worlds/textures', glob('worlds/textures/*.png')),
         ('share/' + package_name + '/config', ['config/sim_tags.yaml']),
         ('share/' + package_name + '/config/missions', glob('config/missions/*.yaml')),
     ],
