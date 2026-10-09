@@ -35,8 +35,11 @@ position_controller_node:
     # xoa khi doi nguon; chi hoc khi gan dich (window_m), dich dung yen va gan dung yen. Gazebo 10-09
     # (camera that, troi 6 cm/s, odom tre 0,1 s + nhieu 3 cm): chi khau P lech 12-15 cm; ki 0,3 vot
     # qua 6-7 cm; ki 0,15 lech 2-3 cm. ki = 0 tat han.
-    drift_comp.ki: 0.15
-    drift_comp.limit_mps: 0.3
+    # 10-09 bay that: ki 0,15 / tran 0,3 m/s + FC dap ung van toc cham -> dao dong +-0,25 m/s quanh tam
+    # bai, vuot qua roi mat tag (2-3 lan thu lai moi bai). Tai hien trong Gazebo bang
+    # vel_delay_s 0,25 + vel_tau_s 1,0 (sim_fc_bridge_node): ha lech 28 cm, het luot thu lai.
+    drift_comp.ki: 0.05
+    drift_comp.limit_mps: 0.1
     drift_comp.window_m: 0.5
     cruise.x.kp: 0.7
     cruise.x.ki: 0.0
@@ -53,6 +56,8 @@ position_controller_node:
     cruise.z.kd: 0.0
     cruise.z.i_limit: 1.0
     cruise.z.out_limit: 1.5
+    # Giam chan bam tag: lenh vx, vy tru vel_damping x van toc than (position_controller_node).
+    landing.vel_damping: 0.5
     landing.x.kp: 0.5
     landing.x.ki: 0.0
     landing.x.kd: 0.0

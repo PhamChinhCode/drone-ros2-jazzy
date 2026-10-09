@@ -46,13 +46,17 @@ def gz_bridge():
                 output='screen')
 
 
-def sim_fc_bridge(auto_arm, heartbeat, delay, noise, drift=None):
-    """drift: (vx, vy, yaw_rate_dps) - sai so van toc FC gia lap (xem sim_fc_bridge_node)."""
+def sim_fc_bridge(auto_arm, heartbeat, delay, noise, drift=None, vel_lag=None):
+    """drift: (vx, vy, yaw_rate_dps) - sai so van toc FC gia lap; vel_lag: (tre thuan s, tau s) cua
+    van toc ngang (xem sim_fc_bridge_node)."""
     p = {'auto_arm': auto_arm, 'publish_mission_heartbeat': heartbeat,
          'odom_delay_s': ParameterValue(delay, value_type=float),
          'odom_noise_m': ParameterValue(noise, value_type=float)}
     if drift is not None:
         for k, v in zip(('drift_vx_mps', 'drift_vy_mps', 'drift_yaw_dps'), drift):
+            p[k] = ParameterValue(v, value_type=float)
+    if vel_lag is not None:
+        for k, v in zip(('vel_delay_s', 'vel_tau_s'), vel_lag):
             p[k] = ParameterValue(v, value_type=float)
     return Node(package='drone_sim', executable='sim_fc_bridge_node', name='sim_fc_bridge_node',
                 parameters=[p, SIM_TIME],

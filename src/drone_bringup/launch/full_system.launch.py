@@ -25,6 +25,9 @@ BAG_TOPICS = [
     '/apriltag/detections', '/optical_flow/velocity',
     '/odometry/filtered', '/mavros/state', '/mavros/battery',
     '/mission/state', '/failsafe_event', '/gripper/status',
+    # 10-09: thieu 3 topic nay nen khong do duoc lenh van toc / do lech tag / laser khi phan tich
+    # dao dong luc ha (drone vuot qua tam roi mat tag). Nho, < 10 KB/s.
+    '/mavros/setpoint_raw/local', '/landing_target/pose', '/range/vertical',
 ]
 
 

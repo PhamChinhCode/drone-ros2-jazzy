@@ -57,10 +57,17 @@ class SimFcBridgeNode(Node):
         self.declare_parameter('drift_vx_mps', 0.0)
         self.declare_parameter('drift_vy_mps', 0.0)
         self.declare_parameter('drift_yaw_dps', 0.0)
+        # Gia lap FC THAT dap ung van toc ngang cham (vong POSHOLD + flow): lenh vx, vy tre thuan
+        # vel_delay_s roi qua quan tinh bac 1 vel_tau_s. X3 cua Gazebo bam gan nhu tuc thi nen gain
+        # tune trong sim (drift_comp ki 0,15) dao dong +-0,25 m/s khi bay that 10-09. 0 = tat.
+        self.declare_parameter('vel_delay_s', 0.0)
+        self.declare_parameter('vel_tau_s', 0.0)
 
         g = lambda name: self.get_parameter(name).value  # noqa: E731
         self.fc = sim_fc.SimFc(auto_arm=g('auto_arm'))
         self.odom_queue = deque()
+        self.vel_queue = deque()        # (t, vx, vy) cho tre thuan
+        self.vel_lag = (0.0, 0.0)
         self.last_enable = None
         self.rx_ok = self.rx_rej = 0
 
@@ -184,6 +191,7 @@ class SimFcBridgeNode(Node):
             self.pub_enable.publish(Bool(data=enable))
             self.get_logger().info(f'dong co {"BAT" if enable else "TAT"}')
             self.last_enable = enable
+        vx, vy = self.lag_horizontal(enable, vx, vy)
         h = self.fc.height_m()
         if enable and h is not None and h > 0.3:
             g = self.get_parameter
@@ -194,6 +202,26 @@ class SimFcBridgeNode(Node):
         twist.linear.x, twist.linear.y, twist.linear.z = vx, vy, vz
         twist.angular.z = yaw_rate
         self.pub_twist.publish(twist)
+
+    def lag_horizontal(self, enable, vx, vy):
+        """Tre thuan + quan tinh bac 1 cho lenh van toc ngang (vel_delay_s, vel_tau_s)."""
+        g = self.get_parameter
+        if not enable:
+            self.vel_queue.clear()
+            self.vel_lag = (0.0, 0.0)
+            return vx, vy
+        now = self.now_s()
+        self.vel_queue.append((now, vx, vy))
+        delay = g('vel_delay_s').value
+        while len(self.vel_queue) > 1 and now - self.vel_queue[1][0] >= delay:
+            self.vel_queue.popleft()
+        _, dvx, dvy = self.vel_queue[0]
+        tau = g('vel_tau_s').value
+        dt = 1.0 / g('control_rate_hz').value
+        a = 1.0 if tau <= 0.0 else dt / (tau + dt)
+        lx, ly = self.vel_lag
+        self.vel_lag = (lx + a * (dvx - lx), ly + a * (dvy - ly))
+        return self.vel_lag
 
     def publish_state(self):
         msg = State()

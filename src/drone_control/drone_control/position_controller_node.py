@@ -100,6 +100,10 @@ class PositionControllerNode(Node):
         self.declare_parameter('drift_comp.ki', 0.15)
         self.declare_parameter('drift_comp.limit_mps', 0.3)
         self.declare_parameter('drift_comp.window_m', 0.5)
+        # Giam chan khi bam tag: tru landing.vel_damping x van toc than (EKF) khoi lenh vx, vy. FC
+        # that dap ung van toc cham nen chi P + khau I bay vuot qua tam bai roi mat tag (10-09).
+        # Dung van toc do chu khong dao ham sai so tag (nhieu, 30 Hz). 0 = tat.
+        self.declare_parameter('landing.vel_damping', 0.0)
 
         self.pids = {phase: {axis: self._make_pid(phase, axis) for axis in ('x', 'y', 'z')}
                      for phase in ('cruise', 'landing')}
@@ -349,6 +353,10 @@ class PositionControllerNode(Node):
                       else self.drift.bias)
             bias = world_to_body(bias_w, yaw)
             vx, vy = vx + bias[0], vy + bias[1]
+        if xy == SOURCE_LANDING and odom_ok:
+            kv = self.get_parameter('landing.vel_damping').value
+            v = self.odom.twist.twist.linear              # he than base_link (child frame)
+            vx, vy = vx - kv * v.x, vy - kv * v.y
         if xy == SOURCE_CRUISE:
             vx, vy = self.limit_waypoint_speed(now_s, vx, vy)
         # Yaw: FSM ra lenh (/mission/yaw) > giu huong mac dinh > yaw_rate cua lenh van toc / 0.
