@@ -106,9 +106,14 @@ echo "    ROS_DISTRO=${ROS_DISTRO}  workspace=$(dirname "$(dirname "$WS_SETUP")"
 # Chạy stack KHÔNG làm drone tự cất cánh: cất cánh cần GCS gửi kế hoạch + MISSION_START,
 # người lái bật công tắc cho phép OFFBOARD (ch8) và FC báo OB_ARM_RDY = 1.
 #
-# `exec`: tiến trình `ros2 launch` THAY chỗ script, để SIGINT của systemd (KillSignal)
-# tới thẳng launch — tắt êm như Ctrl+C, bag kịp đóng file. Không exec thì SIGINT chỉ
-# tới bash và launch bị SIGKILL khi hết TimeoutStopSec.
+# Script GIỮ launch làm tiến trình con (không `exec` nữa, 2026-10-09) để GCS khởi động lại được
+# cả stack mà không cần sudo (lệnh 42101, giao ước GCS 4.1):
+#   - SIGINT/SIGTERM của systemd (KillSignal) -> chuyển cho launch: tắt êm như Ctrl+C, bag đóng file
+#     (đúng như khi còn exec);
+#   - SIGUSR1 (gcs_link_node gửi tới DRONE_STACK_PID) -> tắt launch y như trên rồi thoát mã 75 ->
+#     Restart=on-failure của drone-startup.service chạy lại sau RestartSec.
+# `set -m` BẮT BUỘC: shell không tương tác chạy tiến trình nền với SIGINT bị BỎ QUA - thiếu nó thì
+# SIGINT chuyển tới launch không có tác dụng và launch chỉ chết khi hết TimeoutStopSec (SIGKILL).
 # ---------------------------------------------------------------------------
 if (( SOURCED )); then
   echo "[3/3] Đã nạp môi trường. Chạy stack: ros2 launch drone_bringup full_system.launch.py"
@@ -130,4 +135,20 @@ if ! ip -4 -o addr show scope global | grep -q .; then
 fi
 
 echo "[3/3] Chạy stack: ros2 launch drone_bringup full_system.launch.py"
-exec ros2 launch drone_bringup full_system.launch.py
+export DRONE_STACK_PID=$$
+KHOI_DONG_LAI=0
+set -m
+ros2 launch drone_bringup full_system.launch.py &
+LAUNCH_PID=$!
+trap 'kill -INT "$LAUNCH_PID" 2>/dev/null' INT TERM
+trap 'echo "[i] GCS yêu cầu khởi động lại stack"; KHOI_DONG_LAI=1; kill -INT "$LAUNCH_PID" 2>/dev/null' USR1
+# `wait` trả về sớm mỗi khi có tín hiệu bị bắt -> chờ lại tới khi launch thật sự thoát.
+while :; do
+  wait "$LAUNCH_PID"; RC=$?
+  kill -0 "$LAUNCH_PID" 2>/dev/null || break
+done
+if (( KHOI_DONG_LAI )); then
+  echo "[i] Stack đã tắt - thoát mã 75 để systemd chạy lại"
+  exit 75
+fi
+exit "$RC"

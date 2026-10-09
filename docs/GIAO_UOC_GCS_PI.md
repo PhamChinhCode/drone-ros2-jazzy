@@ -263,6 +263,18 @@ luôn quy tắc **R4 của hợp đồng FC — mọi lệnh đều phải có �
 | 400 | `COMPONENT_ARM_DISARM` | chỉ chấp nhận **disarm**: `param1 = 0`. `param2 = 21196` = cắt ở mọi độ cao |
 | **42100** | `DRONE_ABORT_MISSION` | huỷ kế hoạch đang nạp/đang chạy, hạ cánh, về `IDLE` |
 | 193 | `DO_PAUSE_CONTINUE` | `param1` 0 = dừng giữ vị trí, 1 = đi tiếp. Không đổi `current_wp_index`. **Đã cấp số, FSM chưa hiện thực → `UNSUPPORTED`** (11.P7) |
+| **42101** | `DRONE_RESTART_STACK` | khởi động lại **toàn bộ stack ROS** trên Pi (bổ sung 2026-10-09, xem dưới bảng) |
+
+**`42101 DRONE_RESTART_STACK`** — dùng sau khi nạp bản đồ tag (8.7: Pi ghi file, *chờ khởi động lại
+stack*) hoặc khi một node treo. Mọi param = 0.
+
+- **Chỉ khi an toàn:** Pi trả `DENIED` nếu drone **đang arm** (`STATUS_ARMED`) hoặc `mission_state`
+  **khác `IDLE`**, kèm `STATUSTEXT` lý do. Stack không chạy dưới service (chạy tay) → `UNSUPPORTED`.
+- **`ACCEPTED` gửi TRƯỚC khi tắt**; khoảng 1 s sau Pi tắt stack sạch (như `systemctl stop`: bag đóng
+  file) và service tự chạy lại sau ~5 s. GCS **mất liên kết 20–40 s** rồi tự nối lại (Pi gọi ra trước,
+  mục 2.1) — đây là kết quả mong đợi, không phải sự cố.
+- Phát lại trong lúc chờ tắt → `ACCEPTED` lại, không khởi động lại hai lần. Pi cũ (không biết lệnh)
+  → `UNSUPPORTED`, nên đây là bổ sung **tương thích ngược**, không đổi `contract_ver`.
 
 `COMMAND_ACK.result` dùng giá trị chuẩn: `ACCEPTED` (0), `TEMPORARILY_REJECTED` (1), `DENIED` (2),
 `UNSUPPORTED` (3), `FAILED` (4). **Lệnh lạ → `UNSUPPORTED`, không bao giờ im lặng.**
@@ -292,7 +304,7 @@ Nếu về sau vẫn cần bộ nhớ lệnh (cho lệnh không ánh xạ đư�
 
 | Nhóm | Lệnh | GCS phát lại | Vì sao |
 |---|---|---|---|
-| Thường | 300, 193 | 1,0 s × 3 rồi báo người vận hành | thao tác lại được bằng tay |
+| Thường | 300, 193, 42101 | 1,0 s × 3 rồi báo người vận hành | thao tác lại được bằng tay |
 | **Khẩn** | 20, 21, 400, 42100 | mỗi **0,5 s, KHÔNG giới hạn** tới khi có `ACK` hoặc người vận hành huỷ | |
 
 Lệnh khẩn không được bỏ cuộc: trên 4G chập chờn, một lệnh `LAND`/`DISARM` dừng thử sau 3 giây là
@@ -817,8 +829,9 @@ dùng khi nó vừa, từ chối khi phải mượn trường sai nghĩa.
 | Mã | Tên | Trạng thái |
 |---|---|---|
 | 42100 | `MAV_CMD_DRONE_ABORT_MISSION` | [THOẢ THUẬN] |
+| 42101 | `MAV_CMD_DRONE_RESTART_STACK` | [THOẢ THUẬN] 2026-10-09 — mục 4.1 |
 
-**Còn trống:** `42101–42149`.
+**Còn trống:** `42102–42149`.
 
 `MAV_CMD_DO_PAUSE_CONTINUE` (**193**) đã **cấp số** ở mục 4.1 nhưng FSM chưa hiện thực — Pi trả
 `UNSUPPORTED` và GCS ẩn nút. Cấp số trước để khi làm không phải đổi giao thức (mục 11.P7).

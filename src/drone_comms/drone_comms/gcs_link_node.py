@@ -33,6 +33,7 @@ from std_msgs.msg import Bool
 from std_srvs.srv import Trigger
 
 from drone_comms.qos import EVENT_QOS, SENSOR_QOS
+from drone_comms.stack_restart import quyet_dinh as quyet_dinh_restart
 from drone_comms.tagmap import (TAG_NHO_IDS, doc_apriltag_declared, ghi_tags_override,
                                 tagmap_crc, to_ascii)
 from drone_interfaces.msg import (MissionPlan, MissionPlanAck, MissionWaypoint,
@@ -62,6 +63,8 @@ KHONG_DO_DUOC_16 = 0xFFFF
 # MAV_CMD (muc 4.1)
 CMD_NAV_RTL, CMD_NAV_LAND, CMD_MISSION_START = 20, 21, 300
 CMD_ARM_DISARM, CMD_PAUSE_CONTINUE, CMD_ABORT = 400, 193, 42100
+CMD_RESTART_STACK = 42101          # bo sung 2026-10-09 (muc 4.1) - stack_restart.py
+RESTART_DELAY_S = 1.0              # cho ACK kip len day truoc khi tat
 LENH_KHAN = (CMD_NAV_RTL, CMD_NAV_LAND, CMD_ARM_DISARM, CMD_ABORT)
 ACK_ACCEPTED, ACK_TEMP_REJECTED, ACK_DENIED, ACK_UNSUPPORTED, ACK_FAILED = 0, 1, 2, 3, 4
 # fc_command_bridge_node tu dien param2 = 21196 (cat o moi do cao, giao uoc FC 6.2);
@@ -128,6 +131,8 @@ class GcsLinkNode(Node):
         self.cho_ack = None                # mission_id dang cho mission_manager phan quyet
         self.ban_do = None                 # luot nap ban do tag dang chay (muc 8.7)
         self.mission_state = 0             # tu telemetry moi nhat - DRONE_STATE_IDLE = 0
+        self.armed = None                  # tu telemetry; None = mat duong FC / chua co goi nao
+        self.restart_timer = None          # lenh 42101 da chap nhan, dang cho tat stack
 
         self.create_subscription(
             TelemetryPacket, '/telemetry/outgoing', self.on_telemetry, EVENT_QOS)
@@ -233,6 +238,8 @@ class GcsLinkNode(Node):
         self.tx_telemetry_cho += 1
         self.pos_valid = bool(msg.valid_flags & TelemetryPacket.VALID_POS)
         self.mission_state = msg.mission_state     # nap ban do tag (8.7) chi nhan khi IDLE
+        self.armed = (bool(msg.status_flags & TelemetryPacket.STATUS_ARMED)
+                      if msg.valid_flags & TelemetryPacket.VALID_FC_LINK else None)
         self.enqueue(PRIORITY_TELEMETRY, self.d.MAVLink_drone_telemetry_message(
             stamp_us=int(msg.stamp.sec * 1e6 + msg.stamp.nanosec / 1e3),
             mission_id=msg.mission_id, contract_ver=msg.contract_ver,
@@ -599,6 +606,9 @@ class GcsLinkNode(Node):
         if c == CMD_PAUSE_CONTINUE:
             self.ack_lenh(c, ACK_UNSUPPORTED)      # da cap so, FSM chua hien thuc (muc 4.1)
             return
+        if c == CMD_RESTART_STACK:
+            self.khoi_dong_lai_stack(c)
+            return
         if c not in (CMD_NAV_RTL, CMD_NAV_LAND, CMD_MISSION_START, CMD_ARM_DISARM, CMD_ABORT):
             self.ack_lenh(c, ACK_UNSUPPORTED)      # lenh la -> UNSUPPORTED, khong bao gio im lang
             return
@@ -606,6 +616,28 @@ class GcsLinkNode(Node):
             self.goi_disarm(c)
             return
         self.goi_trigger(c, self.dich_vu[c])
+
+    def khoi_dong_lai_stack(self, command):
+        """Lenh 42101: ACK TRUOC, ~1 s sau bao drone_startup.sh (SIGUSR1) tat stack sach; service
+        tu chay lai. Phat lai trong luc cho -> ACCEPTED lai, khong khoi dong lai hai lan (4.2)."""
+        if self.restart_timer is not None:
+            self.ack_lenh(command, ACK_ACCEPTED)
+            return
+        pid = os.environ.get('DRONE_STACK_PID')
+        kq, ly_do = quyet_dinh_restart(self.armed, self.mission_state, pid)
+        if kq != 'ok':
+            self.ack_lenh(command, ACK_UNSUPPORTED if kq == 'khong_ho_tro' else ACK_DENIED)
+            self.statustext(4, f'khong khoi dong lai stack: {ly_do}')
+            return
+        self.ack_lenh(command, ACK_ACCEPTED)
+        self.statustext(5, 'khoi dong lai stack Pi - mat lien ket ~20-40 s')
+        self.get_logger().warning(f'GCS yeu cau khoi dong lai stack - SIGUSR1 toi {pid} sau '
+                                  f'{RESTART_DELAY_S:g} s')
+
+        def gui_tin_hieu():
+            self.restart_timer.cancel()
+            os.kill(int(pid), signal.SIGUSR1)
+        self.restart_timer = self.create_timer(RESTART_DELAY_S, gui_tin_hieu)
 
     def goi_trigger(self, command, cli):
         """Goi service Trigger khong chan, ACK theo ket qua THAT.

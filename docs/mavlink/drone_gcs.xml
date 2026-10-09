@@ -32,6 +32,16 @@
         <param index="6">Khong dung, dat 0.</param>
         <param index="7">Khong dung, dat 0.</param>
       </entry>
+      <entry value="42101" name="MAV_CMD_DRONE_RESTART_STACK">
+        <description>Khoi dong lai toan bo stack ROS tren Pi (bo sung 2026-10-09, muc 4.1). Chi khi drone KHONG arm va mission_state = IDLE, khong thi DENIED. ACK ACCEPTED gui TRUOC; ~1 s sau Pi tat stack sach, service chay lai sau ~5 s - GCS mat lien ket 20-40 s. Lenh thuong: phat lai 1,0 s x 3.</description>
+        <param index="1">Khong dung, dat 0.</param>
+        <param index="2">Khong dung, dat 0.</param>
+        <param index="3">Khong dung, dat 0.</param>
+        <param index="4">Khong dung, dat 0.</param>
+        <param index="5">Khong dung, dat 0.</param>
+        <param index="6">Khong dung, dat 0.</param>
+        <param index="7">Khong dung, dat 0.</param>
+      </entry>
     </enum>
 
     <!-- Muc 3.3. Ma so de may xu ly; chuoi reason de nguoi doc. Hai thu khong duoc mau thuan;
