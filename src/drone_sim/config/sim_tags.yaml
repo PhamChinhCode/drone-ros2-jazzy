@@ -14,7 +14,7 @@
     known_tags_heading: [0.0, 90.0, 1.0, 0.0, 2.0, 180.0]
     pad_small_tag_id_offset: 10
     pad_small_tag_size_m: 0.10
-    pad_small_tag_forward_m: 0.22
+    pad_small_tag_forward_m: 0.21
     geo_origin_valid: false
     geo_origin_lat: 0.0
     geo_origin_lon: 0.0

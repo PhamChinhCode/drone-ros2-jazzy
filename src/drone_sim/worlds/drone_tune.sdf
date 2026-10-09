@@ -125,7 +125,7 @@
         <visual name="tag_nho">
           <!-- canh khoi den 0.1 m (apriltag.yaml) + vien trang 1 o = 0.125 m. Yaw -90 do: mep
                TREN anh (truc +y cua mat phang) quay ve +x model = phia "tren" bai. -->
-          <pose>0.22 0 0.0055 0 0 -1.5708</pose>
+          <pose>0.21 0 0.0055 0 0 -1.5708</pose>
           <geometry><plane><normal>0 0 1</normal><size>0.125 0.125</size></plane></geometry>
           <material>
             <ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse><specular>0 0 0 1</specular>
@@ -162,7 +162,7 @@
         <visual name="tag_nho">
           <!-- canh khoi den 0.1 m (apriltag.yaml) + vien trang 1 o = 0.125 m. Yaw -90 do: mep
                TREN anh (truc +y cua mat phang) quay ve +x model = phia "tren" bai. -->
-          <pose>0.22 0 0.0055 0 0 -1.5708</pose>
+          <pose>0.21 0 0.0055 0 0 -1.5708</pose>
           <geometry><plane><normal>0 0 1</normal><size>0.125 0.125</size></plane></geometry>
           <material>
             <ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse><specular>0 0 0 1</specular>
@@ -199,7 +199,7 @@
         <visual name="tag_nho">
           <!-- canh khoi den 0.1 m (apriltag.yaml) + vien trang 1 o = 0.125 m. Yaw -90 do: mep
                TREN anh (truc +y cua mat phang) quay ve +x model = phia "tren" bai. -->
-          <pose>0.22 0 0.0055 0 0 -1.5708</pose>
+          <pose>0.21 0 0.0055 0 0 -1.5708</pose>
           <geometry><plane><normal>0 0 1</normal><size>0.125 0.125</size></plane></geometry>
           <material>
             <ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse><specular>0 0 0 1</specular>

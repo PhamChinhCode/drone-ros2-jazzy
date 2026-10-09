@@ -49,7 +49,7 @@ Số đo: camera **90 mm trước tâm**, nghiêng **20°** về trước; `fx 2
 |---|---|---|
 | Tag to | **25 cm** (36h11) | Đọc tới ~3,7 m; mất khỏi khung khi *h* < **0,73 m** (20 cm: 3,0 m / 0,65 m) |
 | Tag nhỏ | **10 cm**, cùng hướng tag to | Đọc được từ *h* ≈ **1,1 m** trở xuống; còn trong khung tới *h* ≈ 0,15 m |
-| Tâm tag nhỏ | **0,22 m** về phía "trên" tag to, tính từ tâm bãi | ≥ 0,206 m để không đè viền trắng tag to (25 cm); vừa dải nhìn thấy ở *h* 0,15–1,1 m |
+| Tâm tag nhỏ | **0,21 m** (0,22 tới 10-09) về phía "trên" tag to, tính từ tâm bãi | ≥ 0,206 m để không đè viền trắng tag to (25 cm); vừa dải nhìn thấy ở *h* 0,15–1,1 m |
 | Dải chuyển giao | *h* **0,73 → 1,1 m** | Cả hai tag cùng thấy được |
 | Hạ mù | dưới *h* ≈ **0,15 m** | Khoảng cuối ngắn, giữ vị trí bằng EKF/flow |
 | Độ cao tiếp cận | **2,5 m** | Tag 25 cm còn ~30 px — bắt chắc |
@@ -59,7 +59,7 @@ Số đo: camera **90 mm trước tâm**, nghiêng **20°** về trước; `fx 2
             phía "trên" của bãi (hướng bãi, yaw_pad)
                          ▲
                    ┌──────────┐
-                   │ tag nhỏ  │  10 cm, ID = ID_to + 10, tâm cách tâm bãi 0,22 m
+                   │ tag nhỏ  │  10 cm, ID = ID_to + 10, tâm cách tâm bãi 0,21 m
                    └──────────┘
           ┌──────────────────────────┐
           │                          │
@@ -182,9 +182,9 @@ CRC khớp ở cả hai bên.
 - `tags.yaml`: thêm `known_tags_heading: [id, độ, ...]` (hướng từ trục N bản đồ, chiều kim đồng
   hồ — cùng quy ước trên dây; chỉ tag có hướng), giữ nguyên `known_tags` 4 phần tử để không vỡ các
   bộ đọc khác, và mẫu bãi `pad_small_tag_id_offset: 10`, `pad_small_tag_size_m: 0.10`,
-  `pad_small_tag_forward_m: 0.22`.
+  `pad_small_tag_forward_m: 0.21`.
 - Hàm thuần mới (pytest): đọc tag + yaw → **suy vị trí/hướng tag nhỏ** = tâm tag to + xoay
-  (0,22 m) theo yaw_pad.
+  (0,21 m) theo yaw_pad.
 - Sửa các bộ đọc: `estimation_math.parse_known_tags`, `drone_comms.tagmap` (đọc, CRC, ghi
   override kèm yaw), `landing_target_bridge_node`, `telemetry_aggregator_node`.
 - `apriltag.yaml`: khai thêm ID 10, 11, 12 (frames, **size 0,10**); đổi size tag to theo bản in
@@ -231,7 +231,7 @@ home quay 90° và quay về.
 ### WP6 — Đích hạ cánh từ hai tag
 
 - `landing_target_bridge_node`: nhận **cả** tag to và tag nhỏ của bãi đang nhắm (ID, ID+10); đổi
-  pose tag nào đang thấy thành **tâm bãi** trong `base_link` (tag nhỏ: lùi 0,22 m theo hướng tag).
+  pose tag nào đang thấy thành **tâm bãi** trong `base_link` (tag nhỏ: lùi 0,21 m theo hướng tag).
   Ưu tiên tag to khi cả hai cùng thấy và *h* > 1 m, tag nhỏ khi thấp hơn.
 - Phát kèm hướng bãi (yaw_pad) trong thân máy cho `PAD_ALIGN`.
 - `mission_manager_node`: xác thực ID chấp nhận cả cặp.

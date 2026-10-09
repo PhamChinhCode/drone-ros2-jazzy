@@ -56,7 +56,7 @@ class MarkerPoseRepublisherNode(Node):
         # xuong thap (tag to ra khoi khung hinh) EKF van duoc sua vi tri.
         self.declare_parameter('known_tags_heading', Parameter.Type.DOUBLE_ARRAY)
         self.declare_parameter('pad_small_tag_id_offset', 10)
-        self.declare_parameter('pad_small_tag_forward_m', 0.22)
+        self.declare_parameter('pad_small_tag_forward_m', 0.21)
         self.declare_parameter('base_frame', 'base_link')
 
         try:

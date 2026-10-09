@@ -1173,7 +1173,7 @@ GCS gửi thì chỉ thêm một chỗ có thể lệch mà không ai thấy (11
 **Tag nhỏ của bãi (0.8) — Pi tự suy, không đi qua dây.** Mỗi bãi có thể có một tag nhỏ cùng hướng,
 đặt về phía "trên" của tag to, `id = id_to + 10`. Mọi bãi dùng **chung một mẫu** khai ở `tags.yaml`
 phía Pi (`pad_small_tag_id_offset`, `pad_small_tag_size_m`, `pad_small_tag_forward_m`; đề xuất
-10 / 0,10 m / 0,22 m). Pi tính vị trí tag nhỏ từ vị trí + hướng tag to, nên tag to **không khai
+10 / 0,10 m / 0,21 m — 0,22 đổi thành 0,21 ngày 2026-10-09 theo tờ in A3). Pi tính vị trí tag nhỏ từ vị trí + hướng tag to, nên tag to **không khai
 hướng thì không có tag nhỏ**. CRC chỉ phủ tag to. GCS muốn vẽ tag nhỏ thì đọc mẫu này từ tài liệu,
 không có trường nào trên dây mang nó.
 

@@ -17,7 +17,7 @@ PAD = (5.0, 3.0, 0.0)
 G = 9.81
 FX, FY, CX, CY, W, H = 299.94, 298.75, 321.58, 180.21, 640, 400
 P_CAM_B = (0.09, 0.0, 0.0)
-BIG, SMALL, SMALL_FWD = 0.25, 0.10, 0.22
+BIG, SMALL, SMALL_FWD = 0.25, 0.10, 0.21
 MIN_PX = 20.0               # canh tag toi thieu de apriltag doc chac (decimate 2)
 MARGIN_PX = 4.0
 

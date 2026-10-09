@@ -99,7 +99,7 @@ class SimTagNode(Node):
         # Bai hai tag (tags.yaml): bai co huong thi co tag nho id + offset, truoc tam forward_m.
         self.declare_parameter('known_tags_heading', Parameter.Type.DOUBLE_ARRAY)
         self.declare_parameter('pad_small_tag_id_offset', 10)
-        self.declare_parameter('pad_small_tag_forward_m', 0.22)
+        self.declare_parameter('pad_small_tag_forward_m', 0.21)
         self.declare_parameter('pad_small_tag_size_m', 0.10)
 
         g = self.get_parameter
