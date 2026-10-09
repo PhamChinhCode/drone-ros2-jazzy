@@ -101,6 +101,12 @@ def camera_pipeline(condition):
                                            ('camera_info', '/camera/camera_info'),
                                            ('detections', '/apriltag/detections')]),
             ]),
+        # Optical flow THAT tren anh camera Gazebo (cung perception.yaml voi Pi) - de kiem dau va do
+        # lon van toc truoc khi tin no tren drone that. Chi phat /optical_flow/velocity, EKF sim
+        # khong dung (sim_fc_bridge phat odom ground truth).
+        Node(package='drone_perception', executable='optical_flow_node', name='optical_flow_node',
+             parameters=[os.path.join(CONFIG, 'perception.yaml'), SIM_TIME], condition=condition,
+             output='screen'),
     ]
 
 

@@ -24,7 +24,7 @@ from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from geometry_msgs.msg import TransformStamped
-from sensor_msgs.msg import Range
+from sensor_msgs.msg import Imu, Range
 from std_msgs.msg import Bool
 from tf2_ros import TransformBroadcaster
 
@@ -79,6 +79,9 @@ class SimFcBridgeNode(Node):
         self.pub_range = self.create_publisher(Range, '/mavros/mtf01p', SENSOR_QOS)
         # Laser gia da la do cao thang dung va sim khong co IMU: thay range_vertical_node.
         self.pub_range_v = self.create_publisher(Range, '/range/vertical', SENSOR_QOS)
+        # Tu the + toc do goc nhu /mavros/imu/data cua FC that: optical_flow_node can de chieu tia
+        # nhin xuong dat theo tu the luc chup (camera nghieng theo than).
+        self.pub_imu = self.create_publisher(Imu, '/mavros/imu/data', SENSOR_QOS)
         self.pub_state = self.create_publisher(State, '/mavros/state', RELIABLE_QOS)
         self.pub_named = self.create_publisher(
             DebugValue, '/mavros/debug_value/named_value_int', NAMED_VALUE_QOS)
@@ -135,6 +138,13 @@ class SimFcBridgeNode(Node):
         rng.range = 0.0 if r is None else r      # hop dong 1.6: FC gui 0 khi mat laser
         self.pub_range.publish(rng)
         self.pub_range_v.publish(rng)
+
+        imu = Imu()
+        imu.header.stamp = stamp
+        imu.header.frame_id = 'base_link'
+        imu.orientation = msg.pose.pose.orientation
+        imu.angular_velocity = msg.twist.twist.angular        # Gazebo: he than (child frame)
+        self.pub_imu.publish(imu)
 
         # "EKF": ground truth + nhieu, phat tre odom_delay_s.
         out = Odometry()

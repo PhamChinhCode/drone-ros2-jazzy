@@ -1,7 +1,10 @@
 optical_flow_node:
   ros__parameters:
     max_corners: 100
-    quality_level: 0.3
+    # Nguong TUONG DOI so voi goc manh nhat anh. 0,3 (cu): do 10-09 tren Pi chi 9 diem/khung (canh
+    # tuong phan manh trong khung lam moi goc khac bi loai) -> sau loc hinh hoc < 8 -> 0 Hz. 0,02 du
+    # 100 diem; diem bam sai van bi max_lk_error loai.
+    quality_level: 0.02
     min_distance: 7
     min_tracked_features: 8      # duoi nguong nay thi KHONG publish gi ca
     max_lk_error: 20.0           # loai diem bam sai: bam tot err~0, anh trang/nhieu err 70-150

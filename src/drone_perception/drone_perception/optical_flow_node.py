@@ -38,7 +38,7 @@ class OpticalFlowNode(Node):
         super().__init__('optical_flow_node')
 
         self.declare_parameter('max_corners', 100)
-        self.declare_parameter('quality_level', 0.3)
+        self.declare_parameter('quality_level', 0.02)
         self.declare_parameter('min_distance', 7)
         self.declare_parameter('min_tracked_features', 8)
         self.declare_parameter('refresh_interval_s', 1.5)

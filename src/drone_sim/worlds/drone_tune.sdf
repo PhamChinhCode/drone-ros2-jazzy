@@ -81,6 +81,24 @@
       </link>
     </model>
 
+    <!-- Mat dat co van (tools/sim_ground_texture.py) phu vung bay 24 x 24 m quanh cac bai: mat
+         phang xam tron khong co goc nao cho optical flow bam. Chi de nhin/camera - va cham van la
+         ground_plane. -->
+    <model name="ground_texture">
+      <static>true</static>
+      <pose>5 -3 0.001 0 0 0</pose>
+      <link name="link">
+        <visual name="visual">
+          <geometry><plane><normal>0 0 1</normal><size>24 24</size></plane></geometry>
+          <material>
+            <ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse><specular>0 0 0 1</specular>
+            <pbr><metal><albedo_map>textures/ground.png</albedo_map>
+              <roughness>1.0</roughness><metalness>0.0</metalness></metal></pbr>
+          </material>
+        </visual>
+      </link>
+    </model>
+
     <!-- Bai dap pad_home: tag 0, khop config/sim_tags.yaml (anh AprilTag that: tag to 25 cm + tag nho 10 cm ve phia "tren" = +x cua model, yaw model = huong bai ENU) -->
     <model name="pad_home">
       <static>true</static>
