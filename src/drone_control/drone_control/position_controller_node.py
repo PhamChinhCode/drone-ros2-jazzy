@@ -38,7 +38,7 @@ from rclpy.signals import SignalHandlerOptions
 from sensor_msgs.msg import Range
 from std_msgs.msg import Float32
 
-from drone_control.drift_comp import body_to_world, DriftCompensator, world_to_body
+from drone_control.drift_comp import body_to_world, closing_speed, DriftCompensator, world_to_body
 from drone_control.hold import HeadingHold, MIN_AIRBORNE_RANGE_M, PositionHold
 from drone_control.pid import PID, check_gain_param
 from drone_control.qos import EVENT_QOS, SENSOR_QOS
@@ -60,6 +60,11 @@ DRIFT_LEARN_MAX_SPEED_MPS = 0.25  # bu troi chi hoc khi toc do ngang duoi muc na
 # 10-10: so tung chu ky thi carrot PAD_ALIGN bo cham (< 5 mm/chu ky) van tinh la dung yen -> do tre
 # bam dich (lon hon khi bat cruise.vel_damping) bi hoc thanh troi SAI DAU, day lech 17 cm luc ha.
 DRIFT_LEARN_STILL_S = 1.0
+# Dang tien VE dich nhanh hon muc nay thi sai so la quang duong con lai, khong phai troi - khong hoc.
+# 10-11: PAD_ALIGN dung lui sau tam bai, PRECISION_LAND keo toi 0,1-0,2 m theo tag -> bu troi hoc
+# nham "troi toi", cham dat lech truoc 2-4 cm (Gazebo FC moi). Troi that: dung yen lech hoac bi day
+# ra xa dich (toc do tien <= 0) - van hoc.
+DRIFT_LEARN_CLOSING_MPS = 0.03
 ODOM_STALE_S = 0.5              # EKF 30 Hz - giu cho chi chot/bam khi odom con moi
 YAW_SETPOINT_STALE_S = 0.5      # /mission/yaw 5 Hz; im = FSM khong muon quay mui -> yaw_rate 0
 
@@ -364,7 +369,9 @@ class PositionControllerNode(Node):
             # Chi hoc khi DICH DUNG YEN va may bay gan nhu dung yen. Dich dang chay (carrot PAD_ALIGN di
             # truoc 0,5 m) thi sai so la do DAN DUONG, khong phai troi: Gazebo 10-09 hoc nham thanh
             # +0,3 m/s ve phia truoc, sang bam tag thi bias day may bay lech 15-23 cm.
-            learn = speed <= DRIFT_LEARN_MAX_SPEED_MPS and (xy != SOURCE_CRUISE or target_still)
+            v = self.odom.twist.twist.linear              # he than, cung he voi errors[xy]
+            learn = (speed <= DRIFT_LEARN_MAX_SPEED_MPS and (xy != SOURCE_CRUISE or target_still)
+                     and closing_speed(errors[xy][:2], (v.x, v.y)) <= DRIFT_LEARN_CLOSING_MPS)
             bias_w = (self.drift.update(body_to_world(errors[xy][:2], yaw), dt) if learn
                       else self.drift.bias)
             bias = world_to_body(bias_w, yaw)

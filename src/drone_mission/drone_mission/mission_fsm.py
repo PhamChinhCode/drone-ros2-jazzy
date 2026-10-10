@@ -98,6 +98,15 @@ ESCALATE_EMERGENCY_LAND = 4
 PRECISION_ACQUIRE_S = 1.0       # moi vao trang thai: cho bat tag toi da chung nay roi coi la mat
 PRECISION_ALIGN_BASE_M = 0.10   # chi xuong khi tag lech ngang <= BASE + PER_M x do cao laser
 PRECISION_ALIGN_PER_M = 0.25
+# Lech ra TRUOC mui (qua tam bai) chat hon nhieu (10-11): camera nghieng 20 do chi nhin 16 do ra sau,
+# ha xuong thi vung thay phia sau hep lai -> dang lech truoc ma ha tiep la tag troi khoi mep duoi anh
+# (Gazebo FC cham + troi toi: lech truoc 0,25-0,30 m van ha, mat tag o 0,67 m; bay that cung vay).
+# Mo hinh chieu camera (test_approach_visibility): ngoc mui 3 do, tag nho con thay khi lech truoc
+# 0,18 m o 0,5 m, 0,32 m o 1,1 m -> nguong nay chua bien 3-5 cm. Qua nguong: dung ha, can tam truoc.
+# 0,03 + 0,15 x h chat qua: Gazebo FC moi lech truoc tinh ~0,10 m (troi) -> dung cho o 0,4 m, cham dat
+# lech 2-4 cm thay vi < 1 cm.
+PRECISION_AHEAD_BASE_M = 0.05
+PRECISION_AHEAD_PER_M = 0.20
 # Duoi do cao nay camera (nghieng 20 do, truoc tam 6 cm) khong con thay tag tron ven - xuong
 # tiep khong can tag. Tren muc nay mat tag la dung, KHONG ha mu.
 PRECISION_BLIND_BELOW_M = 0.35
@@ -919,14 +928,15 @@ class MissionFsm:
                                            f'mat tag {wp.marker_id} - khong ha mu')
             dist = math.hypot(snap.position[0] - pad[0], snap.position[1] - pad[1])
             allowed = PRECISION_ALIGN_BASE_M + PRECISION_ALIGN_PER_M * snap.range_m
-            if lost <= TAG_GAP_GRACE_S and dist <= allowed:
+            # Troi qua tam ra truoc cung la "troi ra ngoai": tag o ngoai mep duoi anh.
+            if lost <= TAG_GAP_GRACE_S and dist <= allowed and self._ahead_ok(snap, pad):
                 act.velocity_up_mps = -descent_mps(snap.range_m)
                 act.detail = (f'mat tag {lost:.1f} s, EKF lech tam {dist:.2f} m - ha tiep, '
                               f'giu tam bai')
                 return act
             if lost <= TAG_GAP_RECOVER_S:
-                act.detail = (f'mat tag {lost:.1f} s, EKF lech tam {dist:.2f} m > {allowed:.2f} - '
-                              f'dung ha, ve tam bai')
+                act.detail = (f'mat tag {lost:.1f} s, EKF lech tam {dist:.2f} m (cho phep '
+                              f'{allowed:.2f}) hoac qua tam ra truoc - dung ha, ve tam bai')
                 return act
             return self._search_failed(now, MARKER_SEARCH, f'mat tag {wp.marker_id} - khong ha mu')
         self.tag_lost_since = None
@@ -937,9 +947,27 @@ class MissionFsm:
         if snap.target_offset_m > allowed:
             act.detail = f'cho can tam: lech {snap.target_offset_m:.2f} m > {allowed:.2f} m'
             return act
+        if not self._ahead_ok(snap, pad):
+            act.detail = (f'cho can tam: lech TRUOC tam {self._ahead_of_pad(snap, pad):.2f} m > '
+                          f'{PRECISION_AHEAD_BASE_M + PRECISION_AHEAD_PER_M * snap.range_m:.2f} m')
+            return act
         act.velocity_up_mps = -descent_mps(snap.range_m)
         act.detail = f'xuong theo tag, lech {snap.target_offset_m:.2f} m'
         return act
+
+    @staticmethod
+    def _ahead_of_pad(snap, pad):
+        """Drone lech ra truoc tam bai bao nhieu m theo huong mui (EKF); None neu thieu du lieu."""
+        if snap.position is None or snap.yaw is None:
+            return None
+        return ((snap.position[0] - pad[0]) * math.cos(snap.yaw)
+                + (snap.position[1] - pad[1]) * math.sin(snap.yaw))
+
+    def _ahead_ok(self, snap, pad):
+        """Lech truoc tam con trong nguong ha (PRECISION_AHEAD_*); thieu vi tri/yaw: khong chan."""
+        ahead = self._ahead_of_pad(snap, pad)
+        limit = PRECISION_AHEAD_BASE_M + PRECISION_AHEAD_PER_M * snap.range_m
+        return ahead is None or ahead <= limit
 
     def _descend_and_disarm(self, snap, act):
         """Giu lenh xuong (tieu chi cham dat can no); landed + OB_DIS_RDY -> DISARM thuong."""

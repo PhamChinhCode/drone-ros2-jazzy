@@ -38,6 +38,15 @@ class DriftCompensator:
         return self.bias
 
 
+def closing_speed(err, vel):
+    """Toc do tien VE dich (m/s, > 0 = dang lai gan): hinh chieu van toc len huong sai so.
+
+    err, vel cung mot he. Sai so qua nho (< 2 cm) thi huong vo nghia - tra 0.
+    """
+    n = math.hypot(*err)
+    return (err[0] * vel[0] + err[1] * vel[1]) / n if n > 0.02 else 0.0
+
+
 def world_to_body(v, yaw):
     """(x, y) he ban do -> (toi, trai) he than theo yaw."""
     c, s = math.cos(yaw), math.sin(yaw)

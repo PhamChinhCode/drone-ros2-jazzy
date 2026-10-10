@@ -328,6 +328,34 @@ def test_mat_tag_vi_troi_xa_thi_dung_ha_ve_tam_bai():
     assert act.position_target[:2] == pytest.approx((10.0, 0.0)) and 've tam' in act.detail
 
 
+def test_lech_truoc_tam_thi_dung_ha_du_trong_nguong_doi_xung():
+    # Camera chi nhin 16 do ra sau: qua tam ra truoc (theo mui, yaw 0 = +x) ma ha tiep la mat tag.
+    fsm = fsm_dang_ha_chinh_xac([wp(0, marker=1)])
+    # 0,7 m: doi xung cho 0,275 m, phia truoc chi 0,05 + 0,20 x 0,7 = 0,19 m
+    act = fsm.step(snap(1.2, armed=True, range_m=0.7, target_offset_m=0.25, yaw=0.0,
+                        position=(10.25, 0.0, 0.7)))
+    assert act.velocity_up_mps == 0.0 and 'TRUOC' in act.detail
+    # Cung lech 0,25 m nhung o PHIA SAU (tag giua anh): ha binh thuong.
+    act = fsm.step(snap(1.3, armed=True, range_m=0.7, target_offset_m=0.25, yaw=0.0,
+                        position=(9.75, 0.0, 0.7)))
+    assert act.velocity_up_mps < 0.0
+    # Mui quay 180 do thi "truoc" doi chieu theo.
+    act = fsm.step(snap(1.4, armed=True, range_m=0.7, target_offset_m=0.25, yaw=math.pi,
+                        position=(9.75, 0.0, 0.7)))
+    assert act.velocity_up_mps == 0.0
+
+
+def test_mat_tag_vi_troi_qua_tam_ra_truoc_thi_dung_ha():
+    # Lech 0,25 m: trong nguong doi xung (0,30 m o 0,8 m) nhung qua tam ra truoc > 0,21 m.
+    fsm = fsm_dang_ha_chinh_xac([wp(0, marker=1)])
+    fsm.step(snap(1.2, armed=True, range_m=0.8, target_offset_m=0.05, yaw=0.0,
+                  position=(10.0, 0.0, 0.8)))
+    act = fsm.step(snap(1.5, armed=True, range_m=0.8, yaw=0.0, position=(10.25, 0.0, 0.8)))
+    assert act.velocity_up_mps == 0.0 and 've tam' in act.detail
+    act = fsm.step(snap(1.7, armed=True, range_m=0.8, yaw=0.0, position=(9.75, 0.0, 0.8)))
+    assert act.velocity_up_mps < 0.0                    # lech sau cung 0,25 m: van ha tiep
+
+
 def test_mat_tag_giua_chung_thi_khong_ha_mu():
     fsm = fsm_dang_ha_chinh_xac()
     fsm.step(snap(1.2, armed=True, range_m=1.0, target_offset_m=0.1))
@@ -1005,7 +1033,9 @@ def test_pad_align_toi_noi_dung_huong_roi_tim_tag_tai_cho():
         e = math.atan2(math.sin(act.yaw_target - yaw), math.cos(act.yaw_target - yaw))
         yaw += max(-math.radians(30) * dt, min(math.radians(30) * dt, e))
     assert fsm.state == m.MARKER_SEARCH and act.expected_marker_id == 1
-    assert fsm.search_target == pytest.approx((10.0, 0.0, m.APPROACH.final_alt))
+    # Diem toi noi lui sau tam bai final_standoff doc truc (bai huong +y).
+    assert fsm.search_target == pytest.approx(
+        (10.0, -m.APPROACH.final_standoff, m.APPROACH.final_alt))
     act = fsm.step(snap(t + dt, armed=True, range_m=z, position=(x, y, z), yaw=yaw))
     assert act.position_target == fsm.search_target     # giu tai cho, khong leo lai alt_m
     assert act.yaw_target == pytest.approx(math.pi / 2)

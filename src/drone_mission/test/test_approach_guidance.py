@@ -45,16 +45,26 @@ def test_vong_cung_chon_chieu_ngan_hon():
     assert g.phase == 'orbit' and g.target[0] > PAD[0]
 
 
-def test_toi_noi():
-    assert guide((5.05, 3.0, 1.1), YAW_PAD, PAD, YAW_PAD).phase == 'arrived'
-    assert guide((5.05, 3.0, 1.1), YAW_PAD + math.radians(20), PAD, YAW_PAD).phase != 'arrived'
-    assert guide((5.05, 3.0, 1.4), YAW_PAD, PAD, YAW_PAD).phase == 'final'      # chua ha xong
+def test_toi_noi_lui_sau_tam_bai():
+    y = 3.0 - P.final_standoff                          # diem toi noi lui sau tam doc truc
+    g = guide((5.05, y, 1.1), YAW_PAD, PAD, YAW_PAD)
+    assert g.phase == 'arrived' and g.target[:2] == pytest.approx((5.0, y))
+    assert guide((5.05, y, 1.1), YAW_PAD + math.radians(20), PAD, YAW_PAD).phase != 'arrived'
+    assert guide((5.05, y, 1.4), YAW_PAD, PAD, YAW_PAD).phase == 'final'        # chua ha xong
+    # Dung tren tam (= vot qua diem dung) khong con la "toi noi" - lui ve.
+    assert guide((5.0, 3.0 + 0.10, 1.1), YAW_PAD, PAD, YAW_PAD).phase == 'final'
+
+
+def test_carrot_khong_vuot_diem_dung():
+    for d in (1.4, 0.8, 0.5, 0.3, 0.16):
+        g = guide((5.0, 3.0 - d, 1.5), YAW_PAD, PAD, YAW_PAD)
+        assert g.target[1] <= 3.0 - P.final_standoff + 1e-9, d
 
 
 def test_vuot_qua_tam_mot_chut_khong_vong_cung():
     """Lo vuot tam bai 0,3 m ve phia truoc: van giu tam, khong bat bay vong quanh bai."""
     g = guide((5.0, 3.3, 1.1), YAW_PAD, PAD, YAW_PAD)
-    assert g.phase == 'final' and g.target[:2] == pytest.approx((5.0, 3.0))
+    assert g.phase == 'final' and g.target[:2] == pytest.approx((5.0, 3.0 - P.final_standoff))
     assert g.yaw == pytest.approx(YAW_PAD)
 
 

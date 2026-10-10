@@ -12,7 +12,7 @@ Ba pha:
   'orbit'   - drone dang o phia TRUOC/ben canh bai: vong cung ban kinh gate_dist quanh tam bai ve
               phia sau (chieu ngan hon), mui nhin tam bai;
   'final'   - trong hanh lang sau bai: bam truc bai (carrot), mui = yaw_pad, ha doc tu gate_alt
-              xuong final_alt tren tam bai.
+              xuong final_alt tai diem lui sau tam bai final_standoff.
 """
 
 from dataclasses import dataclass
@@ -40,6 +40,13 @@ class ApproachParams:
     # cong G them final_hold_lateral). Bay that 10-09: FC bam van toc tre 1-1,5 s, vua vao final la
     # qua tinh day lech 0,4-0,5 m ra khoi hanh lang 25 do -> quay ve G -> vong lai, 28-60 s moi toi.
     final_hold_lateral: float = 0.8
+    # Diem toi noi LUI SAU tam bai doc truc (10-11): camera chi nhin 16 do ra sau, ngay tren tam o
+    # 1,1 m tag to chi con bien ~9 cm phia truoc (ngoc mui 3 do khi ham -> 3 cm). FC tre/troi toi lam
+    # vot qua tam la mat tag (mo phong + bay that). Dung lai sau tam: vot it van con truoc tag,
+    # PRECISION_LAND tien not doan nay (tien = chuc mui = thay ra sau nhieu hon).
+    # 0,15 -> 0,10: keo toi 0,2 m luc bam tag lam bu troi (drift_comp) hoc nham "troi toi" -> cham dat
+    # lech truoc 4 cm (Gazebo FC moi); luong hoc nham ~ binh phuong doan keo.
+    final_standoff: float = 0.10
 
 
 @dataclass(frozen=True)
@@ -73,11 +80,13 @@ def guide(pos, yaw, pad, yaw_pad, p=ApproachParams(), was_final=False):
     horiz = math.hypot(dx, dy)
     zg = pad[2] + p.gate_alt
 
-    over_pad = (pad[0], pad[1], pad[2] + p.final_alt)
-    if (horiz <= p.arrive_radius and abs(wrap(yaw - yaw_pad)) <= math.radians(p.arrive_yaw_deg)
+    over_pad = (pad[0] - p.final_standoff * ux, pad[1] - p.final_standoff * uy,
+                pad[2] + p.final_alt)
+    horiz_s = math.hypot(pos[0] - over_pad[0], pos[1] - over_pad[1])
+    if (horiz_s <= p.arrive_radius and abs(wrap(yaw - yaw_pad)) <= math.radians(p.arrive_yaw_deg)
             and abs(pos[2] - over_pad[2]) <= p.arrive_alt_tol):
         return Guidance('arrived', over_pad, yaw_pad)
-    if horiz <= p.lookahead:
+    if horiz_s <= p.lookahead:
         # Da o tren bai: giu tam, KHONG roi sang vong cung du lo vuot qua tam ve phia truoc.
         return Guidance('final', over_pad, yaw_pad)
 
@@ -94,8 +103,8 @@ def guide(pos, yaw, pad, yaw_pad, p=ApproachParams(), was_final=False):
         # phuong vi tam bai = yaw_pad nen hai cach trung nhau.
         want = math.atan2(-dy, -dx) if horiz > p.point_at_pad_dist else yaw_pad
         aligned = abs(wrap(yaw - want)) <= math.radians(p.align_before_advance_deg)
-        s = max(0.0, behind - (p.lookahead if aligned else 0.0))
-        frac = min(1.0, behind / p.gate_dist)
+        s = max(p.final_standoff, behind - (p.lookahead if aligned else 0.0))
+        frac = min(1.0, max(0.0, (behind - p.final_standoff) / (p.gate_dist - p.final_standoff)))
         z = pad[2] + p.final_alt + (p.gate_alt - p.final_alt) * frac
         return Guidance('final', (pad[0] - s * ux, pad[1] - s * uy, z), want)
 
