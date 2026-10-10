@@ -96,7 +96,12 @@ source "$ROS_SETUP" || { echo "[!] Không nạp được $ROS_SETUP" >&2; $DUNG 
 # shellcheck disable=SC1090
 source "$WS_SETUP"  || { echo "[!] Không nạp được $WS_SETUP — đã colcon build chưa?" >&2; $DUNG 1; }
 
-echo "    ROS_DISTRO=${ROS_DISTRO}  workspace=$(dirname "$(dirname "$WS_SETUP")")"
+# Domain RIÊNG cho stack drone (10-10): WiFi 192.168.10.x có robot ROS khác ở domain 0 mặc định
+# (/ros_robot_controller, /depth_cam, /scan, /odom, /imu, cả /tf). Chung domain thì topic của nó lẫn
+# vào bag (ảnh độ sâu qua WiFi làm recorder mất cả topic drone) và có thể chen vào cây TF của drone.
+# Shell tay muốn thấy stack: `source scripts/drone_startup.sh` (đặt biến này) hoặc tự export.
+export ROS_DOMAIN_ID="${DRONE_ROS_DOMAIN_ID:-17}"
+echo "    ROS_DISTRO=${ROS_DISTRO}  ROS_DOMAIN_ID=${ROS_DOMAIN_ID}  workspace=$(dirname "$(dirname "$WS_SETUP")")"
 
 # ---------------------------------------------------------------------------
 # MỤC 3 — Chạy cả stack (CHỈ khi chạy trực tiếp, tức từ systemd)
@@ -133,6 +138,12 @@ done
 if ! ip -4 -o addr show scope global | grep -q .; then
   echo "[!] Chưa có IPv4 sau 60 s - vẫn chạy, nhưng các node có thể không thấy nhau" >&2
 fi
+
+# Giữ ~/drone_logs <= 10 GB (bag ghi đầy đủ mọi topic, 10-10): dọn lúc khởi động và mỗi 10 phút.
+"$SCRIPT_DIR/prune_logs.sh"
+( while sleep 600; do "$SCRIPT_DIR/prune_logs.sh"; done ) &
+PRUNE_PID=$!
+trap 'kill "$PRUNE_PID" 2>/dev/null' EXIT
 
 echo "[3/3] Chạy stack: ros2 launch drone_bringup full_system.launch.py"
 export DRONE_STACK_PID=$$

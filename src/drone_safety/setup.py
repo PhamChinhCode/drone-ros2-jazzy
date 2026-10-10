@@ -20,6 +20,7 @@ setup(
         'console_scripts': [
             'failsafe_monitor_node = drone_safety.failsafe_monitor_node:main',
             'mission_logger_node = drone_safety.mission_logger_node:main',
+            'system_monitor_node = drone_safety.system_monitor_node:main',
         ],
     },
 )

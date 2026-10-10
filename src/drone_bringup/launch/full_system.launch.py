@@ -19,16 +19,13 @@ CONFIG = os.path.join(BRINGUP, 'config')
 _TAGS_OVERRIDE = os.path.expanduser('~/.config/drone_ros2_jazzy/tags_override.yaml')
 TAGS_YAML = _TAGS_OVERRIDE if os.path.isfile(_TAGS_OVERRIDE) else os.path.join(CONFIG, 'tags.yaml')
 
-# KHONG ghi /camera/image_raw: anh tho 640x400 30 FPS ~7,7 MB/s, de stack chay qua dem 09-17 da
-# lam day the SD 229 GB (bag 190 GB) va rsyslog quay vong loi "No space left".
-BAG_TOPICS = [
-    '/apriltag/detections', '/optical_flow/velocity',
-    '/odometry/filtered', '/mavros/state', '/mavros/battery',
-    '/mission/state', '/failsafe_event', '/gripper/status',
-    # 10-09: thieu 3 topic nay nen khong do duoc lenh van toc / do lech tag / laser khi phan tich
-    # dao dong luc ha (drone vuot qua tam roi mat tag). Nho, < 10 KB/s.
-    '/mavros/setpoint_raw/local', '/landing_target/pose', '/range/vertical',
-]
+# Ghi MOI topic (10-10: phan tich duoc moi van de cua chuyen bay - lenh gui FC, co OB/arm, can RC,
+# IMU, EKF, flow, laser, tag, GPS, log moi node /rosout, tai Pi /system/stats...) TRU luong anh
+# /camera/*: anh tho 30 FPS ~7,7 MB/s (09-17 da lam day the SD 229 GB) va image_transport con phat
+# them ban nen zstd/jpeg/theora ~6 MB/s. Anh de xem lai lay tu camera_log_node (/log/camera, 2 Hz).
+# Cat file moi 10 phut + nen zstd theo chunk; scripts/prune_logs.sh giu tong <= 10 GB.
+BAG_CMD = ['ros2', 'bag', 'record', '--all-topics', '--exclude-regex', '^/camera/.*',
+           '--max-bag-duration', '600', '--storage-preset-profile', 'zstd_fast']
 
 
 def generate_launch_description():
@@ -66,6 +63,12 @@ def generate_launch_description():
              name='mission_logger_node',
              parameters=[os.path.join(CONFIG, 'safety.yaml')], output='screen'),
 
+        # Ghi kem bag: tai / nhiet / ha xung cua Pi (1 Hz) va anh camera thua (2 Hz JPEG).
+        Node(package='drone_safety', executable='system_monitor_node',
+             name='system_monitor_node', output='screen'),
+        Node(package='drone_perception', executable='camera_log_node',
+             name='camera_log_node', output='screen'),
+
         # Cau noi WebSocket de xem truc tiep toan bo he thong tren Foxglove
         # (may khac ket noi toi ws://<ip-drone>:8765).
         Node(package='foxglove_bridge', executable='foxglove_bridge',
@@ -74,8 +77,7 @@ def generate_launch_description():
 
         # Moi lan chay mot thu muc rieng: ten co dinh thi tu lan khoi dong thu hai (tu chay luc
         # boot) ros2 bag chet vi "Output folder already exists".
-        ExecuteProcess(cmd=['ros2', 'bag', 'record', '-o',
-                            os.path.expanduser(time.strftime('~/drone_logs/bag_%Y%m%d_%H%M%S')),
-                            *BAG_TOPICS],
+        ExecuteProcess(cmd=[*BAG_CMD, '-o',
+                            os.path.expanduser(time.strftime('~/drone_logs/bag_%Y%m%d_%H%M%S'))],
                        output='screen'),
     ])
