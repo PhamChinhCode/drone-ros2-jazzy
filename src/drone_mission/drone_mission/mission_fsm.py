@@ -64,6 +64,11 @@ TAKEOFF_CLIMB_MPS = 0.5
 LAND_DESCENT_FAR_MPS = 0.25
 LAND_DESCENT_NEAR_MPS = 0.10
 LAND_NEAR_BELOW_M = 1.2
+# Doan cuoi (10-10, yeu cau user): laser <= 0,25 m (cang con ~5-8 cm, laser doc ~0,17 m khi cham dat)
+# thi ha NHANH. Sat dat khong nghieng sua vi tri duoc (de quet cang) va da can tam xong; xuong
+# nhanh bot thoi gian gio day troi. 0,3 = tran xuong cham cua FC duoi 1,2 m (Pi tu kep 0,285).
+LAND_FINAL_BELOW_M = 0.25
+LAND_FINAL_MPS = 0.3
 OB_STATE_KHOA = 0          # trung fc_link.OB_STATE_KHOA - FSM khong import ROS
 
 # Giu MISSION_COMPLETE it nhat bay nhieu lau truoc khi ve IDLE. Vong FSM 5 Hz (200 ms) ma
@@ -96,6 +101,13 @@ PRECISION_ALIGN_PER_M = 0.25
 # Duoi do cao nay camera (nghieng 20 do, truoc tam 6 cm) khong con thay tag tron ven - xuong
 # tiep khong can tag. Tren muc nay mat tag la dung, KHONG ha mu.
 PRECISION_BLIND_BELOW_M = 0.35
+# Mat tag giua chung khi ha (10-10, yeu cau user): bong drone che tag, khung hinh hong... ma theo EKF
+# drone van trong vung can tam (cung nguong PRECISION_ALIGN_*) thi HA TIEP toi da chung nay, truc
+# ngang bam tam bai da biet (pad_obs) theo EKF. Troi ra ngoai (mat vi troi, khong phai vi nghieng
+# xoay camera) thi dung ha, ve tam theo EKF cho tag; qua TAG_GAP_RECOVER_S moi bay len tim lai.
+TAG_GAP_GRACE_S = 2.0
+TAG_GAP_RECOVER_S = 4.0
+LAND_EKF_MAX_VEL_MPS = 0.3      # tran ngang khi bam tam bai theo EKF luc mat tag
 
 # Tim tag (MARKER_SEARCH / RETRY_LOITER).
 # RETRY_LOITER giu tai diem chung nay roi tim lai. Dai hon chu ky failsafe_monitor_node (2 Hz) de
@@ -113,7 +125,9 @@ RTH_ACCEPT_M = 1.0          # toi nha trong ban kinh nay thi ha canh
 PAD_ALIGN_START_M = 4.0
 # Qua lau chua thang hang (gio, vuong) -> ha bang tag to nhu bai khong huong (quyet dinh 10-08).
 PAD_ALIGN_TIMEOUT_S = 60.0
-APPROACH_MAX_VEL_MPS = 0.8   # cham hon cruise: than nghieng it, tag con trong khung
+# Cham hon cruise: than nghieng it, tag con trong khung. 0,8 -> 0,5 (10-10): FC bam van toc tre
+# 1-1,5 s (bay that 10-09) - nhanh thi qua tinh day lech khoi truc bai.
+APPROACH_MAX_VEL_MPS = 0.5
 APPROACH = ApproachParams()
 # ENROUTE: mui huong theo duong bay khi con xa hon muc nay (gan thi giu mui, tranh quay vong).
 HEADING_HOLD_NEAR_M = 1.0
@@ -124,9 +138,13 @@ MAX_WAYPOINT_VEL_MPS = 1.9  # 95 % tran ngang FC (giao uoc 9.6, P9)
 
 
 def descent_mps(range_m):
-    """Toc do ha (duong) theo do cao laser: xa nhanh, gan / khong laser cham."""
-    if range_m is not None and range_m > LAND_NEAR_BELOW_M:
+    """Toc do ha (duong) theo do cao laser: xa nhanh, gan cham, sat dat nhanh; khong laser cham."""
+    if range_m is None:
+        return LAND_DESCENT_NEAR_MPS
+    if range_m > LAND_NEAR_BELOW_M:
         return LAND_DESCENT_FAR_MPS
+    if range_m <= LAND_FINAL_BELOW_M:
+        return LAND_FINAL_MPS
     return LAND_DESCENT_NEAR_MPS
 
 
@@ -293,6 +311,8 @@ class MissionFsm:
     # Diem hien tai da tiep can thang hang xong (hoac het gio PAD_ALIGN) - khong vao lai PAD_ALIGN.
     aligned: bool = False
     last_snap: Snapshot = None
+    pad_phase: str = None           # pha approach_guidance chu ky truoc trong PAD_ALIGN
+    tag_lost_since: float = None    # PRECISION_LAND: thoi diem bat dau mat tag (None = dang thay)
 
     def load_plan(self, mission_id, raw_waypoints, max_retries, search_timeout_s, known_tags,
                   pad_yaws=None):
@@ -393,6 +413,10 @@ class MissionFsm:
             # latch, khong tu False lai - snap.pos_anchored van True ngay tu buoc dau chang nay).
             self.anchor_climb_target_m = None
             self.ceiling_wait_since_s = None
+        if new_state == PRECISION_LAND:
+            self.tag_lost_since = now_s     # tinh tu luc vao cho toi khi thay tag
+        if new_state == PAD_ALIGN:
+            self.pad_phase = None       # pha luat dan chu ky truoc (tre chuyen pha 'final')
         if new_state == MISSION_COMPLETE:
             # Chua ly do nao khac duoc ghi = khong co gi cat ngang = lam het ke hoach.
             self._ghi_ket_qua(RESULT_COMPLETED)
@@ -723,7 +747,9 @@ class MissionFsm:
             return Action(velocity_up_mps=0.0,
                           detail='tiep can thang hang: chua co vi tri/yaw - giu')
         pad, pad_yaw = self._pad_pose(wp)
-        g = guide(snap.position, snap.yaw, pad, pad_yaw, APPROACH)
+        g = guide(snap.position, snap.yaw, pad, pad_yaw, APPROACH,
+                  was_final=self.pad_phase == 'final')
+        self.pad_phase = g.phase
         if g.phase == 'arrived':
             self.search_target = g.target
             self.aligned = True
@@ -851,9 +877,11 @@ class MissionFsm:
         return self._descend_and_disarm(snap, act)
 
     def _step_precision_land(self, snap):
-        """Xuong theo tag cua waypoint hien tai - chi xuong khi da vao tam, mat tag thi dung.
+        """Xuong theo tag cua waypoint hien tai - chi xuong khi da vao tam.
 
-        position_controller_node tu can tam (vx, vy) theo pose tag; FSM chi quyet dinh vz.
+        position_controller_node can tam (vx, vy) theo pose tag; mat tag thi bam TAM BAI DA BIET
+        (position_target, theo EKF). FSM quyet dinh vz: mat tag ngan ma con gan tam -> ha tiep;
+        troi xa -> dung, ve tam; mat qua lau -> MARKER_SEARCH (khong ha mu).
         """
         now = snap.now_s
         wp = self.current_waypoint()
@@ -866,8 +894,10 @@ class MissionFsm:
             return self.transition(FAILSAFE, now, 'bi disarm khi dang ha chinh xac')
         if snap.landed and not final:
             return self.transition(ACTUATE_GRIPPER, now, f'cham dat tai tag {wp.marker_id}')
+        pad = self._pad_pose(wp)[0]
         act = Action(expected_marker_id=wp.marker_id, velocity_up_mps=0.0,
-                     yaw_target=self._hold_yaw(wp))
+                     yaw_target=self._hold_yaw(wp), position_target=tuple(pad),
+                     max_vel_mps=LAND_EKF_MAX_VEL_MPS)
         if snap.ob_auth is not True:
             act.detail = 'khong biet quyen - giu vz = 0'
             return act
@@ -877,10 +907,29 @@ class MissionFsm:
             act.detail = 'sat dat - xuong tiep'
             return self._descend_and_disarm(snap, act) if final else act
         if snap.target_offset_m is None:
-            if self.time_in_state(now) < PRECISION_ACQUIRE_S:
-                act.detail = f'cho bat tag {wp.marker_id}'
+            if self.tag_lost_since is None:
+                self.tag_lost_since = now
+            lost = now - self.tag_lost_since
+            if snap.position is None or snap.range_m is None:
+                # Khong co EKF / laser thi khong biet troi hay khong: giu cach cu.
+                if self.time_in_state(now) < PRECISION_ACQUIRE_S:
+                    act.detail = f'cho bat tag {wp.marker_id}'
+                    return act
+                return self._search_failed(now, MARKER_SEARCH,
+                                           f'mat tag {wp.marker_id} - khong ha mu')
+            dist = math.hypot(snap.position[0] - pad[0], snap.position[1] - pad[1])
+            allowed = PRECISION_ALIGN_BASE_M + PRECISION_ALIGN_PER_M * snap.range_m
+            if lost <= TAG_GAP_GRACE_S and dist <= allowed:
+                act.velocity_up_mps = -descent_mps(snap.range_m)
+                act.detail = (f'mat tag {lost:.1f} s, EKF lech tam {dist:.2f} m - ha tiep, '
+                              f'giu tam bai')
+                return act
+            if lost <= TAG_GAP_RECOVER_S:
+                act.detail = (f'mat tag {lost:.1f} s, EKF lech tam {dist:.2f} m > {allowed:.2f} - '
+                              f'dung ha, ve tam bai')
                 return act
             return self._search_failed(now, MARKER_SEARCH, f'mat tag {wp.marker_id} - khong ha mu')
+        self.tag_lost_since = None
         if snap.range_m is None:
             act.detail = 'mat laser - giu vz = 0'
             return act

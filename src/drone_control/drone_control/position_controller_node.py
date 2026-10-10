@@ -56,6 +56,10 @@ LANDING_STALE_S = 0.5           # pose tag ~25 Hz; bridge ngung phat khi mat tag
 # -> bo, khong bam mai diem den cu sau khi nhiem vu da doi trang thai.
 MISSION_SETPOINT_STALE_S = 0.5
 DRIFT_LEARN_MAX_SPEED_MPS = 0.25  # bu troi chi hoc khi toc do ngang duoi muc nay
+# Dich cruise phai dung yen (khong lech qua 5 mm so voi diem neo) chung nay moi duoc hoc bu troi.
+# 10-10: so tung chu ky thi carrot PAD_ALIGN bo cham (< 5 mm/chu ky) van tinh la dung yen -> do tre
+# bam dich (lon hon khi bat cruise.vel_damping) bi hoc thanh troi SAI DAU, day lech 17 cm luc ha.
+DRIFT_LEARN_STILL_S = 1.0
 ODOM_STALE_S = 0.5              # EKF 30 Hz - giu cho chi chot/bam khi odom con moi
 YAW_SETPOINT_STALE_S = 0.5      # /mission/yaw 5 Hz; im = FSM khong muon quay mui -> yaw_rate 0
 
@@ -104,6 +108,9 @@ class PositionControllerNode(Node):
         # that dap ung van toc cham nen chi P + khau I bay vuot qua tam bai roi mat tag (10-09).
         # Dung van toc do chu khong dao ham sai so tag (nhieu, 30 Hz). 0 = tat.
         self.declare_parameter('landing.vel_damping', 0.0)
+        # Cung y cho bay toi diem / giu cho (PID cruise): bay that 10-10 FC tre 1-1,5 s, PAD_ALIGN
+        # vuot qua truc bai 0,4-0,5 m roi vong lai 28-60 s (tai hien Gazebo vel_delay 0,5 tau 1,5).
+        self.declare_parameter('cruise.vel_damping', 0.0)
 
         self.pids = {phase: {axis: self._make_pid(phase, axis) for axis in ('x', 'y', 'z')}
                      for phase in ('cruise', 'landing')}
@@ -116,7 +123,7 @@ class PositionControllerNode(Node):
         self.pos_hold = PositionHold()
         self.heading_hold = HeadingHold()
         self.drift = DriftCompensator()
-        self.prev_cruise_target = None
+        self.cruise_anchor = None           # (diem neo dich cruise, thoi diem dat neo)
         self.mission_setpoint = None
         self.mission_setpoint_stamp_s = None
         self.max_vel_mps = None
@@ -272,17 +279,28 @@ class PositionControllerNode(Node):
 
         errors = {}
         target_still = False
-        if self.velocity_stamp_s is not None and now_s - self.velocity_stamp_s <= VELOCITY_STALE_S:
+        vel_fresh = (self.velocity_stamp_s is not None
+                     and now_s - self.velocity_stamp_s <= VELOCITY_STALE_S)
+        sp_fresh = (self.odom is not None and self.mission_setpoint_stamp_s is not None
+                    and now_s - self.mission_setpoint_stamp_s <= MISSION_SETPOINT_STALE_S)
+        if vel_fresh:
             xy = z = SOURCE_VELOCITY
-        elif (self.odom is not None and self.mission_setpoint_stamp_s is not None
-              and now_s - self.mission_setpoint_stamp_s <= MISSION_SETPOINT_STALE_S):
+            # Lenh chi co vz (PRECISION_LAND) kem diem den: truc ngang bam diem den theo EKF (tam bai
+            # da biet) - mat tag ngan (bong che, 10-10) van giu tren tam ma ha tiep, khong chot cho.
+            t = self.velocity_setpoint.twist
+            if sp_fresh and t.linear.x == 0.0 and t.linear.y == 0.0:
+                xy = SOURCE_CRUISE
+        elif sp_fresh:
             xy = z = SOURCE_CRUISE
+        else:
+            xy = z = SOURCE_NONE
+        if sp_fresh:
             p = self.odom.pose.pose
             target = self.mission_setpoint.pose.position
             tgt = (target.x, target.y)
-            target_still = (self.prev_cruise_target is not None
-                            and math.dist(tgt, self.prev_cruise_target) < 0.005)
-            self.prev_cruise_target = tgt
+            if self.cruise_anchor is None or math.dist(tgt, self.cruise_anchor[0]) >= 0.005:
+                self.cruise_anchor = (tgt, now_s)
+            target_still = now_s - self.cruise_anchor[1] >= DRIFT_LEARN_STILL_S
             # Sai so trong he odom (ENU) xoay ve he than FLU bang yaw.
             ex, ey = target.x - p.position.x, target.y - p.position.y
             q = p.orientation
@@ -290,8 +308,6 @@ class PositionControllerNode(Node):
             errors[SOURCE_CRUISE] = (math.cos(yaw) * ex + math.sin(yaw) * ey,
                                      -math.sin(yaw) * ex + math.cos(yaw) * ey,
                                      target.z - p.position.z)
-        else:
-            xy = z = SOURCE_NONE
         if self.landing_stamp_s is not None and now_s - self.landing_stamp_s <= LANDING_STALE_S:
             # Tag trong base_level (FLU, bo roll/pitch - landing_target_bridge_node): tag phia truoc
             # (+x) -> bay toi (+vx); sai so = vi tri tag.
@@ -353,8 +369,8 @@ class PositionControllerNode(Node):
                       else self.drift.bias)
             bias = world_to_body(bias_w, yaw)
             vx, vy = vx + bias[0], vy + bias[1]
-        if xy == SOURCE_LANDING and odom_ok:
-            kv = self.get_parameter('landing.vel_damping').value
+        if xy in PID_PHASE and odom_ok:
+            kv = self.get_parameter(f'{PID_PHASE[xy]}.vel_damping').value
             v = self.odom.twist.twist.linear              # he than base_link (child frame)
             vx, vy = vx - kv * v.x, vy - kv * v.y
         if xy == SOURCE_CRUISE:

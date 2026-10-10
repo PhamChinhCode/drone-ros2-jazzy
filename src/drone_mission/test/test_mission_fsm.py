@@ -287,6 +287,45 @@ def test_toc_do_ha_xa_025_gan_010():
     act = fsm.step(snap(1.3, armed=True, range_m=1.2, target_offset_m=0.1))
     assert act.velocity_up_mps == -0.10
     assert m.descent_mps(None) == 0.10                  # khong laser -> cham
+    assert m.descent_mps(0.30) == 0.10
+    assert m.descent_mps(0.25) == 0.3                   # sat dat (cang ~5-8 cm): xuong nhanh
+    assert m.descent_mps(0.17) == 0.3
+
+
+def test_mat_tag_ngan_gan_tam_thi_ha_tiep_giu_tam_bai_roi_bam_lai_tag():
+    # Bong che tag (10-10): theo EKF van tren tam -> ha tiep toi da TAG_GAP_GRACE_S, bam tam bai.
+    fsm = fsm_dang_ha_chinh_xac([wp(0, marker=1)])
+    tren = (10.03, 0.0, 0.8)                            # lech tam 3 cm
+    fsm.step(snap(1.2, armed=True, range_m=0.8, target_offset_m=0.05, position=tren))
+    act = fsm.step(snap(1.5, armed=True, range_m=0.8, position=tren))
+    assert fsm.state == m.PRECISION_LAND and act.velocity_up_mps < 0.0
+    assert act.position_target[:2] == pytest.approx((10.0, 0.0))     # tam bai da biet
+    act = fsm.step(snap(3.2, armed=True, range_m=0.7, position=tren))
+    assert act.velocity_up_mps < 0.0                    # mat 1,7 s < 2 s: van ha
+    act = fsm.step(snap(3.4, armed=True, range_m=0.7, target_offset_m=0.04, position=tren))
+    assert act.velocity_up_mps < 0.0 and 'theo tag' in act.detail    # thay lai: bam tag tiep
+    act = fsm.step(snap(3.6, armed=True, range_m=0.7, position=tren))
+    assert act.velocity_up_mps < 0.0                    # dem lai tu dau, khong cong don
+
+
+def test_mat_tag_qua_lau_gan_tam_thi_dung_roi_bay_len_tim():
+    fsm = fsm_dang_ha_chinh_xac([wp(0, marker=1)])
+    tren = (10.0, 0.02, 0.8)
+    fsm.step(snap(1.2, armed=True, range_m=0.8, target_offset_m=0.05, position=tren))
+    fsm.step(snap(1.3, armed=True, range_m=0.8, position=tren))
+    act = fsm.step(snap(3.5, armed=True, range_m=0.7, position=tren))   # mat 2,2 s
+    assert fsm.state == m.PRECISION_LAND and act.velocity_up_mps == 0.0
+    fsm.step(snap(5.4, armed=True, range_m=0.7, position=tren))         # mat 4,1 s
+    assert fsm.state == m.MARKER_SEARCH
+
+
+def test_mat_tag_vi_troi_xa_thi_dung_ha_ve_tam_bai():
+    # Troi (khong phai nghieng) lam tag ra khoi khung: EKF lech tam lon -> khong ha tiep.
+    fsm = fsm_dang_ha_chinh_xac([wp(0, marker=1)])
+    fsm.step(snap(1.2, armed=True, range_m=0.8, target_offset_m=0.05, position=(10.0, 0.0, 0.8)))
+    act = fsm.step(snap(1.5, armed=True, range_m=0.8, position=(10.45, 0.0, 0.8)))
+    assert fsm.state == m.PRECISION_LAND and act.velocity_up_mps == 0.0
+    assert act.position_target[:2] == pytest.approx((10.0, 0.0)) and 've tam' in act.detail
 
 
 def test_mat_tag_giua_chung_thi_khong_ha_mu():

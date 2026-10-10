@@ -1,0 +1,11 @@
+# Nhiem vu mo phong 3 bai theo thu tu NGUOC sim_ba_bai: home -> pad_b (tag 2) -> pad_a (tag 1) -> home.
+# Bai nao cung bi tiep can tu phia TRUOC / ben canh nen PAD_ALIGN phai vong cung - dung tinh huong
+# bay that 10-09 (ve bai nha tu phia truoc, vong lai 28-60 s). Chay kem vel_delay_s / vel_tau_s.
+mission_id: 904
+plan_name: sim_vong
+max_retries: 2
+search_timeout_s: 10.0
+waypoints:
+  - {marker_id: 2, action: pickup,  alt_m: 2.0, acceptance_radius_m: 0.5, max_vel_mps: 1.9, loiter_s: 1.0}
+  - {marker_id: 1, action: dropoff, alt_m: 2.0, acceptance_radius_m: 0.5, max_vel_mps: 1.9, loiter_s: 1.0}
+  - {marker_id: 0, action: none,    alt_m: 2.0, acceptance_radius_m: 0.5, max_vel_mps: 1.9, loiter_s: 1.0}

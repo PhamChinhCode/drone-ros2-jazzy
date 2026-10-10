@@ -36,6 +36,10 @@ class ApproachParams:
     arrive_alt_tol: float = 0.08    # m - chi "toi noi" khi da ha xong do cao
     align_before_advance_deg: float = 15.0   # mui lech huong can nhin hon muc nay thi chua tien
     point_at_pad_dist: float = 1.0  # xa hon: mui nhin TAM BAI (tag giua khung); gan hon: yaw_pad
+    # Tre chuyen pha: DA o 'final' thi chi roi khi lech ngang qua muc nay (hoac ra truoc bai / xa hon
+    # cong G them final_hold_lateral). Bay that 10-09: FC bam van toc tre 1-1,5 s, vua vao final la
+    # qua tinh day lech 0,4-0,5 m ra khoi hanh lang 25 do -> quay ve G -> vong lai, 28-60 s moi toi.
+    final_hold_lateral: float = 0.8
 
 
 @dataclass(frozen=True)
@@ -55,8 +59,12 @@ def blend_yaw(a, b, w):
     return wrap(a + w * wrap(b - a))
 
 
-def guide(pos, yaw, pad, yaw_pad, p=ApproachParams()):
-    """pos, pad: (x, y, z) ENU; yaw, yaw_pad: rad. Tra Guidance cho chu ky nay."""
+def guide(pos, yaw, pad, yaw_pad, p=ApproachParams(), was_final=False):
+    """pos, pad: (x, y, z) ENU; yaw, yaw_pad: rad. Tra Guidance cho chu ky nay.
+
+    was_final: chu ky truoc tra 'final' -> hanh lang noi rong (final_hold_lateral), khong bat quay ve
+    cong G chi vi qua tinh day lech nhe.
+    """
     ux, uy = math.cos(yaw_pad), math.sin(yaw_pad)            # phia "TREN" cua bai
     dx, dy = pos[0] - pad[0], pos[1] - pad[1]
     along = dx * ux + dy * uy                                # > 0: dang o phia TRUOC bai
@@ -73,8 +81,12 @@ def guide(pos, yaw, pad, yaw_pad, p=ApproachParams()):
         # Da o tren bai: giu tam, KHONG roi sang vong cung du lo vuot qua tam ve phia truoc.
         return Guidance('final', over_pad, yaw_pad)
 
-    in_corridor = behind > 0 and abs(cross) <= behind * math.tan(math.radians(p.corridor_deg))
-    if in_corridor and behind <= p.gate_dist + 1e-9:
+    half = behind * math.tan(math.radians(p.corridor_deg))
+    max_behind = p.gate_dist
+    if was_final:
+        half, max_behind = max(half, p.final_hold_lateral), p.gate_dist + p.final_hold_lateral
+    in_corridor = behind > 0 and abs(cross) <= half
+    if in_corridor and behind <= max_behind + 1e-9:
         # Bam truc: carrot cach hinh chieu lookahead ve phia tam bai, khong vuot qua tam. Vao hanh
         # lang tu mep ben khi mui chua quay xong thi CHUA tien (chi dat ngang vao truc va quay
         # mui) - tien luc do lam tag lech khoi huong nhin qua FOV.

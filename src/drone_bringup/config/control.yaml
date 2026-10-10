@@ -41,6 +41,9 @@ position_controller_node:
     drift_comp.ki: 0.05
     drift_comp.limit_mps: 0.1
     drift_comp.window_m: 0.5
+    # Giam chan bay toi diem / giu cho (10-10): FC tre 1-1,5 s -> kp 0,7 khong giam chan vuot dich
+    # 36 cm, on dinh 12 s (mo phong vong vi tri tre 0,5 + tau 1,5); 0,6 -> vuot ~5 cm, ~5 s.
+    cruise.vel_damping: 0.6
     cruise.x.kp: 0.7
     cruise.x.ki: 0.0
     cruise.x.kd: 0.0

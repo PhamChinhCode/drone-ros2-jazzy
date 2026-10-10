@@ -112,3 +112,22 @@ def test_mo_phong_toi_noi_dung_huong_khong_quay_tren_bai(start, yaw0, yaw_pad_de
             # Tag (tam bai) phai nam trong FOV ngang (+-47 do, giu bien 35 do) suot doan cuoi.
             bearing = math.atan2(PAD[1] - y, PAD[0] - x)
             assert abs(wrap(bearing - yaw)) <= math.radians(35), (x, y, yaw)
+
+
+def test_da_o_final_bi_qua_tinh_day_lech_nhe_thi_van_bam_truc():
+    # 1 m sau bai, lech ngang 0,6 m: ngoai hanh lang 25 do (0,47 m) nhung trong final_hold_lateral.
+    pos = (5.6, 3.0 - 1.0, 1.6)
+    assert guide(pos, YAW_PAD, PAD, YAW_PAD).phase != 'final'          # chua vao final: ve cong G
+    g = guide(pos, YAW_PAD, PAD, YAW_PAD, was_final=True)
+    assert g.phase == 'final' and g.target[0] == pytest.approx(5.0)    # da vao: keo ve truc
+
+
+def test_da_o_final_lech_qua_xa_thi_van_bo_final():
+    g = guide((5.0 + P.final_hold_lateral + 0.3, 3.0 - 1.0, 1.6), YAW_PAD, PAD, YAW_PAD,
+              was_final=True)
+    assert g.phase != 'final'
+
+
+def test_da_o_final_troi_ra_truoc_bai_thi_bo_final():
+    g = guide((5.0, 3.0 + 1.0, 1.6), YAW_PAD, PAD, YAW_PAD, was_final=True)
+    assert g.phase == 'orbit'
