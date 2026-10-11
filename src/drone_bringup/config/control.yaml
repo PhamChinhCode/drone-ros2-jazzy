@@ -38,8 +38,11 @@ position_controller_node:
     # 10-09 bay that: ki 0,15 / tran 0,3 m/s + FC dap ung van toc cham -> dao dong +-0,25 m/s quanh tam
     # bai, vuot qua roi mat tag (2-3 lan thu lai moi bai). Tai hien trong Gazebo bang
     # vel_delay_s 0,25 + vel_tau_s 1,0 (sim_fc_bridge_node): ha lech 28 cm, het luot thu lai.
-    drift_comp.ki: 0.05
-    drift_comp.limit_mps: 0.1
+    # 10-11: 0,05 / 0,1 qua cham cho gio that - ha 10 s ma gio giu lech 10-13 cm suot (lenh P 5 cm/s,
+    # drone nghieng 2 do van dung yen). FC da nhanh (kp 16 ki 3) + khong hoc khi dang tien ve dich
+    # (DRIFT_LEARN_CLOSING_MPS) nen tang lai.
+    drift_comp.ki: 0.15
+    drift_comp.limit_mps: 0.2
     drift_comp.window_m: 0.5
     # Giam chan bay toi diem / giu cho (10-10): FC tre 1-1,5 s -> kp 0,7 khong giam chan vuot dich
     # 36 cm, on dinh 12 s (mo phong vong vi tri tre 0,5 + tau 1,5); 0,6 -> vuot ~5 cm, ~5 s.
@@ -61,12 +64,12 @@ position_controller_node:
     cruise.z.out_limit: 1.5
     # Giam chan bam tag: lenh vx, vy tru vel_damping x van toc than (position_controller_node).
     landing.vel_damping: 0.5
-    landing.x.kp: 0.5
+    landing.x.kp: 0.8           # 0,5 -> 0,8 (10-11): lech 10 cm chi ra lenh 5 cm/s, khong thang noi gio
     landing.x.ki: 0.0
     landing.x.kd: 0.0
     landing.x.i_limit: 0.5
     landing.x.out_limit: 1.0
-    landing.y.kp: 0.5
+    landing.y.kp: 0.8
     landing.y.ki: 0.0
     landing.y.kd: 0.0
     landing.y.i_limit: 0.5

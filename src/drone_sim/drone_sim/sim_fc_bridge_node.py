@@ -193,7 +193,9 @@ class SimFcBridgeNode(Node):
             self.last_enable = enable
         vx, vy = self.lag_horizontal(enable, vx, vy)
         h = self.fc.height_m()
-        if enable and h is not None and h > 0.3:
+        # Gio/troi tac dung toi sat dat (cang ~5 cm). Truoc 10-11 la > 0,3 m: gio tat dot ngot luc ha
+        # mu, bu troi Pi da hoc (-0,16 m/s) day lui 19 cm - gio that khong tat o 0,3 m.
+        if enable and h is not None and h > 0.1:
             g = self.get_parameter
             vx += g('drift_vx_mps').value
             vy += g('drift_vy_mps').value
