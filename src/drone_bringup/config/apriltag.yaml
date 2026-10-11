@@ -14,7 +14,9 @@
     qos_profile: sensor_data
     detector:
       threads: 2          # Pi 4 co 4 nhan, chua 2 cho optical flow + phan con lai
-      decimate: 2.0
+      # 2.0 -> 1.0 (10-11): bay that ve home, tag 19-32 px trong anh nhung decimate 2 con 10-16 px
+      # -> 0/10 khung nhan; anh day du 7/10. Do tren Pi 5: CPU 54 % -> 105 % mot nhan, 27,5 Hz.
+      decimate: 1.0
       blur: 0.8           # quad_sigma. 0.0 tren Pi 5 trong nha: tag ~60 px ro net nhung 0/377 khung
                           # (libapriltag khong tim ra tu giac); 0.8 -> 100 % khung, margin ~100 (09-26)
       refine: true
