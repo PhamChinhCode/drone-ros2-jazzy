@@ -13,7 +13,7 @@ Ba nguyen tac bat buoc (muc 4.1 tai lieu huong dan):
 import math
 from dataclasses import dataclass, field
 
-from drone_mission.approach_guidance import ApproachParams, guide
+from drone_mission.approach_guidance import ApproachParams, guide, wrap
 
 # Ten trang thai trung khop hang so cua drone_interfaces/MissionState.
 IDLE = 'IDLE'
@@ -140,6 +140,10 @@ APPROACH_MAX_VEL_MPS = 0.5
 APPROACH = ApproachParams()
 # ENROUTE: mui huong theo duong bay khi con xa hon muc nay (gan thi giu mui, tranh quay vong).
 HEADING_HOLD_NEAR_M = 1.0
+# Dau chang (10-11, yeu cau user): giu nguyen x, y (leo thang dung toi alt_m) va quay mui tai cho ve
+# phia diem den, lech duoi muc nay moi bay ngang. Quay mui trong luc bay ngang lam flow troi them
+# va camera chua nhin ve phia bai.
+ENROUTE_TURN_DONE_DEG = 15.0
 
 # Ke hoach nhiem vu. Hanh dong tai diem trung MissionWaypoint.ACTION_*.
 ACTION_NONE, ACTION_PICKUP, ACTION_DROPOFF = 0, 1, 2
@@ -321,6 +325,9 @@ class MissionFsm:
     aligned: bool = False
     last_snap: Snapshot = None
     pad_phase: str = None           # pha approach_guidance chu ky truoc trong PAD_ALIGN
+    # Quay mui tai cho dau chang ENROUTE: diem x, y giu trong luc quay; da quay xong chua.
+    enroute_hold: tuple = None
+    enroute_turned: bool = False
     tag_lost_since: float = None    # PRECISION_LAND: thoi diem bat dau mat tag (None = dang thay)
 
     def load_plan(self, mission_id, raw_waypoints, max_retries, search_timeout_s, known_tags,
@@ -426,6 +433,9 @@ class MissionFsm:
             self.tag_lost_since = now_s     # tinh tu luc vao cho toi khi thay tag
         if new_state == PAD_ALIGN:
             self.pad_phase = None       # pha luat dan chu ky truoc (tre chuyen pha 'final')
+        if new_state == ENROUTE:
+            self.enroute_hold = None
+            self.enroute_turned = False
         if new_state == MISSION_COMPLETE:
             # Chua ly do nao khac duoc ghi = khong co gi cat ngang = lam het ke hoach.
             self._ghi_ket_qua(RESULT_COMPLETED)
@@ -709,6 +719,19 @@ class MissionFsm:
         # Chi so khoang cach NGANG: z cua EKF chua co moc tuyet doi khi khong thay tag.
         dx, dy = wp.target[0] - snap.position[0], wp.target[1] - snap.position[1]
         dist = math.hypot(dx, dy)
+        if (self.params.yaw_control and not self.enroute_turned and snap.yaw is not None
+                and dist > HEADING_HOLD_NEAR_M):
+            bearing = math.atan2(dy, dx)
+            err = abs(wrap(bearing - snap.yaw))
+            if err > math.radians(ENROUTE_TURN_DONE_DEG):
+                if self.enroute_hold is None:
+                    self.enroute_hold = snap.position[:2]
+                act.position_target = (*self.enroute_hold, wp.target[2])
+                act.yaw_target = bearing
+                act.detail = (f'quay mui tai cho ve tag {wp.marker_id}: con lech '
+                              f'{math.degrees(err):.0f} do')
+                return act
+        self.enroute_turned = True
         if self._aligned_approach(wp) and dist <= PAD_ALIGN_START_M:
             return self.transition(PAD_ALIGN, snap.now_s,
                                    f'cach bai {dist:.1f} m - tiep can thang hang '

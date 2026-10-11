@@ -1001,9 +1001,27 @@ def test_tat_yaw_control_thi_bay_nhu_cu():
     assert fsm.state == m.MARKER_SEARCH                 # khong qua PAD_ALIGN
 
 
+def test_dau_chang_quay_mui_tai_cho_roi_moi_bay():
+    # Yeu cau user 10-11: cat canh thang dung, quay mui ve diem den roi moi bay ngang.
+    fsm = fsm_bay_toi_bai_co_huong()
+    act = fsm.step(snap(0.8, armed=True, range_m=1.0, position=(0.0, -10.0, 1.0), yaw=math.pi))
+    assert act.position_target == pytest.approx((0.0, -10.0, 2.0))     # giu x, y, leo len alt_m
+    assert act.yaw_target == pytest.approx(math.atan2(10.0, 10.0)) and 'quay mui' in act.detail
+    # Drone troi nhe trong luc quay: van giu diem dau, khong doi theo.
+    act = fsm.step(snap(1.0, armed=True, range_m=1.5, position=(0.1, -10.1, 1.5), yaw=1.5))
+    assert act.position_target == pytest.approx((0.0, -10.0, 2.0))
+    # Lech con 10 do: bay toi diem den; sau do lech lai (vd gio xoay) cung khong dung lai quay nua.
+    act = fsm.step(snap(1.2, armed=True, range_m=2.0, position=(0.0, -10.0, 2.0),
+                        yaw=math.atan2(10.0, 10.0) + math.radians(10)))
+    assert act.position_target[:2] == pytest.approx((10.0, 0.0))
+    act = fsm.step(snap(1.4, armed=True, range_m=2.0, position=(1.0, -9.0, 2.0), yaw=0.0))
+    assert act.position_target[:2] == pytest.approx((10.0, 0.0))
+
+
 def test_enroute_mui_theo_duong_bay_gan_bai_thi_vao_pad_align():
     fsm = fsm_bay_toi_bai_co_huong()
-    act = fsm.step(snap(0.8, armed=True, range_m=1.0, position=(0.0, -10.0, 2.0), yaw=0.0))
+    act = fsm.step(snap(0.8, armed=True, range_m=1.0, position=(0.0, -10.0, 2.0),
+                        yaw=math.atan2(10.0, 10.0)))
     assert act.yaw_target == pytest.approx(math.atan2(10.0, 10.0))
     fsm.step(snap(1.0, armed=True, range_m=1.0, position=(7.0, 0.0, 2.0), yaw=0.0))
     assert fsm.state == m.PAD_ALIGN
@@ -1016,7 +1034,7 @@ def test_enroute_mui_theo_duong_bay_gan_bai_thi_vao_pad_align():
 def test_pad_align_toi_noi_dung_huong_roi_tim_tag_tai_cho():
     """Dong hoc don gian: bam diem dich toc do han che, quay mui 30 do/s - toi noi truoc han."""
     fsm = fsm_bay_toi_bai_co_huong()
-    x, y, z, yaw = 7.0, 1.0, 2.0, 0.0                  # tu phia ben canh bai
+    x, y, z, yaw = 7.0, 1.0, 2.0, math.atan2(-1.0, 3.0)  # tu phia ben canh bai, mui ve bai
     fsm.step(snap(1.0, armed=True, range_m=1.0, position=(x, y, z), yaw=yaw))
     assert fsm.state == m.PAD_ALIGN
     t, dt = 1.0, 0.2

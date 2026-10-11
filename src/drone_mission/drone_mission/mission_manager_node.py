@@ -10,7 +10,7 @@ import signal
 import threading
 
 import rclpy
-from geometry_msgs.msg import PoseStamped, TwistStamped
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, TwistStamped
 from mavros_msgs.msg import DebugValue, PositionTarget, State
 from nav_msgs.msg import Odometry
 from rclpy.experimental import EventsExecutor
@@ -37,6 +37,8 @@ VZ_COVARIANCE_INDEX = 2 * 6 + 2
 RANGE_STALE_S = 0.5             # laser 20 Hz
 TARGET_STALE_S = 0.5            # pose tag ~25 Hz tu landing_target_bridge_node
 ODOM_STALE_S = 0.5              # EKF 30 Hz
+# Sau khi EKF bi ep lai vi tri (/set_pose) bo pad_odom chung nay: mau tinh tu odom cu con tren duong.
+POSE_RESET_IGNORE_S = 0.5
 
 
 class MissionManagerNode(Node):
@@ -100,6 +102,7 @@ class MissionManagerNode(Node):
         # Tu the bai do tu tag cua DIEM HIEN TAI; dat lai khi doi (mission_id, diem).
         self.pad_filter = PadObsFilter()
         self.pad_filter_key = None
+        self.pose_reset_s = None
         self.arm_future = None           # moi luc chi mot lenh ARM/DISARM dang cho ACK
         self.last_detail = ''
 
@@ -115,6 +118,11 @@ class MissionManagerNode(Node):
         # Tu the bai (tam + huong) DO tu tag - landing_target_bridge_node, cho cong G / truc bai.
         self.create_subscription(
             PoseStamped, '/landing_target/pad_odom', self.on_pad_odom, SENSOR_QOS)
+        # EKF bi ep vi tri (ekf_health_node neo lai theo tag/GPS): khung odom nhay -> tam bai da do
+        # trong khung cu thanh SAI. Bay that 10-11: do tam bai luc EKF lech 2 m, 1 s sau neo lai,
+        # PAD_ALIGN van bay toi tam cu - dung cach tag that 2 m, khong bao gio thay tag.
+        self.create_subscription(
+            PoseWithCovarianceStamped, '/set_pose', self.on_set_pose, EVENT_QOS)
         # Chi de biet odom da neo theo bang tag chua - FSM can truoc khi chot "nha" cho RTH.
         self.create_subscription(EkfHealth, '/ekf/health', self.on_ekf_health, EVENT_QOS)
         self.create_subscription(FailsafeEvent, '/failsafe_event', self.on_failsafe, EVENT_QOS)
@@ -242,9 +250,16 @@ class MissionManagerNode(Node):
     def pad_key(self):
         return (self.fsm.mission_id, self.fsm.current_wp_index)
 
+    def on_set_pose(self, msg):
+        self.pad_filter.reset()
+        self.pose_reset_s = self.now_s()
+        self.get_logger().info('EKF bi ep vi tri (/set_pose) - bo tu the bai da do trong khung cu')
+
     def on_pad_odom(self, msg):
         wp = self.fsm.current_waypoint()
         if wp is None:
+            return
+        if self.pose_reset_s is not None and self.now_s() - self.pose_reset_s < POSE_RESET_IGNORE_S:
             return
         if self.pad_key() != self.pad_filter_key:
             self.pad_filter.reset()
