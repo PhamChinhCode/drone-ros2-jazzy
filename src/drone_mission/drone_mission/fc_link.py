@@ -12,6 +12,8 @@ MAV_RESULT_DENIED = 2
 MAV_CMD_COMPONENT_ARM_DISARM = 400
 # param2 cua DISARM: cat dong co o moi do cao, bo qua cong 20 cm (11.1 #12f). CHI GCS goi.
 DISARM_FORCE_MAGIC = 21196
+MAV_CMD_DO_SET_SERVO = 183     # servo 2 = camera, param2 = xung us
+MAV_CMD_DO_GRIPPER = 211       # param2: 0 nha, 1 kep
 
 OB_STATE_KHOA = 0
 OB_STATE_TAT = 1

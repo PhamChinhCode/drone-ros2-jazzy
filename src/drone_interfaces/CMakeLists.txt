@@ -22,6 +22,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/GotoWaypoint.srv"
   "srv/FcSimpleCommand.srv"
   "srv/EmergencyDisarm.srv"
+  "srv/SetServo.srv"
   DEPENDENCIES builtin_interfaces
 )
 

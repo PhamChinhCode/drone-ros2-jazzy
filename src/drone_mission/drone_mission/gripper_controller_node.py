@@ -1,12 +1,17 @@
-"""gripper_controller_node - dieu khien co cau gap/tha va la NGUON XAC NHAN CUNG DUY NHAT
-rang hang da gap/tha. mission_manager_node khong duoc phep suy doan qua timeout.
+"""gripper_controller_node - dieu khien co cau gap/tha va la NGUON XAC NHAN DUY NHAT rang hang da
+gap/tha. mission_manager_node khong duoc phep suy doan qua timeout.
 
-Diem de sai: hang nhe hoac gap lech co the khong kich hoat cong tac hanh trinh du da gap -
-vi vay status mang ca force_reading_n chu khong chi mot co boolean.
+Servo kep cam vao FC (PD14), khong cam vao Pi: node gui lenh qua fc_command_bridge_node ~/servo
+(MAV_CMD_DO_GRIPPER). Khong co cong tac hanh trinh / cam bien luc (chu du an chot 2026-10-21):
+FC ACCEPTED roi cho travel_s (servo chay het hanh trinh) thi coi nhu da kep/nha -
+sensor_confirmed o day la "da ra lenh va da cho du", KHONG phai do that.
 
-Chay duoc khi khong co phan cung: simulate=true (mac dinh) gia lap hanh trinh servo va cong tac
-xac nhan, du de chay het chuoi ACTUATE_GRIPPER trong Gazebo. Muon thu duong THAT BAI (gripper
-khong xac nhan -> failsafe FS_GRIP_CONFIRM_FAIL) thi khong chay node nay.
+FC tra DENIED khi Pi khong co quyen (giong quyen bay) -> state ERROR, lenh lap lai ke tiep cua
+mission_manager se gui lai.
+
+Chay duoc khi khong co phan cung: simulate=true (mac dinh) bo qua FC, chi gia lap hanh trinh, du
+de chay het chuoi ACTUATE_GRIPPER trong Gazebo. Muon thu duong THAT BAI (gripper khong xac nhan
+-> failsafe FS_GRIP_CONFIRM_FAIL) thi khong chay node nay.
 """
 
 from concurrent.futures import ThreadPoolExecutor
@@ -19,6 +24,7 @@ from rclpy.node import Node
 from rclpy.signals import SignalHandlerOptions
 
 from drone_interfaces.msg import GripperCommand, GripperStatus
+from drone_interfaces.srv import SetServo
 from drone_mission.qos import EVENT_QOS
 
 SIM_FORCE_N = 2.5      # luc gia lap khi da gap chac; khong co y nghia do luong
@@ -30,20 +36,11 @@ class GripperControllerNode(Node):
         super().__init__('gripper_controller_node')
 
         self.declare_parameter('simulate', True)
-        self.declare_parameter('servo_gpio', 18)
-        self.declare_parameter('confirm_switch_gpio', 23)
-        # Do tay theo co cau co khi that truoc khi chot hai gia tri nay.
-        self.declare_parameter('open_pulse_us', 1000)
-        self.declare_parameter('close_pulse_us', 2000)
-        self.declare_parameter('confirm_debounce_ms', 50)
-        self.declare_parameter('force_threshold_n', 1.0)
         self.declare_parameter('status_rate_hz', 10.0)
-        # Thoi gian co cau chay het hanh trinh khi simulate. Servo that do lai roi sua.
-        self.declare_parameter('sim_travel_s', 0.8)
+        # Cho servo chay het hanh trinh sau khi FC nhan lenh (ES08MD II ~0,5 s).
+        self.declare_parameter('travel_s', 0.5)
 
-        self.pi = None
-        if not self.get_parameter('simulate').value:
-            self.setup_gpio()
+        self.cli_servo = self.create_client(SetServo, '/fc_command_bridge_node/servo')
 
         # Khoi dong o trang thai MO: an toan hon: khong giu hang khi chua ai ra lenh.
         self.state = GripperStatus.GRIP_STATE_OPEN
@@ -57,13 +54,33 @@ class GripperControllerNode(Node):
     def now_s(self):
         return self.get_clock().now().nanoseconds / 1e9
 
-    def setup_gpio(self):
-        """TODO: khoi tao pigpio (can pigpiod dang chay), dat che do INPUT + pull-up cho
-        confirm_switch_gpio. Bao loi ro rang neu khong ket noi duoc pigpiod."""
-        self.get_logger().warn('Che do phan cung chua duoc hien thuc, dang chay nhu simulate')
+    def set_servo(self, muon):
+        """Gui lenh kep/nha xuong FC. Khong chan: ket qua ve on_servo_reply."""
+        if not self.cli_servo.service_is_ready():
+            self.on_failed(muon, 'fc_command_bridge_node chua san sang')
+            return
+        req = SetServo.Request()
+        req.target = SetServo.Request.GRIPPER
+        req.value = 1 if muon == GripperStatus.GRIP_STATE_CLOSED else 0
+        future = self.cli_servo.call_async(req)
+        future.add_done_callback(lambda f: self.on_servo_reply(f, muon))
 
-    def set_servo(self, dong):
-        """TODO: dat servo pulse (close_pulse_us / open_pulse_us) qua pigpio."""
+    def on_servo_reply(self, future, muon):
+        if muon != self.target_state:
+            return      # da co lenh moi hon
+        resp = future.result()
+        if not resp.success:
+            self.on_failed(muon, resp.message)
+            return
+        # Chi bat dau dem hanh trinh khi FC da doi xung.
+        self.move_done_s = self.now_s() + self.get_parameter('travel_s').value
+
+    def on_failed(self, muon, ly_do):
+        self.get_logger().warning(
+            f'{"KEP" if muon == GripperStatus.GRIP_STATE_CLOSED else "NHA"} that bai: {ly_do}')
+        self.state = GripperStatus.GRIP_STATE_ERROR
+        self.target_state = None    # lenh lap lai ke tiep se gui lai
+        self.move_done_s = None
 
     def on_command(self, msg):
         muon = (GripperStatus.GRIP_STATE_CLOSED if msg.command == GripperCommand.GRIPPER_CLOSE
@@ -72,19 +89,13 @@ class GripperControllerNode(Node):
             return      # mission_manager phat lai deu dan - khong khoi dong lai hanh trinh
         self.target_state = muon
         self.state = GripperStatus.GRIP_STATE_MOVING
-        self.move_done_s = self.now_s() + self.get_parameter('sim_travel_s').value
-        if not self.get_parameter('simulate').value:
-            self.set_servo(muon == GripperStatus.GRIP_STATE_CLOSED)
+        self.move_done_s = None
+        if self.get_parameter('simulate').value:
+            self.move_done_s = self.now_s() + self.get_parameter('travel_s').value
+        else:
+            self.set_servo(muon)
         self.get_logger().info(
             f'lenh {"CLOSE" if muon == GripperStatus.GRIP_STATE_CLOSED else "OPEN"} (seq {msg.seq})')
-
-    def read_confirm_switch(self):
-        """TODO: doc cong tac hanh trinh (active-low) co debounce confirm_debounce_ms."""
-        return False
-
-    def read_force_sensor(self):
-        """TODO: doc cam bien luc qua ADC; tra 0.0 neu khong lap cam bien."""
-        return 0.0
 
     def publish_status(self):
         if (self.state == GripperStatus.GRIP_STATE_MOVING and self.move_done_s is not None
@@ -95,19 +106,12 @@ class GripperControllerNode(Node):
         msg = GripperStatus()
         msg.stamp = self.get_clock().now().to_msg()
         msg.state = self.state
-        if self.get_parameter('simulate').value:
-            # Gia lap: co cau luon chay dung. sensor_confirmed = dang giu hang.
-            msg.sensor_confirmed = self.state == GripperStatus.GRIP_STATE_CLOSED
-            msg.force_reading_n = SIM_FORCE_N if msg.sensor_confirmed else 0.0
+        # Khong co cam bien: "da kep" = FC nhan lenh kep va da cho het travel_s (xem dau file).
+        msg.sensor_confirmed = self.state == GripperStatus.GRIP_STATE_CLOSED
+        if self.get_parameter('simulate').value and msg.sensor_confirmed:
+            msg.force_reading_n = SIM_FORCE_N
         else:
-            # Cong tac hanh trinh la nguon chinh; cam bien luc do them de bat truong hop gap lech
-            # ma cong tac van dong (xem chu thich dau file).
-            msg.force_reading_n = self.read_force_sensor()
-            msg.sensor_confirmed = (self.read_confirm_switch()
-                                    or msg.force_reading_n
-                                    >= self.get_parameter('force_threshold_n').value)
-            if msg.sensor_confirmed and self.state != GripperStatus.GRIP_STATE_MOVING:
-                msg.state = self.state = GripperStatus.GRIP_STATE_CLOSED
+            msg.force_reading_n = 0.0
         self.pub_status.publish(msg)
 
 

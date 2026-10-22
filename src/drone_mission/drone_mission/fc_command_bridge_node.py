@@ -12,6 +12,8 @@ Theo docs/GIAO_UOC_FC_ROS2.md (hop dong 1.3):
   OB_ARM_RDY = 1.
 - DISARM thuong chi duoc FC nhan khi <= 20 cm tren mat dat. Cat khan cap (param2 = 21196) la
   service rieng ~/emergency_disarm, CHI GCS goi (11.1 #12f).
+- Servo tren FC (kep hang, nghieng camera) qua ~/servo: DO_GRIPPER (211) / DO_SET_SERVO (183).
+  Quyen giong quyen bay - FC tu tra DENIED, bridge khong chan truoc.
 - Khong co NAV_TAKEOFF (FC tra UNSUPPORTED) va KHONG goi SET_MODE (5.1): cat canh, di chuyen,
   ha canh deu la setpoint van toc qua position_controller_node.
 """
@@ -26,7 +28,8 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 
-from drone_interfaces.srv import Arm, EmergencyDisarm, FcSimpleCommand, GotoWaypoint, Takeoff
+from drone_interfaces.srv import (Arm, EmergencyDisarm, FcSimpleCommand, GotoWaypoint,
+                                  SetServo, Takeoff)
 from drone_mission import fc_link
 from drone_mission.qos import EVENT_QOS
 
@@ -65,6 +68,7 @@ class FcCommandBridgeNode(Node):
                             callback_group=cb)
         self.create_service(FcSimpleCommand, '~/simple_command', self.on_simple_command,
                             callback_group=cb)
+        self.create_service(SetServo, '~/servo', self.on_servo, callback_group=cb)
 
     def next_seq(self):
         self.seq_counter += 1
@@ -87,14 +91,19 @@ class FcCommandBridgeNode(Node):
 
     def send_arm_disarm(self, arm, param2):
         """Gui COMMAND_LONG 400 va cho ACK. Tra (result, message)."""
+        return self.send_command(fc_link.MAV_CMD_COMPONENT_ARM_DISARM,
+                                 1.0 if arm else 0.0, param2)
+
+    def send_command(self, command, param1, param2):
+        """Gui COMMAND_LONG va cho ACK. Tra (result, message)."""
         if not self.cli_command.service_is_ready():
             return RESULT_NOT_SENT, 'MAVROS chua san sang (/mavros/cmd/command)'
         req = CommandLong.Request()
-        req.command = fc_link.MAV_CMD_COMPONENT_ARM_DISARM
+        req.command = command
         # confirmation != 0 BAT BUOC: FC khai MAV_AUTOPILOT_GENERIC nen MAVROS chi cho COMMAND_ACK
         # khi confirmation != 0; bang 0 no tu tra ACCEPTED ngay, khong doi FC (do 09-14).
         req.confirmation = 1
-        req.param1 = 1.0 if arm else 0.0
+        req.param1 = float(param1)
         req.param2 = float(param2)
 
         timeout = self.get_parameter('ack_timeout_s').value
@@ -157,6 +166,25 @@ class FcCommandBridgeNode(Node):
         if result == fc_link.MAV_RESULT_DENIED:
             return f'{verb}: DENIED - Pi khong co quyen, dung thu lai, cho nguoi lai'
         return f'{verb}: MAV_RESULT {result}'
+
+    def on_servo(self, request, response):
+        response.seq = self.next_seq()
+        if request.target == SetServo.Request.GRIPPER:
+            verb = 'KEP' if request.value else 'NHA'
+            result, err = self.send_command(fc_link.MAV_CMD_DO_GRIPPER, 1, 1 if request.value else 0)
+        elif request.target == SetServo.Request.CAMERA:
+            verb = f'CAMERA {request.value} us'
+            result, err = self.send_command(fc_link.MAV_CMD_DO_SET_SERVO, 2, request.value)
+        else:
+            response.success, response.result = False, RESULT_NOT_SENT
+            response.message = f'target {request.target} khong hop le'
+            self.log_result(response)
+            return response
+        response.result = result
+        response.success = result == fc_link.MAV_RESULT_ACCEPTED
+        response.message = err or self.describe_result(verb, result)
+        self.log_result(response)
+        return response
 
     def on_takeoff(self, request, response):
         """FC khong ho tro NAV_TAKEOFF (giao uoc 5.1) - cat canh la setpoint van toc len."""
