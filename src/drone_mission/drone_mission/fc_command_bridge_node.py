@@ -175,6 +175,9 @@ class FcCommandBridgeNode(Node):
         elif request.target == SetServo.Request.CAMERA:
             verb = f'CAMERA {request.value} us'
             result, err = self.send_command(fc_link.MAV_CMD_DO_SET_SERVO, 2, request.value)
+        elif request.target == SetServo.Request.GRIPPER_US:
+            verb = f'KEP {request.value} us'
+            result, err = self.send_command(fc_link.MAV_CMD_DO_SET_SERVO, 1, request.value)
         else:
             response.success, response.result = False, RESULT_NOT_SENT
             response.message = f'target {request.target} khong hop le'

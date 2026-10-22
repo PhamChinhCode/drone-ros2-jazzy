@@ -1,11 +1,14 @@
 # Servo tren FC (TIM4), di qua fc_command_bridge_node. Quyen giong quyen bay: FC tra DENIED khi
 # Pi khong co quyen (ch8 tat / nguoi lai gianh lai).
-#   GRIPPER: value 0 = nha, 1 = kep  -> MAV_CMD_DO_GRIPPER (211); xung dong/mo nam o tham so FC
-#   CAMERA : value = do rong xung us -> MAV_CMD_DO_SET_SERVO (183) servo 2; FC kep vao
-#            servo_cam_min_us..servo_cam_max_us
+#   GRIPPER   : value 0 = nha, 1 = kep  -> MAV_CMD_DO_GRIPPER (211); xung dong/mo nam o tham so FC
+#   CAMERA    : value = do rong xung us -> MAV_CMD_DO_SET_SERVO (183) servo 2; FC kep vao
+#               servo_cam_min_us..servo_cam_max_us
+#   GRIPPER_US: value = do rong xung us -> MAV_CMD_DO_SET_SERVO (183) servo 1 (goc mo tuy y); FC
+#               kep vao servo_grip_open_us..servo_grip_close_us
 # ACCEPTED chi nghia la xung da doi - servo khong co phan hoi, ben goi tu cho servo chay xong.
 uint8 GRIPPER=1
 uint8 CAMERA=2
+uint8 GRIPPER_US=3
 
 uint8 target
 uint16 value
