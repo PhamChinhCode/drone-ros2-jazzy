@@ -24,8 +24,8 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
-from drone_sim.sim_launch import (TAGS_YAML, camera_pipeline, controller_node, gazebo, gcs_link,
-                                  gripper_node,
+from drone_sim.sim_launch import (TAGS_YAML, camera_pipeline, camera_tilt, controller_node, gazebo,
+                                  gcs_link, gripper_node,
                                   gz_bridge, landing_bridge, marker_republisher,
                                   sim_fc_bridge, sim_tag, telemetry_aggregator)
 
@@ -59,6 +59,7 @@ def generate_launch_description():
                              LaunchConfiguration('drift_yaw_dps')),
                       vel_lag=(LaunchConfiguration('vel_delay_s'), LaunchConfiguration('vel_tau_s'))),
         controller_node(),
+        camera_tilt(),
         sim_tag(LaunchConfiguration('tag_noise_m'), LaunchConfiguration('tag_dropout'),
                 UnlessCondition(LaunchConfiguration('camera'))),
         *camera_pipeline(IfCondition(LaunchConfiguration('camera'))),
@@ -75,8 +76,11 @@ def generate_launch_description():
              parameters=[os.path.join(CONFIG, 'mission.yaml'), TAGS_YAML,
                          {'takeoff_alt_m': ParameterValue(LaunchConfiguration('takeoff_alt_m'),
                                                           value_type=float),
-                          # X3 quay yaw duoc: thu WP5 + PAD_ALIGN truoc khi yaw FC that dat WP0.
-                          'yaw_control': True},
+                          # X3 quay yaw duoc: thu WP5 + ALIGN_HEADING nhu drone that.
+                          'yaw_control': True,
+                          # Camera Gazebo thap hon base_link 6 cm (CAM_XYZ): tag hop ra khoi khung
+                          # tu ToF ~0,30 m thay vi ~0,23 m nhu drone that.
+                          'box_blind_below_m': 0.32},
                          SIM_TIME],
              output='screen'),
         Node(package='drone_estimation', executable='ekf_health_node', name='ekf_health_node',

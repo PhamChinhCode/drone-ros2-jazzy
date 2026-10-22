@@ -6,13 +6,16 @@ Ba nguyen tac bat buoc (muc 1.4 tai lieu huong dan):
   2. duoi nguong dac trung toi thieu thi KHONG publish gi ca;
   3. phat hien lai dac trung dinh ky de khong bam mai diem da troi khoi khung hinh.
 
-Camera lap truoc tam 90 mm, nghieng 20 do ve phia truoc (KHONG nhin thang xuong): pixel duoc doi
-sang van toc bang flow_geometry (chieu tia nhin xuong mat dat theo TF lap dat + tu the IMU luc
-chup moi khung), phat trong base_link. Xem docstring flow_geometry ve sai so cua cach cu.
+Camera lap truoc tam 90 mm, nghieng bang servo (0 do thang xuong, 20 do ve mui khi bay toi diem,
+20 do ve duoi khi gap hang): pixel duoc doi sang van toc bang flow_geometry (chieu tia nhin xuong
+mat dat theo TF lap dat + tu the IMU luc chup moi khung), phat trong base_link. TF lap dat doi theo
+goc servo (camera_tilt_node) nen tra lai MOI khung; servo dang quay (/camera/tilt NaN) thi bo khung
+va bam lai tu dau. Xem docstring flow_geometry ve sai so cua cach cu.
 """
 
 import collections
 from concurrent.futures import ThreadPoolExecutor
+import math
 import signal
 import threading
 
@@ -25,11 +28,12 @@ from rclpy.node import Node
 from rclpy.signals import SignalHandlerOptions
 from rclpy.time import Time
 from sensor_msgs.msg import CameraInfo, Image, Imu, Range
+from std_msgs.msg import Float32
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from drone_perception.flow_geometry import base_velocity, quat_to_matrix
 from drone_perception.optical_flow_estimator import OpticalFlowEstimator
-from drone_perception.qos import SENSOR_QOS
+from drone_perception.qos import EVENT_QOS, SENSOR_QOS
 
 
 class OpticalFlowNode(Node):
@@ -61,6 +65,7 @@ class OpticalFlowNode(Node):
         self.prev_view = None          # (t, R_wb, h_cam) cua khung xu ly truoc
         self.last_refresh = None
         self.frame_counter = 0
+        self.tilt_moving = False       # servo camera dang quay (/camera/tilt NaN)
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self, spin_thread=True)
@@ -71,6 +76,7 @@ class OpticalFlowNode(Node):
         # relative_alt chua duoc giao uoc kiem (12.A1) va de FC giam GLOBAL_POSITION_INT (11.1 #14).
         self.create_subscription(Range, '/range/vertical', self.on_altitude, SENSOR_QOS)
         self.create_subscription(Imu, '/mavros/imu/data', self.on_imu, SENSOR_QOS)
+        self.create_subscription(Float32, '/camera/tilt', self.on_tilt, EVENT_QOS)
 
         self.pub_velocity = self.create_publisher(
             TwistWithCovarianceStamped, '/optical_flow/velocity', SENSOR_QOS)
@@ -122,8 +128,11 @@ class OpticalFlowNode(Node):
             return None
         return best[1], best[2]
 
+    def on_tilt(self, msg):
+        self.tilt_moving = math.isnan(msg.data)
+
     def _lookup_mount(self):
-        """TF lap dat camera (tinh) - lay mot lan tu estimation.launch.py, khong chep so."""
+        """TF lap dat camera (camera_tilt_node phat theo goc servo) - tra moi khung, khong chep so."""
         try:
             tf = self.tf_buffer.lookup_transform('base_link', 'camera_optical_frame', Time())
         except TransformException:
@@ -131,9 +140,11 @@ class OpticalFlowNode(Node):
                                    throttle_duration_sec=5.0)
             return False
         r, p = tf.transform.rotation, tf.transform.translation
+        first = self.R_bo is None
         self.R_bo = quat_to_matrix(r.x, r.y, r.z, r.w)
         self.p_cam_b = np.array([p.x, p.y, p.z])
-        self.get_logger().info(f'TF lap dat camera: vi tri {self.p_cam_b.round(3).tolist()} m')
+        if first:
+            self.get_logger().info(f'TF lap dat camera: vi tri {self.p_cam_b.round(3).tolist()} m')
         return True
 
     def on_image(self, msg):
@@ -141,7 +152,12 @@ class OpticalFlowNode(Node):
         # duoc pixel -> met. Im lang cho, khong doan bua.
         if self.estimator is None or self.altitude_m is None:
             return
-        if self.R_bo is None and not self._lookup_mount():
+        if self.tilt_moving:
+            # Anh nhoe va TF chua dung goc that: bo, bam lai tu dau khi servo dung.
+            self.estimator.reset()
+            self.prev_view = None
+            return
+        if not self._lookup_mount():
             return
 
         self.frame_counter += 1

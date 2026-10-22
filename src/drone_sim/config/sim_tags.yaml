@@ -1,7 +1,7 @@
 # Ban do bai dap RIENG cho mo phong (khop worlds/drone_tune.sdf): home + 2 bai, moi bai co tag nho.
 # Mo phong khong doc ~/.config/.../tags_override.yaml nua: ban nap qua day con sot tu lan chay cu
 # (khong co huong -> khong co tag nho) lam ket qua phu thuoc may.
-# Ba bai ba huong khac nhau de thu tiep can thang hang (PAD_ALIGN) + dieu khien yaw (WP5). home quay
+# Ba bai ba huong khac nhau de thu quay mui theo bai (ALIGN_HEADING) + dieu khien yaw (WP5). home quay
 # Dong (90) = mui X3 luc dat len bai (yaw 0) - nhu ngoai doi dat drone len bai theo huong "tren"
 # (truoc 10-09 de 270: ve home drone quay nguoc 180 do so voi luc cat canh). pad_a Bac (0), pad_b
 # Nam (180). Do tu N, chieu kim dong ho.
@@ -14,7 +14,8 @@
     known_tags_heading: [0.0, 90.0, 1.0, 0.0, 2.0, 180.0]
     pad_small_tag_id_offset: 10
     pad_small_tag_size_m: 0.10
-    pad_small_tag_forward_m: 0.21
+    pad_small_tag_forward_m: -0.30    # tag tren noc hop hang, 0,30 m ve phia "duoi" (tags.yaml)
+    pad_small_tag_height_m: 0.12
     geo_origin_valid: false
     geo_origin_lat: 0.0
     geo_origin_lon: 0.0

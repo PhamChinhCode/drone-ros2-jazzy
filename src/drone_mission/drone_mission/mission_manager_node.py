@@ -37,6 +37,7 @@ VZ_COVARIANCE_INDEX = 2 * 6 + 2
 RANGE_STALE_S = 0.5             # laser 20 Hz
 TARGET_STALE_S = 0.5            # pose tag ~25 Hz tu landing_target_bridge_node
 ODOM_STALE_S = 0.5              # EKF 30 Hz
+TILT_STALE_S = 0.5              # camera_tilt_node phat /camera/tilt 30 Hz; im = khong biet goc camera
 # Sau khi EKF bi ep lai vi tri (/set_pose) bo pad_odom chung nay: mau tinh tu odom cu con tren duong.
 POSE_RESET_IGNORE_S = 0.5
 
@@ -62,6 +63,11 @@ class MissionManagerNode(Node):
         # Huong "tren" cua bai (tags.yaml, giao uoc GCS 0.8) - bai co huong moi tiep can thang hang.
         self.declare_parameter('known_tags_heading', Parameter.Type.DOUBLE_ARRAY)
         self.declare_parameter('yaw_control', False)
+        # Tag nho tren hop hang (tags.yaml) - FSM suy vi tri hop tu tam + huong bai.
+        self.declare_parameter('pad_small_tag_id_offset', 10)
+        self.declare_parameter('pad_small_tag_forward_m', -0.30)
+        # Duoi ToF nay ha mu toi hop (tag hop ra khoi khung) - xem mission_fsm.BOX_BLIND_BELOW_M.
+        self.declare_parameter('box_blind_below_m', mission_fsm.BOX_BLIND_BELOW_M)
 
         self.fsm = mission_fsm.MissionFsm(params=mission_fsm.Params(
             search_timeout_s=self.get_parameter('search_timeout_s').value,
@@ -71,7 +77,10 @@ class MissionManagerNode(Node):
             takeoff_alt_m=self.get_parameter('takeoff_alt_m').value,
             anchor_margin_m=self.get_parameter('anchor_margin_m').value,
             anchor_wait_s=self.get_parameter('anchor_wait_s').value,
-            yaw_control=self.get_parameter('yaw_control').value))
+            yaw_control=self.get_parameter('yaw_control').value,
+            small_id_offset=self.get_parameter('pad_small_tag_id_offset').value,
+            box_forward_m=self.get_parameter('pad_small_tag_forward_m').value,
+            box_blind_below_m=self.get_parameter('box_blind_below_m').value))
 
         self.snapshot = mission_fsm.Snapshot()
         try:
@@ -103,6 +112,8 @@ class MissionManagerNode(Node):
         self.pad_filter = PadObsFilter()
         self.pad_filter_key = None
         self.pose_reset_s = None
+        self.tilt_deg = None
+        self.tilt_stamp_s = None
         self.arm_future = None           # moi luc chi mot lenh ARM/DISARM dang cho ACK
         self.last_detail = ''
 
@@ -120,7 +131,7 @@ class MissionManagerNode(Node):
             PoseStamped, '/landing_target/pad_odom', self.on_pad_odom, SENSOR_QOS)
         # EKF bi ep vi tri (ekf_health_node neo lai theo tag/GPS): khung odom nhay -> tam bai da do
         # trong khung cu thanh SAI. Bay that 10-11: do tam bai luc EKF lech 2 m, 1 s sau neo lai,
-        # PAD_ALIGN van bay toi tam cu - dung cach tag that 2 m, khong bao gio thay tag.
+        # van bay toi tam cu - dung cach tag that 2 m, khong bao gio thay tag.
         self.create_subscription(
             PoseWithCovarianceStamped, '/set_pose', self.on_set_pose, EVENT_QOS)
         # Chi de biet odom da neo theo bang tag chua - FSM can truoc khi chot "nha" cho RTH.
@@ -133,6 +144,8 @@ class MissionManagerNode(Node):
             PositionTarget, '/mavros/setpoint_raw/local', self.on_cmd_setpoint, SENSOR_QOS)
         self.create_subscription(DebugValue, '/mavros/debug_value/named_value_int',
                                  self.on_named_value, NAMED_VALUE_QOS)
+        # Goc camera da on dinh (NaN = servo dang quay) - camera_tilt_node.
+        self.create_subscription(Float32, '/camera/tilt', self.on_tilt, EVENT_QOS)
 
         self.pub_state = self.create_publisher(MissionState, '/mission/state', EVENT_QOS)
         self.pub_expected_id = self.create_publisher(Int32, '/mission/expected_marker_id', EVENT_QOS)
@@ -145,6 +158,8 @@ class MissionManagerNode(Node):
         # Yaw mong muon (ENU, rad) cho vong yaw cua position_controller_node (WP5); chi phat khi
         # FSM muon quay mui - im thi controller giu yaw_rate = 0.
         self.pub_yaw = self.create_publisher(Float32, '/mission/yaw', EVENT_QOS)
+        # Goc camera mong muon (do, + ve mui) cho camera_tilt_node - phat moi chu ky.
+        self.pub_camera_tilt = self.create_publisher(Float32, '/mission/camera_tilt', EVENT_QOS)
         # Phan quyet ve ke hoach, cho gcs_link_node dich thanh DRONE_MISSION_ACK (muc 3.2).
         self.pub_plan_ack = self.create_publisher(
             MissionPlanAck, '/mission/plan_ack', EVENT_QOS)
@@ -299,6 +314,10 @@ class MissionManagerNode(Node):
         self.snapshot.landed = self.landing_detector.step(
             range_m, self.fc_vz_mps, self.cmd_vz_mps, now_s)
 
+    def on_tilt(self, msg):
+        self.tilt_deg = None if math.isnan(msg.data) else msg.data
+        self.tilt_stamp_s = self.now_s()
+
     def on_target_lost(self, msg):
         self.snapshot.landing_target_lost = msg.data
 
@@ -336,6 +355,8 @@ class MissionManagerNode(Node):
         snap.yaw = self.yaw if odom_fresh else None
         snap.pad_obs = (self.pad_filter.value() if self.pad_filter_key == self.pad_key()
                         else None)
+        tilt_fresh = self.tilt_stamp_s is not None and now - self.tilt_stamp_s <= TILT_STALE_S
+        snap.camera_tilt_deg = self.tilt_deg if tilt_fresh else None
 
         prev_state = self.fsm.state
         action = self.fsm.step(snap)
@@ -351,9 +372,9 @@ class MissionManagerNode(Node):
             self.send_gripper(action.gripper_command)
         self.pub_expected_id.publish(Int32(data=action.expected_marker_id))
         wp = self.fsm.current_waypoint()
-        dang_toi = self.fsm.state in (mission_fsm.ENROUTE, mission_fsm.PAD_ALIGN,
-                                      mission_fsm.MARKER_SEARCH, mission_fsm.RETRY_LOITER,
-                                      mission_fsm.PRECISION_LAND)
+        dang_toi = self.fsm.state in (mission_fsm.ENROUTE, mission_fsm.MARKER_SEARCH,
+                                      mission_fsm.ALIGN_HEADING, mission_fsm.RETRY_LOITER,
+                                      mission_fsm.PRECISION_LAND, mission_fsm.FINAL_APPROACH)
         self.pub_approach_id.publish(Int32(data=wp.marker_id if wp and dang_toi else -1))
         if action.velocity_up_mps is not None:
             msg = TwistStamped()
@@ -372,6 +393,8 @@ class MissionManagerNode(Node):
                 self.pub_max_vel.publish(Float32(data=float(action.max_vel_mps)))
         if action.yaw_target is not None:
             self.pub_yaw.publish(Float32(data=float(action.yaw_target)))
+        if action.camera_tilt_deg is not None:
+            self.pub_camera_tilt.publish(Float32(data=float(action.camera_tilt_deg)))
         self.publish_mission_state(action.detail, action.expected_marker_id)
 
     def send_gripper(self, lenh):

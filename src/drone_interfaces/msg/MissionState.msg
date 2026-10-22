@@ -11,11 +11,11 @@ uint8 RTH=7
 uint8 EMERGENCY_LAND=8
 uint8 MISSION_COMPLETE=9
 uint8 FAILSAFE=10
-# Ban 0.8 (giao uoc GCS, docs/ke_hoach_huong_bay_hai_tag.md). Hien chi PAD_ALIGN duoc dung: tag nho
-# do landing_target_bridge_node tu doi trong PRECISION_LAND nen chua can FINAL_APPROACH rieng.
-uint8 ALIGN_HEADING=11
-uint8 PAD_ALIGN=12               # tiep can thang hang truc bai qua cong G
-uint8 FINAL_APPROACH=13
+# Ban 0.8 (giao uoc GCS). Tu 2026-10-22 (docs/ke_hoach_camera_servo_gap_hang.md) bo cong G: PAD_ALIGN
+# khong con dung (giu gia tri cho giao uoc); ALIGN_HEADING va FINAL_APPROACH dung theo nghia moi.
+uint8 ALIGN_HEADING=11           # treo tren tam bai bam tag to, quay mui = huong bai roi moi ha
+uint8 PAD_ALIGN=12               # KHONG DUNG tu 2026-10-22 (truoc: tiep can thang hang qua cong G)
+uint8 FINAL_APPROACH=13          # lay hang: tim tag tren hop, nghieng camera, ha toi do cao gap
 
 # Ket qua cua chuyen bay GAN NHAT da ket thuc. CHOT lai: giu nguyen sau khi ve IDLE cho toi
 # khi cat canh chuyen moi, nen GCS khoi dong lai luc nao cung hoi lai duoc (giao uoc GCS R5).

@@ -13,6 +13,9 @@ odom -> base_link (tu IMU qua EKF) va tru vao toa do da biet cua tag.
 Tra TF tag MOI NHAT chu khong tra dung stamp detection: do 09-14 luc CPU day tai, /tf cua tag toi
 SAU ban tin detections hon 100 ms -> tra dung stamp luon ExtrapolationException (pose 0,2 Hz du
 detections 15 Hz). Pose phat ra mang stamp cua chinh TF tag nen EKF van nhan dung thoi diem chup.
+
+Chi TAG TO neo EKF (2026-10-22): tag nho nay dan tren hop hang dat tay, lech vai cm. Servo camera dang
+quay (/camera/tilt NaN) thi bo moi detection - TF lap dat camera chua dung goc that.
 """
 
 from concurrent.futures import ThreadPoolExecutor
@@ -23,18 +26,16 @@ import threading
 import rclpy
 from apriltag_msgs.msg import AprilTagDetectionArray
 from geometry_msgs.msg import PoseWithCovarianceStamped
-from rclpy.exceptions import ParameterUninitializedException
 from rclpy.experimental import EventsExecutor
 from rclpy.node import Node
-from rclpy.parameter import Parameter
 from rclpy.signals import SignalHandlerOptions
 from rclpy.time import Time
+from std_msgs.msg import Float32
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from drone_estimation.estimation_math import drone_position_from_tag
-from drone_estimation.pad_map import (build_pad_map, parse_headings, small_to_center,
-                                      SMALL_FRAME_SUFFIX)
-from drone_estimation.qos import SENSOR_QOS
+from drone_estimation.pad_map import build_pad_map
+from drone_estimation.qos import EVENT_QOS, SENSOR_QOS
 
 # TF tag cu hon muc nay (so voi dong ho node) thi bo - pose da troi, EKF khong nen nhan.
 MAX_TAG_AGE_S = 0.5
@@ -53,34 +54,16 @@ class MarkerPoseRepublisherNode(Node):
         self.declare_parameter('known_tags', [0.0])
         # Ten khung TF tung tag, CUNG THU TU voi known_tags - khop tag.frames trong apriltag.yaml.
         self.declare_parameter('tag_frames', [''])
-        # Huong tag + mau tag nho (giao uoc GCS 0.8): tag nho cung la diem neo vi tri, nho no ma
-        # xuong thap (tag to ra khoi khung hinh) EKF van duoc sua vi tri.
-        self.declare_parameter('known_tags_heading', Parameter.Type.DOUBLE_ARRAY)
-        self.declare_parameter('pad_small_tag_id_offset', 10)
-        self.declare_parameter('pad_small_tag_forward_m', 0.21)
         self.declare_parameter('base_frame', 'base_link')
 
-        try:
-            headings = parse_headings(self.get_parameter('known_tags_heading').value)
-        except ParameterUninitializedException:
-            headings = {}
-        pads = build_pad_map(
-            self.get_parameter('known_tags').value, self.get_parameter('tag_frames').value,
-            headings, self.get_parameter('pad_small_tag_id_offset').value,
-            self.get_parameter('pad_small_tag_forward_m').value)
-        # Tag nho cua MOI bai (10-09): tam bai suy tu truc TREN DO DUOC cua chinh tag nho
-        # (pad_map.small_to_center) roi neo theo vi tri tag TO - dung ca khi bai dat lech/quay khac
-        # huong khai bao, hoac chua khai huong. Truoc do chi bai co huong moi co tag nho, vi tri
-        # tag nho tinh theo huong khai bao -> bai dat sai huong la EKF neo lech toi 2 x 0,21 m.
-        self.known_tags = {i: t.pos for i, t in pads.items() if not t.small}
-        self.tag_frames = {i: t.frame for i, t in pads.items() if not t.small}
-        off = self.get_parameter('pad_small_tag_id_offset').value
-        self.small_of = {i + off: i for i in self.known_tags}      # id tag nho -> id tag to
-        for small, big in self.small_of.items():
-            self.tag_frames[small] = self.tag_frames[big] + SMALL_FRAME_SUFFIX
-        self.forward_m = self.get_parameter('pad_small_tag_forward_m').value
-        self.get_logger().info(f'ban do: {len(self.known_tags)} bai (+ tag nho), khung '
+        # Khong truyen huong bai -> pad_map khong suy tag nho: chi tag to neo EKF.
+        pads = build_pad_map(self.get_parameter('known_tags').value,
+                             self.get_parameter('tag_frames').value, {}, 0, 0.0)
+        self.known_tags = {i: t.pos for i, t in pads.items()}
+        self.tag_frames = {i: t.frame for i, t in pads.items()}
+        self.get_logger().info(f'ban do: {len(self.known_tags)} bai, khung '
                                f'{sorted(self.tag_frames.values())}')
+        self.tilt_moving = False
         self.warned = set()
         self.last_tag_stamp = {}         # tag id -> stamp TF da dung, tranh phat trung
 
@@ -90,11 +73,17 @@ class MarkerPoseRepublisherNode(Node):
 
         self.create_subscription(
             AprilTagDetectionArray, '/apriltag/detections', self.on_detections, SENSOR_QOS)
+        self.create_subscription(Float32, '/camera/tilt', self.on_tilt, EVENT_QOS)
         self.pub_pose = self.create_publisher(
             PoseWithCovarianceStamped, '/marker/pose_odom', SENSOR_QOS)
 
+    def on_tilt(self, msg):
+        self.tilt_moving = math.isnan(msg.data)
+
     def on_detections(self, msg):
         """Moi detection co trong known_tags -> mot pose drone trong target_frame."""
+        if self.tilt_moving:
+            return
         target = self.get_parameter('target_frame').value
         base = self.get_parameter('base_frame').value
         var = self.get_parameter('pos_covariance').value
@@ -103,7 +92,7 @@ class MarkerPoseRepublisherNode(Node):
             if det.id not in self.tag_frames:
                 continue
             try:
-                # TF tag moi nhat (base_link -> camera la TF tinh nen luon ghep duoc).
+                # TF tag moi nhat (base_link -> camera do camera_tilt_node phat 30 Hz).
                 t_tag = self.tf_buffer.lookup_transform(base, self.tag_frames[det.id], Time())
                 # Huong than may: moi nhat la du, huong doi cham hon nhieu so voi vi tri.
                 t_att = self.tf_buffer.lookup_transform(target, base, Time())
@@ -116,13 +105,7 @@ class MarkerPoseRepublisherNode(Node):
                 continue
             self.last_tag_stamp[det.id] = tag_stamp
             tr, q = t_tag.transform.translation, t_att.transform.rotation
-            tag_in_base = (tr.x, tr.y, tr.z)
-            big = self.small_of.get(det.id, det.id)
-            if det.id in self.small_of:
-                qt = t_tag.transform.rotation
-                tag_in_base = small_to_center(tag_in_base, (qt.x, qt.y, qt.z, qt.w),
-                                              self.forward_m)
-            pos = drone_position_from_tag(self.known_tags[big], tag_in_base,
+            pos = drone_position_from_tag(self.known_tags[det.id], (tr.x, tr.y, tr.z),
                                           (q.x, q.y, q.z, q.w))
             if not all(math.isfinite(v) for v in pos):
                 continue

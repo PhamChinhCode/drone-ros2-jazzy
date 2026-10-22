@@ -17,10 +17,9 @@ CONTROL_YAML = os.path.join(CONFIG, 'control.yaml')
 TAGS_YAML = os.path.join(get_package_share_directory('drone_sim'), 'config', 'sim_tags.yaml')
 GZ_LAUNCH = os.path.join(get_package_share_directory('ros_gz_sim'), 'launch', 'gz_sim.launch.py')
 SIM_TIME = {'use_sim_time': True}
-# Camera duoi bung X3 - PHAI khop <sensor camera_down> trong worlds/drone_tune.sdf va
-# sim_tag_node.BASE_TO_CAM_XYZ. x, pitch nhu drone that (estimation.launch.py); z xem chu thich world.
+# Vi tri camera duoi bung X3 - PHAI khop <sensor camera_down> trong worlds/drone_tune.sdf. x nhu
+# drone that; z xem chu thich world. Goc nghieng do camera_tilt_node phat theo servo.
 CAM_XYZ = ('0.09', '0', '-0.06')
-CAM_PITCH = '1.2217'
 
 
 def gazebo(gui, render_engine):
@@ -83,9 +82,6 @@ def camera_pipeline(condition):
              arguments=['/camera/image_raw@sensor_msgs/msg/Image[gz.msgs.Image',
                         '/camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo'],
              parameters=[SIM_TIME], condition=condition, output='screen'),
-        Node(package='tf2_ros', executable='static_transform_publisher', name='base_to_camera',
-             arguments=[*CAM_XYZ, '0', CAM_PITCH, '0', 'base_link', 'camera_link'],
-             parameters=[SIM_TIME], condition=condition),
         Node(package='tf2_ros', executable='static_transform_publisher', name='camera_to_optical',
              arguments=['0', '0', '0', '-1.5708', '0', '-1.5708', 'camera_link',
                         'camera_optical_frame'],
@@ -112,6 +108,15 @@ def camera_pipeline(condition):
              parameters=[os.path.join(CONFIG, 'perception.yaml'), SIM_TIME], condition=condition,
              output='screen'),
     ]
+
+
+def camera_tilt():
+    """Node that: servo camera qua fc_command_bridge (sim_fc nhan lenh 183) + TF base_link ->
+    camera_link theo goc servo. Vi tri camera = camera Gazebo (CAM_XYZ)."""
+    return Node(package='drone_mission', executable='camera_tilt_node', name='camera_tilt_node',
+                parameters=[os.path.join(CONFIG, 'mission.yaml'),
+                            {'camera_xyz': [float(v) for v in CAM_XYZ]}, SIM_TIME],
+                output='screen')
 
 
 def sim_tag(noise, dropout, condition=None):

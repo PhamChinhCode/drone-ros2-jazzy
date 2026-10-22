@@ -1,10 +1,11 @@
 """Ban do bai dap: tag to (tags.yaml) + tag nho Pi tu suy - thuan Python, pytest duoc.
 
-Moi bai co the co mot tag nho cung huong, dat ve phia "TREN" cua tag to (giao uoc GCS 0.8 muc 8.7,
-docs/ke_hoach_huong_bay_hai_tag.md): camera nghieng 20 do, lap 90 mm truoc tam nen xuong thap thi
-tag to (duoi tam) ra khoi khung hinh, tag nho (truoc mat) con thay. Moi bai dung CHUNG mot mau:
-id_nho = id_to + id_offset, tam cach tam tag to forward_m theo huong bai. Tag to khong khai huong
-thi khong suy duoc vi tri tag nho -> bai do khong co tag nho.
+Moi bai co the co mot tag nho cung huong (giao uoc GCS 0.8 muc 8.7). Tu 2026-10-22 tag nho DAN TREN
+NOC HOP HANG (docs/ke_hoach_camera_servo_gap_hang.md): drone bam tag nho de dat co cau gap ngay
+tren hop. Moi bai dung CHUNG mot mau: id_nho = id_to + id_offset, tam cach tam tag to forward_m
+theo huong bai (am = ve phia "duoi"), cao hon mat bai height_m (chieu cao hop). Tag nho KHONG dung
+neo EKF (hop dat tay, lech vai cm). Tag to khong khai huong thi khong suy duoc vi tri tag nho -> bai
+do khong co tag nho.
 
 Huong khai trong tags.yaml theo quy uoc tren day (giao uoc 8.6): do tu truc N cua ban do, CHIEU KIM
 DONG HO. Ban do la ENU (x = E, y = N) nen yaw ENU (tu truc x, nguoc kim) = 90 - huong.
@@ -40,11 +41,11 @@ def parse_headings(flat):
     return {int(flat[i]): float(flat[i + 1]) for i in range(0, len(flat), 2)}
 
 
-def build_pad_map(known_tags_flat, frames, headings, id_offset, forward_m):
+def build_pad_map(known_tags_flat, frames, headings, id_offset, forward_m, height_m=0.0):
     """{id: PadTag} gom tag to va tag nho suy ra.
 
     known_tags_flat: [id, x, y, z, ...] (tags.yaml); frames: ten khung TF cung thu tu;
-    headings: {id: do} cua tag CO huong.
+    headings: {id: do} cua tag CO huong; forward_m / height_m: tam tag nho so voi tam tag to.
     """
     if len(known_tags_flat) % 4:
         raise ValueError(
@@ -69,7 +70,7 @@ def build_pad_map(known_tags_flat, frames, headings, id_offset, forward_m):
             raise ValueError(f'tag nho {small_id} cua bai {tag_id} trung mot tag to da khai')
         x, y, z = big.pos
         out[small_id] = PadTag(
-            (x + forward_m * math.cos(big.yaw), y + forward_m * math.sin(big.yaw), z),
+            (x + forward_m * math.cos(big.yaw), y + forward_m * math.sin(big.yaw), z + height_m),
             big.yaw, big.frame + SMALL_FRAME_SUFFIX, tag_id, True)
     return out
 
@@ -83,17 +84,6 @@ TAG_UP_AXIS = (0.0, 1.0, 0.0)
 def tag_up(q_frame_tag):
     """Huong "tren" cua tag (vecto don vi) bieu dien trong khung cha cua q (x, y, z, w)."""
     return rotate(q_frame_tag, TAG_UP_AXIS)
-
-
-def small_to_center(p_small, q_small, forward_m):
-    """Tam bai tu tag NHO: lui forward_m nguoc truc TREN DO DUOC cua chinh tag nho.
-
-    Khong dung huong bai khai bao (GCS) cung khong dung yaw la ban - bai dat lech hay quay bat ky
-    huong nao van ra dung tam, mien to in dung mau (tag nho cung chieu, phia TREN tag to).
-    p_small, q_small: vi tri + huong tag nho trong cung mot khung (vd base_link).
-    """
-    u = tag_up(q_small)
-    return tuple(p_small[i] - forward_m * u[i] for i in range(3))
 
 
 def up_yaw(q_frame_tag):

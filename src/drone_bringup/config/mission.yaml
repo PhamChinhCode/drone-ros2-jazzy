@@ -8,7 +8,7 @@ mission_manager_node:
     anchor_margin_m: 0.5          # leo them sau khi neo (EkfHealth.anchored) truoc khi roi TAKEOFF
     anchor_wait_s: 10.0           # cham tran ma chua neo thi lo lung cho ngan nay giay roi EMERGENCY_LAND
     state_publish_rate_hz: 5.0
-    # Pi dieu khien huong mui + tiep can thang hang bai co huong (PAD_ALIGN). BAT 2026-10-09: yaw FC
+    # Pi dieu khien huong mui + quay mui theo bai co huong (ALIGN_HEADING). BAT 2026-10-09: yaw FC
     # dat WP0 (log 074903) + kiem dau tren ban: muc tieu lech trai 30 do -> Pi +0,523 rad/s FLU ->
     # FC OB_T_YAWR -29,96 do/s (FC + = phai) - dung dau, dung do lon.
     yaw_control: true
@@ -19,6 +19,21 @@ gripper_controller_node:
     # Xung dong/mo nam o tham so FC (servo_grip_open_us / servo_grip_close_us), khong o day.
     travel_s: 0.5                # cho servo kep han sau khi FC nhan lenh
     status_rate_hz: 10.0
+
+camera_tilt_node:
+  ros__parameters:
+    # Bang goc (do, + ve MUI, 0 = thang xuong) <-> xung servo camera, do 2026-10-22 bang tag 36h11
+    # (docs/ke_hoach_camera_servo_gap_hang.md muc 1). Phi tuyen - noi suy tung doan. Diem -20 do
+    # (1244 us) NGOAI SUY tu doc 0,073 do/us phia duoi - chua do (camera chi do toi -15,9 do).
+    tilt_deg: [-20.0, -15.9, -12.2, -8.5, -4.8, -1.1, 0.0, 2.8, 6.6, 10.6, 14.7, 19.0, 20.0, 23.4,
+               28.0, 32.8, 37.9, 43.2, 48.8]
+    pulse_us: [1244, 1300, 1350, 1400, 1450, 1500, 1514, 1550, 1600, 1650, 1700, 1750, 1762, 1800,
+               1850, 1900, 1950, 2000, 2050]
+    overshoot_us: 100            # chong ro ~1,9 do: luon tien toi tu phia us thap
+    overshoot_wait_s: 0.3
+    settle_s: 0.8                # servo chay + khung hinh het nhoe truoc khi bao goc moi
+    initial_tilt_deg: 0.0        # luc khoi dong coi camera nhin thang xuong (nguoi lai dat bang RC)
+    camera_xyz: [0.09, 0.0, 0.0] # truoc tam 90 mm, ngang ToF (do 10-08)
 
 fc_command_bridge_node:
   ros__parameters:

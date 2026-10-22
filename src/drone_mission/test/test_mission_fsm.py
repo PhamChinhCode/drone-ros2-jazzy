@@ -642,16 +642,28 @@ def test_ekf_hong_khi_dang_rth_thi_dung_lai_giu_vi_tri():
 # ------------------------------------------------------- ACTUATE_GRIPPER (gap/tha)
 
 def fsm_dang_gap(action=None, waypoints=None):
-    """... -> cham dat tai diem co hanh dong -> ACTUATE_GRIPPER luc 3,0."""
+    """... -> ACTUATE_GRIPPER luc 3,0: PICKUP qua FINAL_APPROACH, DROPOFF treo o GRIP_HOVER_M, diem
+    khong hanh dong cham dat."""
     wps = waypoints or [wp(0, marker=1, action=action or m.ACTION_PICKUP)]
     fsm = fsm_dang_ha_chinh_xac(wps)
-    fsm.step(snap(3.0, armed=True, range_m=0.18, landed=True, disarm_ready=True))
+    a = fsm.current_waypoint().action
+    if a == m.ACTION_PICKUP:
+        fsm.step(snap(2.0, armed=True, range_m=m.BOX_SEARCH_ALT_M))
+        assert fsm.state == m.FINAL_APPROACH
+        fsm.step(snap(2.2, armed=True, range_m=0.6, target_offset_m=0.05))            # -> tilt
+        fsm.step(snap(2.4, armed=True, range_m=0.6, camera_tilt_deg=m.CAM_BOX_DEG))   # -> descend
+        fsm.step(snap(3.0, armed=True, range_m=m.GRIP_HOVER_M, camera_tilt_deg=m.CAM_BOX_DEG))
+    elif a == m.ACTION_DROPOFF:
+        fsm.step(snap(3.0, armed=True, range_m=m.GRIP_HOVER_M))
+    else:
+        fsm.step(snap(3.0, armed=True, range_m=0.18, landed=True, disarm_ready=True))
     assert fsm.state == m.ACTUATE_GRIPPER
     return fsm
 
 
 def gap_snap(t, **kw):
-    return snap(t, armed=True, range_m=0.18, landed=True, disarm_ready=True, **kw)
+    """Treo o do cao gap (PICKUP/DROPOFF) - trang thai gap khong xet landed."""
+    return snap(t, armed=True, range_m=m.GRIP_HOVER_M, **kw)
 
 
 def test_giu_on_dinh_roi_moi_ra_lenh_gap():
@@ -957,15 +969,15 @@ def test_abort_giua_luc_giu_MISSION_COMPLETE_khong_lam_fsm_ket():
     assert fsm.state == m.IDLE
 
 
-# ---- WP7: tiep can thang hang bai co huong (PAD_ALIGN) + yaw (WP5) ---------------------------
+# ---- WP7 + yaw (WP5): quay mui tai cho dau chang -------------------------------------------
 
 PAD_YAWS = {1: math.pi / 2}           # tag 1 tai (10, 0) quay Bac: phia "tren" = +y
 
 
-def fsm_bay_toi_bai_co_huong(yaw_control=True):
+def fsm_bay_toi_bai_co_huong(yaw_control=True, action=m.ACTION_NONE):
     fsm = m.MissionFsm(params=m.Params(takeoff_alt_m=1.0, yaw_control=yaw_control))
-    assert fsm.load_plan(1, [wp(0, marker=1, alt_m=2.0, max_vel_mps=1.5)], 0, 0.0, TAGS,
-                         PAD_YAWS) == ''
+    assert fsm.load_plan(1, [wp(0, marker=1, alt_m=2.0, max_vel_mps=1.5, action=action,
+                                acceptance_radius_m=1.5)], 0, 0.0, TAGS, PAD_YAWS) == ''
     fsm.request_start(0.0)
     fsm.step(snap(0.0, arm_ready=True))
     fsm.step(snap(0.5, armed=True))
@@ -979,7 +991,9 @@ def test_tat_yaw_control_thi_bay_nhu_cu():
     act = fsm.step(snap(0.8, armed=True, range_m=1.0, position=(0.0, 0.0, 2.0), yaw=0.0))
     assert act.yaw_target is None
     fsm.step(snap(1.0, armed=True, range_m=1.0, position=(9.9, 0.0, 2.0), yaw=0.0))
-    assert fsm.state == m.MARKER_SEARCH                 # khong qua PAD_ALIGN
+    assert fsm.state == m.MARKER_SEARCH
+    fsm.step(snap(1.2, armed=True, range_m=2.0, position=(9.9, 0.0, 2.0), target_offset_m=0.1))
+    assert fsm.state == m.PRECISION_LAND                # khong quay mui theo bai
 
 
 def test_dau_chang_quay_mui_tai_cho_roi_moi_bay():
@@ -999,124 +1013,177 @@ def test_dau_chang_quay_mui_tai_cho_roi_moi_bay():
     assert act.position_target[:2] == pytest.approx((10.0, 0.0))
 
 
-def test_enroute_mui_theo_duong_bay_gan_bai_thi_vao_pad_align():
+# ---- 10-22: camera servo, quay mui tren bai, gap/tha khi treo ----------------------------------
+
+def test_camera_nhin_truoc_khi_bay_toi_diem_va_nhin_xuong_khi_tim_tag():
     fsm = fsm_bay_toi_bai_co_huong()
-    act = fsm.step(snap(0.8, armed=True, range_m=1.0, position=(0.0, -10.0, 2.0),
-                        yaw=math.atan2(10.0, 10.0)))
-    assert act.yaw_target == pytest.approx(math.atan2(10.0, 10.0))
-    fsm.step(snap(1.0, armed=True, range_m=1.0, position=(7.0, 0.0, 2.0), yaw=0.0))
-    assert fsm.state == m.PAD_ALIGN
-    act = fsm.step(snap(1.2, armed=True, range_m=1.0, position=(7.0, 0.0, 2.0), yaw=0.0))
-    assert act.position_target is not None and act.yaw_target is not None
-    assert act.expected_marker_id == -1                 # pose tag se cuop truc ngang cua luat dan
-    assert act.max_vel_mps == m.APPROACH_MAX_VEL_MPS
+    act = fsm.step(snap(0.8, armed=True, range_m=2.0, position=(0.0, 0.0, 2.0), yaw=0.0))
+    assert act.camera_tilt_deg == m.CAM_ENROUTE_DEG
+    # Cao 2 m -> chuyen khi cach ngang <= min(1,5; 0,5 x 2) = 1,0 m.
+    fsm.step(snap(1.0, armed=True, range_m=2.0, position=(8.9, 0.0, 2.0), yaw=0.0))
+    assert fsm.state == m.ENROUTE
+    act = fsm.step(snap(1.2, armed=True, range_m=2.0, position=(9.1, 0.0, 2.0), yaw=0.0))
+    assert fsm.state == m.MARKER_SEARCH and act.camera_tilt_deg == m.CAM_DOWN_DEG
 
 
-def test_pad_align_toi_noi_dung_huong_roi_tim_tag_tai_cho():
-    """Dong hoc don gian: bam diem dich toc do han che, quay mui 30 do/s - toi noi truoc han."""
+def test_thay_tag_tu_xa_thi_bay_ve_tam_tag_do_duoc():
     fsm = fsm_bay_toi_bai_co_huong()
-    x, y, z, yaw = 7.0, 1.0, 2.0, math.atan2(-1.0, 3.0)  # tu phia ben canh bai, mui ve bai
-    fsm.step(snap(1.0, armed=True, range_m=1.0, position=(x, y, z), yaw=yaw))
-    assert fsm.state == m.PAD_ALIGN
-    t, dt = 1.0, 0.2
-    while fsm.state == m.PAD_ALIGN:
-        t += dt
-        assert t < 1.0 + m.PAD_ALIGN_TIMEOUT_S, 'khong toi noi truoc han'
-        act = fsm.step(snap(t, armed=True, range_m=z, position=(x, y, z), yaw=yaw))
-        if fsm.state != m.PAD_ALIGN:
-            break
-        tx, ty, tz = act.position_target
-        d = math.dist((x, y, z), (tx, ty, tz))
-        k = min(1.0, act.max_vel_mps * dt / d) if d > 1e-9 else 0.0
-        x, y, z = x + k * (tx - x), y + k * (ty - y), z + k * (tz - z)
-        e = math.atan2(math.sin(act.yaw_target - yaw), math.cos(act.yaw_target - yaw))
-        yaw += max(-math.radians(30) * dt, min(math.radians(30) * dt, e))
-    assert fsm.state == m.MARKER_SEARCH and act.expected_marker_id == 1
-    # Diem toi noi lui sau tam bai final_standoff doc truc (bai huong +y).
-    assert fsm.search_target == pytest.approx(
-        (10.0, -m.APPROACH.final_standoff, m.APPROACH.final_alt))
-    act = fsm.step(snap(t + dt, armed=True, range_m=z, position=(x, y, z), yaw=yaw))
-    assert act.position_target == fsm.search_target     # giu tai cho, khong leo lai alt_m
-    assert act.yaw_target == pytest.approx(math.pi / 2)
-    act = fsm.step(snap(t + 2 * dt, armed=True, range_m=z, position=(x, y, z), yaw=yaw,
-                        target_offset_m=0.05))
-    assert fsm.state == m.PRECISION_LAND and act.yaw_target == pytest.approx(math.pi / 2)
-
-
-def test_pad_align_qua_han_thi_ha_bang_tag_to():
-    fsm = fsm_bay_toi_bai_co_huong()
-    fsm.step(snap(1.0, armed=True, range_m=1.0, position=(7.0, 0.0, 2.0), yaw=0.0))
-    assert fsm.state == m.PAD_ALIGN
-    act = fsm.step(snap(1.0 + m.PAD_ALIGN_TIMEOUT_S, armed=True, range_m=1.0,
-                        position=(12.0, 3.0, 2.0), yaw=0.0))
-    assert fsm.state == m.MARKER_SEARCH and act.expected_marker_id == 1
-    assert fsm.search_target is None                    # tim tai diem cua waypoint nhu cu
-
-
-def test_pad_align_mat_vi_tri_thi_giu():
-    fsm = fsm_bay_toi_bai_co_huong()
-    fsm.step(snap(1.0, armed=True, range_m=1.0, position=(7.0, 0.0, 2.0), yaw=0.0))
-    act = fsm.step(snap(1.2, armed=True, range_m=1.0, position=None, yaw=None))
-    assert fsm.state == m.PAD_ALIGN and act.velocity_up_mps == 0.0
-    assert act.position_target is None
-
-
-
-# ---- 10-09: tu the bai DO tu tag thay huong khai bao ----------------------------------------
-
-def test_pad_align_dung_tu_the_bai_do_duoc_thay_khai_bao():
-    """Khai Bac (90 do ENU) nhung tag cho thay bai quay Dong (0) -> cong G phai o phia Tay bai."""
-    fsm = fsm_bay_toi_bai_co_huong()
-    obs = (10.0, 0.0, 0.0, 0.0)
-    fsm.step(snap(1.0, armed=True, range_m=1.0, position=(7.0, 0.0, 2.0), yaw=0.0, pad_obs=obs))
-    assert fsm.state == m.PAD_ALIGN
-    act = fsm.step(snap(1.2, armed=True, range_m=1.0, position=(7.0, 0.0, 2.0), yaw=0.0,
+    obs = (10.4, 0.3, 0.0, math.pi / 2)                  # bai dat lech khai bao 0,5 m
+    act = fsm.step(snap(0.8, armed=True, range_m=2.0, position=(5.0, 0.3, 2.0), yaw=0.0,
                         pad_obs=obs))
-    # Dang o ngay sau bai theo huong DO (x < 10, tren truc y = 0): bam truc, mui = 0 (Dong).
-    assert act.position_target[1] == pytest.approx(0.0, abs=1e-6)
-    assert act.yaw_target == pytest.approx(0.0, abs=1e-6)
+    assert act.position_target == pytest.approx((10.4, 0.3, 2.0))
 
 
-def fsm_tim_tag_bai_khong_huong():
-    fsm = m.MissionFsm(params=m.Params(takeoff_alt_m=1.0, yaw_control=True))
-    assert fsm.load_plan(1, [wp(0, marker=1, alt_m=2.0, max_vel_mps=1.5)], 0, 0.0, TAGS) == ''
-    fsm.request_start(0.0)
-    fsm.step(snap(0.0, arm_ready=True))
-    fsm.step(snap(0.5, armed=True))
-    fsm.step(snap(0.6, armed=True, range_m=1.0))
-    fsm.step(snap(0.8, armed=True, range_m=1.0, position=(10.0, 0.0, 2.0), yaw=0.0))
-    assert fsm.state == m.MARKER_SEARCH         # khong khai huong -> khong qua PAD_ALIGN som
+def fsm_tim_tag_co_huong(action=m.ACTION_NONE):
+    fsm = fsm_bay_toi_bai_co_huong(action=action)
+    fsm.step(snap(1.0, armed=True, range_m=2.0, position=(10.0, 0.0, 2.0), yaw=0.0))
+    assert fsm.state == m.MARKER_SEARCH
     return fsm
 
 
-def test_bai_khong_khai_huong_thay_tag_thi_tiep_can_theo_huong_do():
-    fsm = fsm_tim_tag_bai_khong_huong()
-    obs = (10.0, 0.0, 0.0, math.pi / 2)
-    fsm.step(snap(1.0, armed=True, range_m=1.0, position=(10.0, 0.0, 2.0), yaw=0.0,
-                  pad_obs=obs, target_offset_m=0.1))
-    assert fsm.state == m.PAD_ALIGN              # thay tag nhung chua thang hang: chua ha
-    act = fsm.step(snap(1.2, armed=True, range_m=1.0, position=(10.0, 0.0, 2.0), yaw=0.0,
-                        pad_obs=obs))
-    assert act.yaw_target is not None
+def test_thay_tag_khi_camera_chua_xuong_thi_cho():
+    fsm = fsm_tim_tag_co_huong()
+    for tilt in (None, m.CAM_ENROUTE_DEG):
+        act = fsm.step(snap(1.2, armed=True, range_m=2.0, target_offset_m=0.1, yaw=0.0,
+                            camera_tilt_deg=tilt))
+        assert fsm.state == m.MARKER_SEARCH and 'cho camera' in act.detail
+    act = fsm.step(snap(1.4, armed=True, range_m=2.0, target_offset_m=0.1, yaw=0.0))
+    assert fsm.state == m.ALIGN_HEADING and act.expected_marker_id == 1
 
 
-def test_da_thang_hang_thi_tim_tag_xong_ha_va_giu_mui_theo_huong_do():
-    fsm = fsm_tim_tag_bai_khong_huong()
-    obs = (10.0, 0.0, 0.0, math.pi / 2)
-    fsm.aligned = True
-    act = fsm.step(snap(1.0, armed=True, range_m=1.0, position=(10.0, 0.0, 1.1), yaw=math.pi / 2,
-                        pad_obs=obs, target_offset_m=0.05))
+def test_quay_mui_theo_bai_giu_1s_roi_ha_thang_dung():
+    fsm = fsm_tim_tag_co_huong()
+    fsm.step(snap(1.2, armed=True, range_m=2.0, target_offset_m=0.1, yaw=0.0))
+    assert fsm.state == m.ALIGN_HEADING
+    act = fsm.step(snap(1.4, armed=True, range_m=2.0, target_offset_m=0.1, yaw=0.0))
+    assert act.yaw_target == pytest.approx(math.pi / 2) and act.velocity_up_mps == 0.0
+    assert act.expected_marker_id == 1 and act.position_target[:2] == pytest.approx((10.0, 0.0))
+    ok = math.pi / 2 - math.radians(3)
+    fsm.step(snap(2.0, armed=True, range_m=2.0, target_offset_m=0.1, yaw=ok))
+    fsm.step(snap(2.5, armed=True, range_m=2.0, target_offset_m=0.1, yaw=ok))
+    assert fsm.state == m.ALIGN_HEADING                 # chua giu du 1 s
+    act = fsm.step(snap(3.0, armed=True, range_m=2.0, target_offset_m=0.1, yaw=ok))
+    assert fsm.state == m.PRECISION_LAND and act.yaw_target == pytest.approx(math.pi / 2)
+    act = fsm.step(snap(3.2, armed=True, range_m=2.0, target_offset_m=0.1, yaw=ok))
+    assert act.velocity_up_mps == -m.LAND_DESCENT_FAR_MPS          # toc do ha nhu cu
+
+
+def test_quay_mui_mat_tag_qua_lau_thi_tim_lai():
+    fsm = fsm_tim_tag_co_huong()
+    fsm.step(snap(1.2, armed=True, range_m=2.0, target_offset_m=0.1, yaw=0.0))
+    fsm.step(snap(1.3, armed=True, range_m=2.0, yaw=0.0))
+    fsm.step(snap(1.2 + m.TAG_GAP_RECOVER_S + 0.2, armed=True, range_m=2.0, yaw=0.0))
+    assert fsm.state == m.MARKER_SEARCH and fsm.retry_count == 1
+
+
+def test_quay_mui_qua_han_thi_ha_voi_mui_dang_co():
+    fsm = fsm_tim_tag_co_huong()
+    fsm.step(snap(1.2, armed=True, range_m=2.0, target_offset_m=0.1, yaw=0.0))
+    fsm.step(snap(1.2 + m.ALIGN_HEADING_TIMEOUT_S, armed=True, range_m=2.0, target_offset_m=0.1,
+                  yaw=0.0))
     assert fsm.state == m.PRECISION_LAND
-    assert act.yaw_target == pytest.approx(math.pi / 2)
 
 
-def test_het_gio_pad_align_khong_quay_lai_pad_align():
-    fsm = fsm_tim_tag_bai_khong_huong()
-    obs = (10.0, 0.0, 0.0, math.pi / 2)
-    fsm.step(snap(1.0, armed=True, range_m=1.0, position=(10.0, 0.0, 2.0), yaw=0.0, pad_obs=obs))
-    assert fsm.state == m.PAD_ALIGN
-    fsm.step(snap(1.0 + m.PAD_ALIGN_TIMEOUT_S, armed=True, range_m=1.0, position=(13.0, 2.0, 2.0),
-                  yaw=0.0, pad_obs=obs))
-    assert fsm.state == m.MARKER_SEARCH
-    fsm.step(snap(62.0, armed=True, range_m=1.0, position=(13.0, 2.0, 2.0), yaw=0.0, pad_obs=obs))
-    assert fsm.state == m.MARKER_SEARCH          # khong vong lai PAD_ALIGN
+def test_tha_hang_treo_o_do_cao_gap_khong_lao_nhanh_doan_mu():
+    fsm = fsm_dang_ha_chinh_xac([wp(0, marker=1, action=m.ACTION_DROPOFF), wp(1, marker=0)])
+    act = fsm.step(snap(2.0, armed=True, range_m=0.25))            # duoi nguong mu, chua toi 0,20
+    assert fsm.state == m.PRECISION_LAND and act.velocity_up_mps == -m.LAND_DESCENT_NEAR_MPS
+    fsm.step(snap(2.2, armed=True, range_m=m.GRIP_HOVER_M))
+    assert fsm.state == m.ACTUATE_GRIPPER
+    act = fsm.step(snap(2.4, armed=True, range_m=0.24))            # nay len: keo xuong lai
+    assert act.velocity_up_mps == pytest.approx(-0.04)
+    act = fsm.step(snap(2.6, armed=True, range_m=0.10))            # tut: tran +0,10
+    assert act.velocity_up_mps == pytest.approx(m.LAND_DESCENT_NEAR_MPS)
+
+
+def fsm_tim_hop():
+    """Bai 1 (10, 0) quay Bac, lay hang: ALIGN_HEADING -> PRECISION_LAND -> FINAL_APPROACH luc 3,0."""
+    fsm = fsm_tim_tag_co_huong(action=m.ACTION_PICKUP)
+    bac = math.pi / 2
+    fsm.step(snap(1.2, armed=True, range_m=2.0, target_offset_m=0.1, yaw=bac))
+    fsm.step(snap(1.4, armed=True, range_m=2.0, target_offset_m=0.1, yaw=bac))
+    fsm.step(snap(2.5, armed=True, range_m=2.0, target_offset_m=0.1, yaw=bac))
+    assert fsm.state == m.PRECISION_LAND
+    act = fsm.step(snap(3.0, armed=True, range_m=0.58, target_offset_m=0.02, yaw=bac))
+    assert fsm.state == m.FINAL_APPROACH and act.expected_marker_id == 11
+    return fsm
+
+
+def test_lay_hang_tron_ven_roi_neo_lai_bang_tag_to():
+    fsm = fsm_tim_hop()
+    bac = math.pi / 2
+    # Pha tim: lui ve hop khai bao (0,30 m ve phia "duoi" = -y), camera thang xuong.
+    act = fsm.step(snap(3.2, armed=True, range_m=0.6, yaw=bac))
+    assert act.position_target[:2] == pytest.approx((10.0, -0.30))
+    assert act.expected_marker_id == 11 and act.camera_tilt_deg == m.CAM_DOWN_DEG
+    # Thay tag hop -> nghieng camera ve duoi, giu do cao.
+    act = fsm.step(snap(3.4, armed=True, range_m=0.6, yaw=bac, target_offset_m=0.08))
+    assert act.camera_tilt_deg == m.CAM_BOX_DEG and act.velocity_up_mps == 0.0
+    act = fsm.step(snap(3.6, armed=True, range_m=0.6, yaw=bac, camera_tilt_deg=None))
+    assert 'cho camera' in act.detail
+    fsm.step(snap(4.0, armed=True, range_m=0.6, yaw=bac, camera_tilt_deg=m.CAM_BOX_DEG))
+    # Pha ha: lech lon thi can tam, vao tam thi xuong cham.
+    tilt = dict(armed=True, yaw=bac, camera_tilt_deg=m.CAM_BOX_DEG)
+    act = fsm.step(snap(4.2, range_m=0.5, target_offset_m=0.15, **tilt))
+    assert act.velocity_up_mps == 0.0 and 'can tam' in act.detail
+    act = fsm.step(snap(4.4, range_m=0.5, target_offset_m=0.03, **tilt))
+    assert act.velocity_up_mps == -m.LAND_DESCENT_NEAR_MPS
+    act = fsm.step(snap(5.0, range_m=0.24, **tilt))                   # mu, khong can tag
+    assert act.velocity_up_mps == -m.LAND_DESCENT_NEAR_MPS and fsm.state == m.FINAL_APPROACH
+    fsm.step(snap(5.4, range_m=0.20, **tilt))
+    assert fsm.state == m.ACTUATE_GRIPPER
+    # Gap: giu on dinh roi kep, cam bien xac nhan -> diem cuoi -> ha canh.
+    assert fsm.step(gap_snap(7.5)).gripper_command == 'close'
+    fsm.step(gap_snap(8.0, gripper_sensor_confirmed=True))
+    assert fsm.state == m.EMERGENCY_LAND
+
+
+def test_gap_xong_phai_thay_lai_tag_to_moi_bay_tiep():
+    fsm = fsm_dang_gap(waypoints=[wp(0, marker=1, action=m.ACTION_PICKUP), wp(1, marker=0)])
+    fsm.step(gap_snap(5.5))
+    act = fsm.step(gap_snap(6.0, gripper_sensor_confirmed=True))
+    assert fsm.state == m.TAKEOFF and act.camera_tilt_deg == m.CAM_DOWN_DEG
+    act = fsm.step(snap(6.2, armed=True, range_m=0.3))
+    assert act.expected_marker_id == 1                  # nho bridge bao tag to vua roi
+    fsm.step(snap(7.0, armed=True, range_m=0.8))                       # du bien leo, chua thay tag
+    act = fsm.step(snap(7.2, armed=True, range_m=0.8))
+    assert fsm.state == m.TAKEOFF and 'thay lai tag to' in act.detail
+    fsm.step(snap(7.4, armed=True, range_m=0.8, target_offset_m=0.3))
+    fsm.step(snap(7.6, armed=True, range_m=0.8))
+    assert fsm.state == m.ENROUTE
+
+
+def test_gap_xong_khong_thay_lai_tag_to_thi_ha_khan_cap():
+    fsm = fsm_dang_gap(waypoints=[wp(0, marker=1, action=m.ACTION_PICKUP), wp(1, marker=0)])
+    fsm.step(gap_snap(5.5))
+    fsm.step(gap_snap(6.0, gripper_sensor_confirmed=True))
+    fsm.step(snap(6.2, armed=True, range_m=0.3))                        # dich leo = 0,3 + 0,5
+    fsm.step(snap(7.0, armed=True, range_m=0.8))
+    fsm.step(snap(7.1 + fsm.params.anchor_wait_s, armed=True, range_m=0.8))
+    assert fsm.state == m.EMERGENCY_LAND
+
+
+def test_khong_thay_hop_10s_la_mot_lan_that_bai():
+    fsm = fsm_tim_hop()
+    fsm.step(snap(3.0 + m.BOX_SEARCH_TIMEOUT_S - 0.1, armed=True, range_m=0.6))
+    assert fsm.state == m.FINAL_APPROACH
+    fsm.step(snap(3.0 + m.BOX_SEARCH_TIMEOUT_S, armed=True, range_m=0.6))
+    assert fsm.state == m.RETRY_LOITER and fsm.retry_count == 1
+
+
+def test_camera_khong_nghieng_duoc_la_mot_lan_that_bai():
+    fsm = fsm_tim_hop()
+    fsm.step(snap(3.2, armed=True, range_m=0.6, target_offset_m=0.05))
+    fsm.step(snap(3.3 + m.CAM_SETTLE_TIMEOUT_S, armed=True, range_m=0.6))
+    assert fsm.state == m.RETRY_LOITER
+
+
+def test_mat_tag_hop_khi_ha_qua_lau_la_mot_lan_that_bai():
+    fsm = fsm_tim_hop()
+    tilt = dict(armed=True, camera_tilt_deg=m.CAM_BOX_DEG)
+    fsm.step(snap(3.2, armed=True, range_m=0.6, target_offset_m=0.05))
+    fsm.step(snap(3.4, range_m=0.6, **tilt))
+    act = fsm.step(snap(3.6, range_m=0.5, **tilt))
+    assert act.velocity_up_mps == 0.0 and 'mat tag hop' in act.detail
+    fsm.step(snap(3.6 + m.TAG_GAP_RECOVER_S + 0.1, range_m=0.5, **tilt))
+    assert fsm.state == m.RETRY_LOITER

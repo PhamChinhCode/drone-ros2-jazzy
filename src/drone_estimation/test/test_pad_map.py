@@ -111,11 +111,7 @@ def test_up_yaw_doc_dung_huong_bai(pad_yaw):
                         abs_tol=1e-9)
 
 
-@pytest.mark.parametrize('pad_yaw', [0.0, 0.7, -1.9, math.pi])
-def test_tam_bai_tu_tag_nho_khong_can_huong_khai_bao(pad_yaw):
-    """Tag nho cach tam 0,21 m ve phia TREN; suy nguoc chi tu tu the do duoc cua tag nho."""
-    from drone_estimation.pad_map import small_to_center
-    center = (3.0, -2.0, 0.0)
-    small = (center[0] + 0.21 * math.cos(pad_yaw), center[1] + 0.21 * math.sin(pad_yaw), 0.0)
-    got = small_to_center(small, q_tag_world(pad_yaw), 0.21)
-    assert got == pytest.approx(center, abs=1e-9)
+def test_tag_nho_tren_hop_lech_ve_phia_duoi_va_cao_hon():
+    """Hop cao 0,12 m, tam cach tam tag to 0,30 m ve phia "duoi" (bai A huong Bac -> -y)."""
+    m = build_pad_map(KNOWN, FRAMES, {1: 0.0}, 10, -0.30, 0.12)
+    assert m[11].pos == pytest.approx((10.0, -0.30, 0.12), abs=1e-9)

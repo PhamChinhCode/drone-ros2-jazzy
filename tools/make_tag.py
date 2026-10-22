@@ -49,7 +49,8 @@ def grid_of(dict_name, tag_id):
     n = int(d.bytesList.shape[0])
     if not 0 <= tag_id < n:
         sys.exit(f"[!] --id {tag_id} ngoài khoảng: từ điển '{dict_name}' chỉ có id 0..{n-1}")
-    img = aruco.drawMarker(d, tag_id, cells)
+    draw = getattr(aruco, "generateImageMarker", None) or aruco.drawMarker   # OpenCV >= 4.7 đổi tên
+    img = draw(d, tag_id, cells)
     return (img // 255).astype(int), cells
 
 

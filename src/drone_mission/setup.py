@@ -22,6 +22,7 @@ setup(
             'gripper_controller_node = drone_mission.gripper_controller_node:main',
             'fc_command_bridge_node = drone_mission.fc_command_bridge_node:main',
             'send_mission_plan = drone_mission.send_mission_plan:main',
+            'camera_tilt_node = drone_mission.camera_tilt_node:main',
         ],
     },
 )

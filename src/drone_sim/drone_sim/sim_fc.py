@@ -17,6 +17,8 @@ DISARM tra lai quyen sau KHOA - FC that phai gat ch8 xuong-len.
 FRAME_BODY_NED = 8
 TYPE_MASK_VELOCITY_YAWRATE = 0x07C7
 MAV_CMD_COMPONENT_ARM_DISARM = 400
+MAV_CMD_DO_SET_SERVO = 183       # servo 1 kep, 2 camera (fc_link.py)
+MAV_CMD_DO_GRIPPER = 211
 DISARM_FORCE_MAGIC = 21196
 MAV_RESULT_ACCEPTED = 0
 MAV_RESULT_TEMPORARILY_REJECTED = 1
@@ -73,6 +75,9 @@ class SimFc:
 
     def command(self, command, param1, param2):
         """COMMAND_LONG -> MAV_RESULT."""
+        if command in (MAV_CMD_DO_SET_SERVO, MAV_CMD_DO_GRIPPER):
+            # Servo kep / camera tren FC that: quyen servo = quyen bay (khong can arm).
+            return MAV_RESULT_ACCEPTED if self.authority else MAV_RESULT_DENIED
         if command != MAV_CMD_COMPONENT_ARM_DISARM:
             return MAV_RESULT_UNSUPPORTED
         if param1 >= 0.5:

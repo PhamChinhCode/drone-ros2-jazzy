@@ -60,16 +60,12 @@ def generate_launch_description():
         # tham so plugin khi node da len. Thieu: IMU covariance mac dinh, laser khong phat.
         ExecuteProcess(cmd=[_plugin_param_script()], shell=True, output='screen'),
 
-        # Vi tri lap camera tren khung drone - DO THAT roi sua sau day.
-        # Sai transform nay gay trieu chung "thay dung marker nhung bay lech tam".
-        # Do lai 10-08: truoc tam 90 mm (09-14 ghi 6 cm), cao ngang cam bien ToF (lay z = 0),
-        # mat camera nghieng 20 do so voi mat ban (theo ban ve, user xac nhan 10-08), nhin ve
-        # phia truoc -> truc nhin lech 20 do khoi phuong thang
-        # dung: pitch = 90 - 20 = 70 do. Tag do sau hieu chinh 640x400 cho 17-23 do. Tham so:
-        # x y z yaw pitch roll.
-        Node(package='tf2_ros', executable='static_transform_publisher',
-             name='base_to_camera',
-             arguments=['0.09', '0', '0', '0', '1.2217', '0', 'base_link', 'camera_link']),
+        # Vi tri lap camera tren khung drone - sai transform nay gay trieu chung "thay dung marker
+        # nhung bay lech tam". Tu 2026-10-22 camera nghieng bang servo: TF base_link -> camera_link
+        # do camera_tilt_node phat THEO goc servo (truoc tam 90 mm, ngang ToF - do 10-08), thay
+        # static TF nghieng co dinh 20 do. Bang goc <-> xung: mission.yaml.
+        Node(package='drone_mission', executable='camera_tilt_node', name='camera_tilt_node',
+             parameters=[os.path.join(CONFIG, 'mission.yaml')], output='screen'),
 
         # Noi hai quy uoc truc (REP 103): camera_link la x-tien, z-len; con
         # camera_optical_frame la x-phai, y-xuong, z-theo huong nhin. camera.yaml dat

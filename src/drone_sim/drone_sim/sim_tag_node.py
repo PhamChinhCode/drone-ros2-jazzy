@@ -7,9 +7,10 @@ landing_target_bridge_node can:
   /apriltag/detections            AprilTagDetectionArray (chi ID, dung de loc)
   TF camera_optical_frame -> <ten khung tag>
 
-Dung dung chuoi TF cua drone that (base_link -> camera_link -> camera_optical_frame, so do lay
-tu estimation.launch.py) nen phep lookupTransform cua bridge di qua y het duong that, ke ca sai
-so do lap camera nghieng.
+Dung dung chuoi TF cua drone that (base_link -> camera_link -> camera_optical_frame) nen phep
+lookupTransform cua bridge di qua y het duong that. base_link -> camera_link do camera_tilt_node
+phat THEO goc servo (nhu drone that); node nay tra TF do moi chu ky nen camera nghieng toi dau thi
+tam nhin mo phong theo toi do. Tag nho nam tren nap hop hang (pad_small_tag_height_m).
 
 Tam nhin mo phong bang hinh chop: tag chi "thay duoc" khi nam trong FOV, trong khoang cach cho
 phep, va khong bi che. KHONG mo phong: mo anh khi bay nhanh, thieu sang, tag bi loa, sai so PnP
@@ -27,15 +28,13 @@ from nav_msgs.msg import Odometry
 from rclpy.exceptions import ParameterUninitializedException
 from rclpy.node import Node
 from rclpy.parameter import Parameter
-from tf2_ros import StaticTransformBroadcaster, TransformBroadcaster
+from rclpy.time import Time
+from tf2_ros import (Buffer, StaticTransformBroadcaster, TransformBroadcaster, TransformException,
+                     TransformListener)
 
 from drone_control.qos import SENSOR_QOS
 from drone_estimation.pad_map import build_pad_map, parse_headings
 
-# Lay tu estimation.launch.py - phai khop voi drone that.
-# z = -0,06: khop camera Gazebo gan duoi bung X3 (worlds/drone_tune.sdf, sim_launch.CAM_XYZ).
-BASE_TO_CAM_XYZ = (0.09, 0.0, -0.06)        # do 2026-10-08: truoc tam 90 mm
-BASE_TO_CAM_RPY = (0.0, 1.2217, 0.0)        # yaw, pitch, roll (pitch 70 do)
 CAM_TO_OPTICAL_RPY = (-1.5708, 0.0, -1.5708)
 
 
@@ -96,10 +95,11 @@ class SimTagNode(Node):
         self.declare_parameter('dropout_prob', 0.0)          # ti le khung bi mat detection
         self.declare_parameter('known_tags', Parameter.Type.DOUBLE_ARRAY)
         self.declare_parameter('tag_frames', Parameter.Type.STRING_ARRAY)
-        # Bai hai tag (tags.yaml): bai co huong thi co tag nho id + offset, truoc tam forward_m.
+        # Bai co huong thi co tag nho (tren hop hang) id + offset, lech forward_m, cao height_m.
         self.declare_parameter('known_tags_heading', Parameter.Type.DOUBLE_ARRAY)
         self.declare_parameter('pad_small_tag_id_offset', 10)
-        self.declare_parameter('pad_small_tag_forward_m', 0.21)
+        self.declare_parameter('pad_small_tag_forward_m', -0.30)
+        self.declare_parameter('pad_small_tag_height_m', 0.12)
         self.declare_parameter('pad_small_tag_size_m', 0.10)
 
         g = self.get_parameter
@@ -108,7 +108,8 @@ class SimTagNode(Node):
         except ParameterUninitializedException:
             headings = {}
         pads = build_pad_map(g('known_tags').value, g('tag_frames').value, headings,
-                             g('pad_small_tag_id_offset').value, g('pad_small_tag_forward_m').value)
+                             g('pad_small_tag_id_offset').value, g('pad_small_tag_forward_m').value,
+                             g('pad_small_tag_height_m').value)
         # id -> (vi tri, ten khung, canh, ma tran xoay tag -> the gioi theo huong bai)
         self.tags = {i: (np.array(t.pos), t.frame,
                          g('pad_small_tag_size_m').value if t.small else g('tag_size_m').value,
@@ -120,17 +121,15 @@ class SimTagNode(Node):
             f'{i} @ {tuple(np.round(p, 3))} ({f}, {s:.2f} m)'
             for i, (p, f, s, _) in self.tags.items()))
 
-        # base_link -> camera_optical_frame, gop san (khong doi trong luc chay).
-        r_cam = rpy_to_mat(*BASE_TO_CAM_RPY)
-        self.r_base_opt = r_cam @ rpy_to_mat(*CAM_TO_OPTICAL_RPY)
-        self.t_base_opt = np.array(BASE_TO_CAM_XYZ)
-
         self.odom = None
+        # camera_link -> camera_optical_frame: quy uoc truc, co dinh. base_link -> camera_link do
+        # camera_tilt_node phat (doi theo servo) - tra moi chu ky trong tick().
         self.tf_static = StaticTransformBroadcaster(self)
         self.tf_static.sendTransform([
-            self.make_tf('base_link', 'camera_link', self.t_base_opt, rpy_to_mat(*BASE_TO_CAM_RPY)),
             self.make_tf('camera_link', 'camera_optical_frame', np.zeros(3),
                          rpy_to_mat(*CAM_TO_OPTICAL_RPY))])
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
         self.tf_bc = TransformBroadcaster(self)
         self.pub_det = self.create_publisher(
             AprilTagDetectionArray, '/apriltag/detections', SENSOR_QOS)
@@ -175,6 +174,13 @@ class SimTagNode(Node):
     def tick(self):
         if self.odom is None:
             return
+        try:
+            mount = self.tf_buffer.lookup_transform('base_link', 'camera_optical_frame', Time())
+        except TransformException:
+            return                                    # chua co camera_tilt_node
+        tr, rq = mount.transform.translation, mount.transform.rotation
+        t_base_opt = np.array([tr.x, tr.y, tr.z])
+        r_base_opt = quat_to_mat(rq.x, rq.y, rq.z, rq.w)
         p = self.odom.pose.pose.position
         o = self.odom.pose.pose.orientation
         r_wb = quat_to_mat(o.x, o.y, o.z, o.w)       # than -> the gioi
@@ -189,7 +195,7 @@ class SimTagNode(Node):
         tfs = []
         for tag_id, (p_tag_w, frame, size_m, r_w_tag) in self.tags.items():
             v_base = r_wb.T @ (p_tag_w - p_w)                 # tag trong base_link
-            v_opt = self.r_base_opt.T @ (v_base - self.t_base_opt)
+            v_opt = r_base_opt.T @ (v_base - t_base_opt)
             if not self.visible(v_opt, size_m) or random.random() < dropout:
                 continue
             if noise > 0.0:
@@ -198,7 +204,7 @@ class SimTagNode(Node):
             det.id = tag_id
             det_msg.detections.append(det)
             tfs.append(self.make_tf('camera_optical_frame', frame, v_opt,
-                                    self.r_base_opt.T @ r_wb.T @ r_w_tag))
+                                    r_base_opt.T @ r_wb.T @ r_w_tag))
         if tfs:
             self.tf_bc.sendTransform(tfs)
         self.pub_det.publish(det_msg)
