@@ -139,7 +139,7 @@ if ! ip -4 -o addr show scope global | grep -q .; then
   echo "[!] Chưa có IPv4 sau 60 s - vẫn chạy, nhưng các node có thể không thấy nhau" >&2
 fi
 
-# Giữ ~/drone_logs <= 10 GB (bag ghi đầy đủ mọi topic, 10-10): dọn lúc khởi động và mỗi 10 phút.
+# Dọn ~/drone_logs (chỉ giữ bag lúc hoạt động ±2 phút, còn lại 30 phút; tổng <= 10 GB): lúc khởi động và mỗi 10 phút.
 "$SCRIPT_DIR/prune_logs.sh"
 ( while sleep 600; do "$SCRIPT_DIR/prune_logs.sh"; done ) &
 PRUNE_PID=$!

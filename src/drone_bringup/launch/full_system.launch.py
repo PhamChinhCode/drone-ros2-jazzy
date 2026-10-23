@@ -23,9 +23,10 @@ TAGS_YAML = _TAGS_OVERRIDE if os.path.isfile(_TAGS_OVERRIDE) else os.path.join(C
 # IMU, EKF, flow, laser, tag, GPS, log moi node /rosout, tai Pi /system/stats...) TRU luong anh
 # /camera/*: anh tho 30 FPS ~7,7 MB/s (09-17 da lam day the SD 229 GB) va image_transport con phat
 # them ban nen zstd/jpeg/theora ~6 MB/s. Anh de xem lai lay tu camera_log_node (/log/camera, 2 Hz).
-# Cat file moi 10 phut + nen zstd theo chunk; scripts/prune_logs.sh giu tong <= 10 GB.
+# Cat file moi 1 phut (10-23, truoc: 10 phut) + nen zstd theo chunk: scripts/prune_logs.sh chi giu
+# file trung luc hoat dong (log_activity_node) +-2 phut, file khac giu 30 phut; tong <= 10 GB.
 BAG_CMD = ['ros2', 'bag', 'record', '--all-topics', '--exclude-regex', '^/camera/.*',
-           '--max-bag-duration', '600', '--storage-preset-profile', 'zstd_fast']
+           '--max-bag-duration', '60', '--storage-preset-profile', 'zstd_fast']
 
 
 def generate_launch_description():
@@ -62,6 +63,9 @@ def generate_launch_description():
         Node(package='drone_safety', executable='mission_logger_node',
              name='mission_logger_node',
              parameters=[os.path.join(CONFIG, 'safety.yaml')], output='screen'),
+        # Danh dau luc arm / Pi co quyen / co nhiem vu - prune_logs giu bag doan do.
+        Node(package='drone_safety', executable='log_activity_node',
+             name='log_activity_node', output='screen'),
 
         # Ghi kem bag: tai / nhiet / ha xung cua Pi (1 Hz) va anh camera thua (2 Hz JPEG).
         Node(package='drone_safety', executable='system_monitor_node',
