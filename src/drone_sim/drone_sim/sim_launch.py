@@ -3,14 +3,18 @@
 import os
 
 from ament_index_python.packages import get_package_share_directory
-from launch.actions import IncludeLaunchDescription
+from launch.actions import (AppendEnvironmentVariable, ExecuteProcess, IncludeLaunchDescription,
+                            TimerAction)
 from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
 from launch_ros.parameter_descriptions import ParameterValue
+import yaml
 
-WORLD = os.path.join(get_package_share_directory('drone_sim'), 'worlds', 'drone_tune.sdf')
+SHARE = get_package_share_directory('drone_sim')
+WORLD = os.path.join(SHARE, 'worlds', 'drone_tune.sdf')
+MODELS = os.path.join(SHARE, 'models')
 CONFIG = os.path.join(get_package_share_directory('drone_bringup'), 'config')
 CONTROL_YAML = os.path.join(CONFIG, 'control.yaml')
 # Ban do bai rieng cua mo phong (home + 2 bai, co huong -> co tag nho), khop worlds/drone_tune.sdf.
@@ -21,17 +25,50 @@ SIM_TIME = {'use_sim_time': True}
 # drone that; z xem chu thich world. Goc nghieng do camera_tilt_node phat theo servo.
 CAM_XYZ = ('0.09', '0', '-0.06')
 
+# Hai drone mo phong (sim_mission.launch.py drone:=...). Moi so lieu phai khop world tuong ung.
+DRONES = {
+    # X3 Gazebo Fuel, camera gan cung (khong co servo trong Gazebo - camera:=true chi dung o 20 do).
+    'x3': dict(world='drone_tune.sdf', model='X3', pivot=[float(v) for v in CAM_XYZ], lens=[0.0, 0.0, 0.0],
+               ground_range_m=0.17, camera_joint_topic='', tof_xyz=[0.0], boxes=[0.0],
+               range_node=False, vel_ki=0.0,
+               # Camera thap hon base_link 6 cm: tag hop ra khoi khung tu ToF ~0,30 m.
+               box_cam_switch_m=0.32),
+    # Khung Version2.0 (models/drone_v2 <- drone_v2.urdf): truc servo + ong kinh theo URDF, laser 0,146 m
+    # khi nam dat (chan 0,155 m, mat MTF-01 0,009 m duoi mat FC = goc base_link), servo camera that.
+    'v2': dict(world='drone_v2.sdf', model='drone_v2', pivot=[0.09525, -0.018, -0.05218], lens=[0.0, 0.017, -0.0418],
+               ground_range_m=0.146, camera_joint_topic='/X3/camera_tilt/cmd',
+               # Laser theo tia (sim_tof): MTF-01 0,10 m sau tam, 0,009 m duoi FC (URDF); hop hang 12 cm
+               # [x, y, yaw] - PHAI khop hop_a / hop_b trong worlds/drone_v2.sdf.
+               tof_xyz=[-0.10, 0.0, -0.009], boxes=[10.0, -0.30, 1.5708, 5.0, -5.70, -1.5708],
+               # range_vertical_node THAT (bu nghieng + bu hop hang) thay laser da xu ly cua FC gia.
+               range_node=True,
+               # Khau I van toc ngang nhu FC that (Gazebo khong co): khu troi tinh do trong tam lech.
+               vel_ki=1.0,
+               # Doi camera -20 -> -36 do o cung ToF 0,32 nhu drone that (mission.yaml). Che do tag tong
+               # hop (camera:=false): sim_tag_node bo tag gan hon min_range 0,15 m - doan cuoi mat tag.
+               box_cam_switch_m=0.32),
+}
 
-def gazebo(gui, render_engine):
+
+def camera_tilt_table():
+    """Bang goc <-> xung cua camera_tilt_node (mission.yaml) - FC gia doi xung ra goc joint."""
+    with open(os.path.join(CONFIG, 'mission.yaml'), encoding='utf-8') as f:
+        p = yaml.safe_load(f)['camera_tilt_node']['ros__parameters']
+    return [float(v) for v in p['tilt_deg']], [int(v) for v in p['pulse_us']]
+
+
+def gazebo(gui, render_engine, world=WORLD):
     """-r: chay ngay; -s: chi server, khong cua so.
 
     render_engine 'ogre' (Ogre1): Ogre2 mac dinh nhap nhay tren may ao / GPU yeu."""
     def include(flags, condition):
-        args = [flags, ' --render-engine ', render_engine, f' {WORLD}']
+        args = [flags, ' --render-engine ', render_engine, f' {world}']
         return IncludeLaunchDescription(PythonLaunchDescriptionSource(GZ_LAUNCH),
                                         launch_arguments=[('gz_args', args)],
                                         condition=condition)
-    return [include('-r', IfCondition(gui)),
+    # model://drone_v2 trong worlds/drone_v2.sdf.
+    return [AppendEnvironmentVariable('GZ_SIM_RESOURCE_PATH', MODELS),
+            include('-r', IfCondition(gui)),
             include('-r -s', UnlessCondition(gui))]
 
 
@@ -41,16 +78,24 @@ def gz_bridge():
                 arguments=['/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock',
                            '/X3/gazebo/command/twist@geometry_msgs/msg/Twist]gz.msgs.Twist',
                            '/X3/enable@std_msgs/msg/Bool]gz.msgs.Boolean',
-                           '/model/X3/odometry@nav_msgs/msg/Odometry[gz.msgs.Odometry'],
+                           '/model/X3/odometry@nav_msgs/msg/Odometry[gz.msgs.Odometry',
+                           # Goc servo camera (rad) -> JointPositionController (chi world drone_v2).
+                           '/X3/camera_tilt/cmd@std_msgs/msg/Float64]gz.msgs.Double'],
                 output='screen')
 
 
-def sim_fc_bridge(auto_arm, heartbeat, delay, noise, drift=None, vel_lag=None):
+def sim_fc_bridge(auto_arm, heartbeat, delay, noise, drift=None, vel_lag=None, drone='x3'):
     """drift: (vx, vy, yaw_rate_dps) - sai so van toc FC gia lap; vel_lag: (tre thuan s, tau s) cua
-    van toc ngang (xem sim_fc_bridge_node)."""
+    van toc ngang (xem sim_fc_bridge_node); drone: khoa cua DRONES."""
+    d = DRONES[drone]
+    tilt_deg, pulse_us = camera_tilt_table()
     p = {'auto_arm': auto_arm, 'publish_mission_heartbeat': heartbeat,
          'odom_delay_s': ParameterValue(delay, value_type=float),
-         'odom_noise_m': ParameterValue(noise, value_type=float)}
+         'odom_noise_m': ParameterValue(noise, value_type=float),
+         'ground_range_m': d['ground_range_m'], 'camera_joint_topic': d['camera_joint_topic'],
+         'tof_xyz': d['tof_xyz'], 'boxes': d['boxes'],
+         'publish_range_vertical': not d['range_node'], 'vel_ki': d['vel_ki'],
+         'tilt_deg': tilt_deg, 'pulse_us': pulse_us}
     if drift is not None:
         for k, v in zip(('drift_vx_mps', 'drift_vy_mps', 'drift_yaw_dps'), drift):
             p[k] = ParameterValue(v, value_type=float)
@@ -110,13 +155,37 @@ def camera_pipeline(condition):
     ]
 
 
-def camera_tilt():
+def range_vertical(condition=None):
+    """Node that: laser tho /mavros/mtf01p + IMU -> /range/vertical (bu nghieng, bu hop hang)."""
+    return Node(package='drone_estimation', executable='range_vertical_node',
+                name='range_vertical_node', parameters=[SIM_TIME], condition=condition,
+                output='screen')
+
+
+def camera_tilt(drone='x3'):
     """Node that: servo camera qua fc_command_bridge (sim_fc nhan lenh 183) + TF base_link ->
-    camera_link theo goc servo. Vi tri camera = camera Gazebo (CAM_XYZ)."""
+    camera_link theo goc servo. Truc servo + ong kinh = camera Gazebo cua drone do (DRONES)."""
+    d = DRONES[drone]
     return Node(package='drone_mission', executable='camera_tilt_node', name='camera_tilt_node',
                 parameters=[os.path.join(CONFIG, 'mission.yaml'),
-                            {'camera_xyz': [float(v) for v in CAM_XYZ]}, SIM_TIME],
+                            {'camera_xyz': d['pivot'], 'lens_xyz': d['lens']}, SIM_TIME],
                 output='screen')
+
+
+def gui_follow(model, condition=None):
+    """Goc nhin Gazebo GUI bam theo drone (sau, cheo trai, cao hon) - doi GUI len roi moi goi."""
+    def svc(name, typ, req):
+        return ExecuteProcess(cmd=['gz', 'service', '-s', name, '--reqtype', typ, '--reptype',
+                                   'gz.msgs.Boolean', '--timeout', '3000', '--req', req])
+    return TimerAction(period=10.0, condition=condition, actions=[
+        svc('/gui/follow', 'gz.msgs.StringMsg', f'data: "{model}"'),
+        svc('/gui/follow/offset', 'gz.msgs.Vector3d', 'x: -1.5, y: -1.5, z: 1.2')])
+
+
+def camera_view(condition=None):
+    """Cua so anh camera + goc servo + tag dang thay (can camera:=true - anh render that)."""
+    return Node(package='drone_sim', executable='sim_camera_view_node', name='sim_camera_view_node',
+                parameters=[SIM_TIME], condition=condition, output='screen')
 
 
 def sim_tag(noise, dropout, condition=None):

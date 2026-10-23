@@ -1,0 +1,306 @@
+<sdf version='1.11'>
+<!-- SINH TU DONG tu drone_v2.urdf bang tools/sinh_model_drone_v2.py - DUNG SUA TAY. -->
+  <model name='drone_v2'>
+    <link name='base_link'>
+      <inertial>
+        <pose>0.00513 -6.9999999999999994e-05 -0.02452 0 0 0</pose>
+        <mass>0.73431999999999997</mass>
+        <inertia>
+          <ixx>0.0065319999999999996</ixx>
+          <ixy>-2.9349999999999999e-06</ixy>
+          <ixz>8.0359999999999996e-05</ixz>
+          <iyy>0.0071314999999999998</iyy>
+          <iyz>1.7999999999999999e-06</iyz>
+          <izz>0.012697999999999999</izz>
+        </inertia>
+      </inertial>
+      <collision name='base_link_collision'>
+        <pose>0 0 -0.0385 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.44940000000000002 0.44940000000000002 0.23300000000000001</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name='base_link_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://drone_v2/meshes/base_link.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>0.4375 0.4375 0.474999994 1</diffuse>
+          <ambient>0.4375 0.4375 0.474999994 1</ambient>
+        </material>
+      </visual>
+    </link>
+    <joint name='camera_tilt_joint' type='revolute'>
+      <pose relative_to='base_link'>0.095250000000000001 -0.017999999999999999 -0.052179999999999997 0 0 0</pose>
+      <parent>base_link</parent>
+      <child>camera_tilt_link</child>
+      <axis>
+        <xyz>0 -1 0</xyz>
+        <limit>
+          <lower>-0.62831999999999999</lower>
+          <upper>0.85172000000000003</upper>
+          <effort>0.16</effort>
+          <velocity>10.5</velocity>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='camera_tilt_link'>
+      <pose relative_to='camera_tilt_joint'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>0.00046000000000000001 0.017559999999999999 -0.01711 0 0 0</pose>
+        <mass>0.0091400000000000006</mass>
+        <inertia>
+          <ixx>2.9758e-06</ixx>
+          <ixy>2.2050000000000001e-09</ixy>
+          <ixz>5.8900000000000001e-09</ixz>
+          <iyy>1.5371000000000001e-06</iyy>
+          <iyz>-8.5199999999999995e-08</iyz>
+          <izz>2.0623000000000001e-06</izz>
+        </inertia>
+      </inertial>
+      <collision name='camera_tilt_link_collision'>
+        <pose>0.00125 0.017000000000000001 -0.015900000000000001 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.0275 0.040000000000000001 0.051799999999999999</size>
+          </box>
+        </geometry>
+      </collision>
+      <visual name='camera_tilt_link_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://drone_v2/meshes/camera_tilt_link.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>0.125 0.625 0.37500003 1</diffuse>
+          <ambient>0.125 0.625 0.37500003 1</ambient>
+        </material>
+      </visual>
+    </link>
+    <joint name='prop_front_left_joint' type='revolute'>
+      <pose relative_to='base_link'>0.20349 0.20349 0.035999999999999997 0 0 0</pose>
+      <parent>base_link</parent>
+      <child>prop_front_left</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-inf</lower>
+          <upper>inf</upper>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='prop_front_left'>
+      <pose relative_to='prop_front_left_joint'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0.0012800000000000001 0 0 0</pose>
+        <mass>0.00611</mass>
+        <inertia>
+          <ixx>1.2028000000000001e-05</ixx>
+          <ixy>2.9960000000000002e-06</ixy>
+          <ixz>0</ixz>
+          <iyy>9.1273000000000005e-07</iyy>
+          <iyz>0</iyz>
+          <izz>1.2887e-05</izz>
+        </inertia>
+      </inertial>
+      <collision name='prop_front_left_collision'>
+        <pose>0 0 0.00125 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.0094999999999999998</length>
+            <radius>0.1016</radius>
+          </cylinder>
+        </geometry>
+      </collision>
+      <visual name='prop_front_left_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://drone_v2/meshes/prop_front_left.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>0.125 0.125 0.125 1</diffuse>
+          <ambient>0.125 0.125 0.125 1</ambient>
+        </material>
+      </visual>
+    </link>
+    <joint name='prop_front_right_joint' type='revolute'>
+      <pose relative_to='base_link'>0.20349 -0.20349 0.035999999999999997 0 0 0</pose>
+      <parent>base_link</parent>
+      <child>prop_front_right</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-inf</lower>
+          <upper>inf</upper>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='prop_front_right'>
+      <pose relative_to='prop_front_right_joint'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0.0012899999999999999 0 0 0</pose>
+        <mass>0.00611</mass>
+        <inertia>
+          <ixx>1.2573e-05</ixx>
+          <ixy>1.626e-06</ixy>
+          <ixz>0</ixz>
+          <iyy>3.6950999999999998e-07</iyy>
+          <iyz>0</iyz>
+          <izz>1.2887999999999999e-05</izz>
+        </inertia>
+      </inertial>
+      <collision name='prop_front_right_collision'>
+        <pose>0 0 0.00125 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.0094999999999999998</length>
+            <radius>0.1016</radius>
+          </cylinder>
+        </geometry>
+      </collision>
+      <visual name='prop_front_right_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://drone_v2/meshes/prop_front_right.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>1 0.37500003 0.125 1</diffuse>
+          <ambient>1 0.37500003 0.125 1</ambient>
+        </material>
+      </visual>
+    </link>
+    <joint name='prop_rear_left_joint' type='revolute'>
+      <pose relative_to='base_link'>-0.20349 0.20349 0.035999999999999997 0 0 0</pose>
+      <parent>base_link</parent>
+      <child>prop_rear_left</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-inf</lower>
+          <upper>inf</upper>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='prop_rear_left'>
+      <pose relative_to='prop_rear_left_joint'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0.0012899999999999999 0 0 0</pose>
+        <mass>0.00611</mass>
+        <inertia>
+          <ixx>3.9717999999999998e-06</ixx>
+          <ixy>-5.7989999999999999e-06</ixy>
+          <ixz>0</ixz>
+          <iyy>8.9704999999999999e-06</iyy>
+          <iyz>0</iyz>
+          <izz>1.2887999999999999e-05</izz>
+        </inertia>
+      </inertial>
+      <collision name='prop_rear_left_collision'>
+        <pose>0 0 0.00125 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.0094999999999999998</length>
+            <radius>0.1016</radius>
+          </cylinder>
+        </geometry>
+      </collision>
+      <visual name='prop_rear_left_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://drone_v2/meshes/prop_rear_left.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>1 0.37500003 0.125 1</diffuse>
+          <ambient>1 0.37500003 0.125 1</ambient>
+        </material>
+      </visual>
+    </link>
+    <joint name='prop_rear_right_joint' type='revolute'>
+      <pose relative_to='base_link'>-0.20349 -0.20349 0.035999999999999997 0 0 0</pose>
+      <parent>base_link</parent>
+      <child>prop_rear_right</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-inf</lower>
+          <upper>inf</upper>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='prop_rear_right'>
+      <pose relative_to='prop_rear_right_joint'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0.0012800000000000001 0 0 0</pose>
+        <mass>0.00611</mass>
+        <inertia>
+          <ixx>5.3797999999999997e-06</ixx>
+          <ixy>-6.2190000000000001e-06</ixy>
+          <ixz>0</ixz>
+          <iyy>7.5612999999999999e-06</iyy>
+          <iyz>0</iyz>
+          <izz>1.2887e-05</izz>
+        </inertia>
+      </inertial>
+      <collision name='prop_rear_right_collision'>
+        <pose>0 0 0.00125 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.0094999999999999998</length>
+            <radius>0.1016</radius>
+          </cylinder>
+        </geometry>
+      </collision>
+      <visual name='prop_rear_right_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://drone_v2/meshes/prop_rear_right.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>0.125 0.125 0.125 1</diffuse>
+          <ambient>0.125 0.125 0.125 1</ambient>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

@@ -16,6 +16,9 @@ setup(
         # Anh AprilTag dan len bai (tools/sim_tag_textures.py) - world tro duong dan tuong doi.
         ('share/' + package_name + '/worlds/textures', glob('worlds/textures/*.png')),
         ('share/' + package_name + '/config', ['config/sim_tags.yaml']),
+        # Model drone_v2 (tools/sinh_model_drone_v2.py tu drone_v2.urdf) - world drone_v2.sdf.
+        ('share/' + package_name + '/models/drone_v2', glob('models/drone_v2/model.*')),
+        ('share/' + package_name + '/models/drone_v2/meshes', glob('models/drone_v2/meshes/*.stl')),
         ('share/' + package_name + '/config/missions', glob('config/missions/*.yaml')),
     ],
     install_requires=['setuptools'],
@@ -28,6 +31,7 @@ setup(
         'console_scripts': [
             'sim_fc_bridge_node = drone_sim.sim_fc_bridge_node:main',
             'sim_tag_node = drone_sim.sim_tag_node:main',
+            'sim_camera_view_node = drone_sim.sim_camera_view_node:main',
             'step_test = drone_sim.step_test:main',
         ],
     },

@@ -133,5 +133,5 @@ Ghi chú:
 | F | Không đổi enum. **Còn lại:** ý nghĩa mới của 11/13 chưa ghi vào `GIAO_UOC_GCS_PI.md` / dialect |
 | G | Gazebo chế độ tag tổng hợp (`camera:=false`): servo + hộp; chạy trọn `sim_pick_drop` trên ubt. **Còn lại:** chế độ camera render (`camera:=true`) chưa có servo — camera Gazebo vẫn cố định |
 
-Ngưỡng hạ mù tới hộp là tham số `box_blind_below_m` (0,26 m drone thật, 0,32 m Gazebo vì camera sim thấp hơn 6 cm) — chỉnh lại khi đo được độ cao camera so với ToF (M2).
+**Cập nhật 2026-10-22 (đo tag trên hộp thật, user chốt):** gắp khi nắp hộp **ngang chân drone** → `GRIP_HOVER_M` 0,20 → **0,27 m** (chân 0,155 − mặt ToF 0,009 + hộp 0,12; thả cũng ở mức này). Bỏ hạ mù: xuống theo tag hộp ở −20° tới ToF `box_cam_switch_m` = **0,32 m**, dừng, nghiêng camera **−36° (1100 µs)** rồi bám tag tiếp tới ToF 0,27 m. Đo thật: tag cách ống kính 9,3 cm đọc được 1150..1050 µs; 1100 µs ở giữa. Đo trên tag hộp (chưa kiểm thăng bằng): 1244 µs = −24°, 1100 µs = −36° → bảng phía đuôi còn lệch ~4°.
 Chưa đo: servo phía đuôi −20° (1244 µs là ngoại suy).

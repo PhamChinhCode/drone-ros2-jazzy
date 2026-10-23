@@ -11,6 +11,10 @@ Truoc do EKF khong co nguon z tuyet doi nao giua hai bai: chi vz cua FC + IMU ne
 Gia dinh MAT DAT PHANG tai z = ground_z_m (ban do tag dat tren nen phang, tag ~ z 0). Bay qua vat
 cao (ban, thung, bac) thi laser bao thap hon that - pose2_rejection_threshold chan buoc nhay dot
 ngot, nhung doan dai tren vat cao van keo z xuong. Vi tri lap laser chua do: coi nhu o tam than.
+
+Hop hang (2026-10-22, box_range): trong pha lay hang nhiem vu phat /mission/box_height > 0; vet sang
+tren nap hop thi /range/vertical va /range/pose_z dung do cao TOI DAT da bu, laser mat sat nap thi
+giu so cu (khong bao mat laser, khong dua vao EKF).
 """
 
 from concurrent.futures import ThreadPoolExecutor
@@ -24,9 +28,11 @@ from rclpy.node import Node
 from rclpy.signals import SignalHandlerOptions
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from sensor_msgs.msg import Imu, Range
+from std_msgs.msg import Float32
 
+from drone_estimation.box_range import BoxRange
 from drone_estimation.estimation_math import tilt_cos_from_quaternion, vertical_range
-from drone_estimation.qos import SENSOR_QOS
+from drone_estimation.qos import EVENT_QOS, SENSOR_QOS
 
 
 class RangeVerticalNode(Node):
@@ -46,9 +52,12 @@ class RangeVerticalNode(Node):
         self.tilt_cos = None
         self.imu_stamp_s = None
         self.blocked = False
+        self.box = BoxRange()
 
         self.create_subscription(Imu, '/mavros/imu/data', self.on_imu, SENSOR_QOS)
         self.create_subscription(Range, '/mavros/mtf01p', self.on_range, SENSOR_QOS)
+        self.create_subscription(Float32, '/mission/box_height',
+                                 lambda m: self.box.set_box(m.data), EVENT_QOS)
         self.pub = self.create_publisher(Range, '/range/vertical', SENSOR_QOS)
         self.pub_z = self.create_publisher(PoseWithCovarianceStamped, '/range/pose_z', SENSOR_QOS)
 
@@ -75,12 +84,14 @@ class RangeVerticalNode(Node):
                 msg.range, msg.min_range, msg.max_range, self.tilt_cos, self.blocked,
                 self.get_parameter('max_tilt_deg').value,
                 self.get_parameter('tilt_hyst_deg').value)
+            h, do_that = self.box.update(h, self.now_s())
             if h is not None:
                 # Giu [min, max] cung ti le de mot so do hop le van nam trong dai sau khi bu.
                 out.range = h
-                out.min_range = msg.min_range * self.tilt_cos
+                out.min_range = min(msg.min_range * self.tilt_cos, h)
                 out.max_range = msg.max_range * self.tilt_cos
-                self.publish_pose_z(msg.header.stamp, h)
+                if do_that:
+                    self.publish_pose_z(msg.header.stamp, h)
         self.pub.publish(out)
 
     def publish_pose_z(self, stamp, h):

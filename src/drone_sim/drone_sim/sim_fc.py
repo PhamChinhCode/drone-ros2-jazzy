@@ -35,8 +35,9 @@ RANGE_MIN_M, RANGE_MAX_M = 0.10, 8.0              # khop MAV_DIST_MIN_CM = 10 cu
 
 class SimFc:
 
-    def __init__(self, auto_arm=False):
+    def __init__(self, auto_arm=False, ground_range_m=GROUND_RANGE_M):
         self.auto_arm = auto_arm      # tune khong can mission_manager_node: arm ngay khi co mat dat
+        self.ground_range_m = ground_range_m    # laser doc khi nam dat (khung khac thi khac)
         self.armed = False
         self.authority = True
         self.running = False          # OB_STATE = DANG_CHAY
@@ -58,11 +59,11 @@ class SimFc:
         return None if self.z is None else self.z - self.ground_z
 
     def range_m(self):
-        """Laser gia: GROUND_RANGE_M luc nam dat + do cao; ngoai dai do -> None."""
+        """Laser gia: ground_range_m luc nam dat + do cao; ngoai dai do -> None."""
         h = self.height_m()
         if h is None:
             return None
-        r = GROUND_RANGE_M + h
+        r = self.ground_range_m + h
         return r if RANGE_MIN_M <= r <= RANGE_MAX_M else None
 
     def on_setpoint(self, now_s, frame, type_mask, vx, vy, vz, yaw_rate):

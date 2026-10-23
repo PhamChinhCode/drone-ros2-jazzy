@@ -652,7 +652,9 @@ def fsm_dang_gap(action=None, waypoints=None):
         assert fsm.state == m.FINAL_APPROACH
         fsm.step(snap(2.2, armed=True, range_m=0.6, target_offset_m=0.05))            # -> tilt
         fsm.step(snap(2.4, armed=True, range_m=0.6, camera_tilt_deg=m.CAM_BOX_DEG))   # -> descend
-        fsm.step(snap(3.0, armed=True, range_m=m.GRIP_HOVER_M, camera_tilt_deg=m.CAM_BOX_DEG))
+        fsm.step(snap(2.6, armed=True, range_m=0.30, camera_tilt_deg=m.CAM_BOX_DEG))  # -> grip_tilt
+        fsm.step(snap(2.8, armed=True, range_m=0.30, camera_tilt_deg=m.CAM_GRIP_DEG))  # -> final
+        fsm.step(snap(3.0, armed=True, range_m=m.GRIP_HOVER_M, camera_tilt_deg=m.CAM_GRIP_DEG))
     elif a == m.ACTION_DROPOFF:
         fsm.step(snap(3.0, armed=True, range_m=m.GRIP_HOVER_M))
     else:
@@ -1086,12 +1088,14 @@ def test_quay_mui_qua_han_thi_ha_voi_mui_dang_co():
 
 def test_tha_hang_treo_o_do_cao_gap_khong_lao_nhanh_doan_mu():
     fsm = fsm_dang_ha_chinh_xac([wp(0, marker=1, action=m.ACTION_DROPOFF), wp(1, marker=0)])
-    act = fsm.step(snap(2.0, armed=True, range_m=0.25))            # duoi nguong mu, chua toi 0,20
-    assert fsm.state == m.PRECISION_LAND and act.velocity_up_mps == -m.LAND_DESCENT_NEAR_MPS
+    act = fsm.step(snap(1.9, armed=True, range_m=0.30))            # duoi nguong mu, doan cuoi:
+    assert fsm.state == m.PRECISION_LAND and act.velocity_up_mps == -m.GRIP_FINAL_MPS   # cham han
     fsm.step(snap(2.2, armed=True, range_m=m.GRIP_HOVER_M))
     assert fsm.state == m.ACTUATE_GRIPPER
-    act = fsm.step(snap(2.4, armed=True, range_m=0.24))            # nay len: keo xuong lai
+    act = fsm.step(snap(2.4, armed=True, range_m=0.31))            # nay len: keo xuong lai
     assert act.velocity_up_mps == pytest.approx(-0.04)
+    assert act.position_target[:2] == pytest.approx((10.0, 0.0))   # giu tren tam bai, khong troi
+    assert act.box_mode is False                                   # tha hang: khong bu laser
     act = fsm.step(snap(2.6, armed=True, range_m=0.10))            # tut: tran +0,10
     assert act.velocity_up_mps == pytest.approx(m.LAND_DESCENT_NEAR_MPS)
 
@@ -1112,13 +1116,16 @@ def fsm_tim_hop():
 def test_lay_hang_tron_ven_roi_neo_lai_bang_tag_to():
     fsm = fsm_tim_hop()
     bac = math.pi / 2
-    # Pha tim: lui ve hop khai bao (0,30 m ve phia "duoi" = -y), camera thang xuong.
-    act = fsm.step(snap(3.2, armed=True, range_m=0.6, yaw=bac))
-    assert act.position_target[:2] == pytest.approx((10.0, -0.30))
+    # Pha tim: lui ve hop khai bao (0,30 m ve phia "duoi" = -y), camera thang xuong; do cao giu theo
+    # z EKF (neo tag) chu KHONG theo ToF - vet sang quet qua nap hop (range 0,68 khong lam leo).
+    act = fsm.step(snap(3.2, armed=True, range_m=0.68, yaw=bac))
+    assert act.position_target == pytest.approx((10.0, -0.30, m.BOX_SEARCH_ALT_M))
+    assert act.velocity_up_mps is None and act.box_mode
     assert act.expected_marker_id == 11 and act.camera_tilt_deg == m.CAM_DOWN_DEG
-    # Thay tag hop -> nghieng camera ve duoi, giu do cao.
-    act = fsm.step(snap(3.4, armed=True, range_m=0.6, yaw=bac, target_offset_m=0.08))
-    assert act.camera_tilt_deg == m.CAM_BOX_DEG and act.velocity_up_mps == 0.0
+    # Thay tag hop -> nghieng camera ve duoi, van giu z theo EKF; tam hop DO duoc thay khai bao.
+    act = fsm.step(snap(3.4, armed=True, range_m=0.8, yaw=bac, target_offset_m=0.08,
+                        box_obs=(10.03, -0.27)))
+    assert act.camera_tilt_deg == m.CAM_BOX_DEG and act.velocity_up_mps is None
     act = fsm.step(snap(3.6, armed=True, range_m=0.6, yaw=bac, camera_tilt_deg=None))
     assert 'cho camera' in act.detail
     fsm.step(snap(4.0, armed=True, range_m=0.6, yaw=bac, camera_tilt_deg=m.CAM_BOX_DEG))
@@ -1128,10 +1135,21 @@ def test_lay_hang_tron_ven_roi_neo_lai_bang_tag_to():
     assert act.velocity_up_mps == 0.0 and 'can tam' in act.detail
     act = fsm.step(snap(4.4, range_m=0.5, target_offset_m=0.03, **tilt))
     assert act.velocity_up_mps == -m.LAND_DESCENT_NEAR_MPS
-    act = fsm.step(snap(5.0, range_m=0.24, **tilt))                   # mu, khong can tag
-    assert act.velocity_up_mps == -m.LAND_DESCENT_NEAR_MPS and fsm.state == m.FINAL_APPROACH
-    fsm.step(snap(5.4, range_m=0.20, **tilt))
+    # Duoi 0,32: tag sap ra khoi khung o -20 do -> dung, giu tam hop do duoc, nghieng camera goc gap.
+    act = fsm.step(snap(4.8, range_m=0.30, **tilt))
+    assert act.velocity_up_mps == 0.0 and act.camera_tilt_deg == m.CAM_GRIP_DEG
+    assert act.position_target[:2] == pytest.approx((10.03, -0.27))  # tam hop do lan cuoi
+    act = fsm.step(snap(4.9, range_m=0.30, armed=True, yaw=bac, camera_tilt_deg=None))
+    assert act.velocity_up_mps == 0.0 and 'cho camera' in act.detail
+    grip = dict(armed=True, yaw=bac, camera_tilt_deg=m.CAM_GRIP_DEG)
+    fsm.step(snap(5.0, range_m=0.30, **grip))
+    # Doan cuoi: van bam tag hop (khong ha mu), cham han.
+    act = fsm.step(snap(5.1, range_m=0.30, target_offset_m=0.01, **grip))
+    assert act.velocity_up_mps == -m.GRIP_FINAL_MPS and act.expected_marker_id == 11
+    fsm.step(snap(5.4, range_m=0.28, target_offset_m=0.01, **grip))
     assert fsm.state == m.ACTUATE_GRIPPER
+    act = fsm.step(gap_snap(5.5))
+    assert act.position_target[:2] == pytest.approx((10.03, -0.27)) and act.box_mode
     # Gap: giu on dinh roi kep, cam bien xac nhan -> diem cuoi -> ha canh.
     assert fsm.step(gap_snap(7.5)).gripper_command == 'close'
     fsm.step(gap_snap(8.0, gripper_sensor_confirmed=True))
@@ -1145,12 +1163,13 @@ def test_gap_xong_phai_thay_lai_tag_to_moi_bay_tiep():
     assert fsm.state == m.TAKEOFF and act.camera_tilt_deg == m.CAM_DOWN_DEG
     act = fsm.step(snap(6.2, armed=True, range_m=0.3))
     assert act.expected_marker_id == 1                  # nho bridge bao tag to vua roi
+    assert act.box_mode                                 # con tren hop: van bu laser
     fsm.step(snap(7.0, armed=True, range_m=0.8))                       # du bien leo, chua thay tag
     act = fsm.step(snap(7.2, armed=True, range_m=0.8))
     assert fsm.state == m.TAKEOFF and 'thay lai tag to' in act.detail
     fsm.step(snap(7.4, armed=True, range_m=0.8, target_offset_m=0.3))
-    fsm.step(snap(7.6, armed=True, range_m=0.8))
-    assert fsm.state == m.ENROUTE
+    act = fsm.step(snap(7.6, armed=True, range_m=0.8))
+    assert fsm.state == m.ENROUTE and act.box_mode is False
 
 
 def test_gap_xong_khong_thay_lai_tag_to_thi_ha_khan_cap():
@@ -1187,3 +1206,54 @@ def test_mat_tag_hop_khi_ha_qua_lau_la_mot_lan_that_bai():
     assert act.velocity_up_mps == 0.0 and 'mat tag hop' in act.detail
     fsm.step(snap(3.6 + m.TAG_GAP_RECOVER_S + 0.1, range_m=0.5, **tilt))
     assert fsm.state == m.RETRY_LOITER
+
+
+def test_tam_hop_lay_trung_vi_bo_lan_do_sat_mep_khung():
+    """Mo phong 10-22: lan do cuoi (tag hop sat mep khung) lech 5 cm keo drone lech tam khi gap."""
+    fsm = fsm_tim_hop()
+    tilt = dict(armed=True, yaw=math.pi / 2, camera_tilt_deg=m.CAM_BOX_DEG)
+    fsm.step(snap(3.2, armed=True, range_m=0.8, target_offset_m=0.05, box_obs=(10.0, -0.30)))
+    fsm.step(snap(3.4, range_m=0.8, box_obs=(10.0, -0.30), **tilt))
+    for i, (r, obs) in enumerate([(0.7, (10.01, -0.30)), (0.6, (10.0, -0.31)), (0.5, (10.0, -0.30)),
+                                  (0.35, (10.0, -0.25))]):           # 0,35 < 0,32 + 0,05: bo
+        fsm.step(snap(3.6 + 0.2 * i, range_m=r, target_offset_m=0.02, box_obs=obs, **tilt))
+    act = fsm.step(snap(4.6, range_m=0.30, **tilt))                     # doi goc camera
+    assert act.position_target[:2] == pytest.approx((10.0, -0.30))
+    assert act.camera_tilt_deg == m.CAM_GRIP_DEG
+
+
+def test_o_goc_gap_tiep_tuc_do_tam_hop():
+    """Camera -36 do: tag hop lai tron khung - lan do doan cuoi (gan, chinh xac hon) vao trung vi."""
+    fsm = fsm_tim_hop()
+    tilt = dict(armed=True, camera_tilt_deg=m.CAM_BOX_DEG)
+    grip = dict(armed=True, camera_tilt_deg=m.CAM_GRIP_DEG)
+    fsm.step(snap(3.2, armed=True, range_m=0.8, target_offset_m=0.05, box_obs=(10.0, -0.30)))
+    fsm.step(snap(3.4, range_m=0.8, box_obs=(10.0, -0.30), **tilt))
+    fsm.step(snap(3.6, range_m=0.30, box_obs=(10.0, -0.25), **tilt))   # -> grip_tilt, bo lan do
+    fsm.step(snap(3.8, range_m=0.30, box_obs=(10.0, -0.25), **grip))   # -> final
+    for i in range(3):
+        fsm.step(snap(4.0 + 0.1 * i, range_m=0.30, target_offset_m=0.01, box_obs=(10.0, -0.32), **grip))
+    assert fsm.box_xy == pytest.approx((10.0, -0.32))
+
+
+def test_camera_khong_toi_goc_gap_la_mot_lan_that_bai():
+    fsm = fsm_tim_hop()
+    tilt = dict(armed=True, camera_tilt_deg=m.CAM_BOX_DEG)
+    fsm.step(snap(3.2, armed=True, range_m=0.6, target_offset_m=0.05))
+    fsm.step(snap(3.4, range_m=0.6, **tilt))
+    fsm.step(snap(3.6, range_m=0.30, **tilt))                           # -> grip_tilt
+    fsm.step(snap(3.7 + m.CAM_SETTLE_TIMEOUT_S, range_m=0.30, **tilt))
+    assert fsm.state == m.RETRY_LOITER
+
+
+def test_chi_kep_khi_da_vao_tam_hop_toi_da_cho_2_giay():
+    fsm = fsm_dang_gap()                                  # ACTUATE_GRIPPER luc 3,0
+    bx, by = fsm._box_point(fsm.current_waypoint())
+    lech = (bx + 0.03, by, 0.2)                           # EKF: lech 3 cm
+    act = fsm.step(gap_snap(5.5, position=lech))
+    assert act.gripper_command == '' and 'vao tam hop' in act.detail
+    act = fsm.step(gap_snap(5.8, position=(bx + 0.01, by, 0.2)))        # lech 1 cm: kep
+    assert act.gripper_command == 'close'
+    fsm = fsm_dang_gap()
+    act = fsm.step(gap_snap(5.0 + m.GRIP_CENTER_WAIT_S, position=lech))  # het cho: kep luon
+    assert act.gripper_command == 'close'

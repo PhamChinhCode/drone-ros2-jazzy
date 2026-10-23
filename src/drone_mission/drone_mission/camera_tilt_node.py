@@ -28,7 +28,7 @@ from std_msgs.msg import Float32
 from tf2_ros import TransformBroadcaster
 
 from drone_interfaces.srv import SetServo
-from drone_mission.camera_tilt import approach_moves, camera_link_pitch, TiltTable
+from drone_mission.camera_tilt import approach_moves, camera_link_pitch, camera_position, TiltTable
 from drone_mission.qos import EVENT_QOS
 
 # Goc lenh moi khac goc dang theo duoi qua muc nay moi tinh la doi (lenh phat lai 5 Hz).
@@ -47,13 +47,17 @@ class CameraTiltNode(Node):
         self.declare_parameter('settle_s', 0.8)
         self.declare_parameter('retry_s', 1.0)
         self.declare_parameter('initial_tilt_deg', 0.0)
-        # Vi tri camera tren than (m, base_link). z = 0: ngang cam bien ToF (do 10-08).
+        # Truc servo camera tren than (m, base_link). z = 0: ngang cam bien ToF (do 10-08).
         self.declare_parameter('camera_xyz', [0.09, 0.0, 0.0])
+        # Ong kinh so voi truc servo (m, khung camera_tilt_link o goc 0 - URDF drone_v2). 0 = ong kinh
+        # nam ngay tren truc, chi xoay tai cho.
+        self.declare_parameter('lens_xyz', [0.0, 0.0, 0.0])
         self.declare_parameter('tf_rate_hz', 30.0)
 
         g = self.get_parameter
         self.table = TiltTable(g('tilt_deg').value, g('pulse_us').value)
-        self.xyz = list(g('camera_xyz').value)
+        self.pivot = list(g('camera_xyz').value)
+        self.lens = list(g('lens_xyz').value)
         self.current_deg = float(g('initial_tilt_deg').value)   # goc TF dang phat
         self.current_us = None          # xung cuoi FC da nhan; None = chua tung gui
         self.settled = True
@@ -128,7 +132,8 @@ class CameraTiltNode(Node):
         tf = TransformStamped()
         tf.header.stamp = self.get_clock().now().to_msg()
         tf.header.frame_id, tf.child_frame_id = 'base_link', 'camera_link'
-        tf.transform.translation.x, tf.transform.translation.y, tf.transform.translation.z = self.xyz
+        tf.transform.translation.x, tf.transform.translation.y, tf.transform.translation.z = \
+            camera_position(self.pivot, self.lens, self.current_deg)
         half = camera_link_pitch(self.current_deg) / 2.0
         tf.transform.rotation.y, tf.transform.rotation.w = math.sin(half), math.cos(half)
         self.tf_bc.sendTransform(tf)

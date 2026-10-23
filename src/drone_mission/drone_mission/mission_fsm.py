@@ -132,7 +132,10 @@ RTH_ACCEPT_M = 1.0          # toi nha trong ban kinh nay thi ha canh
 # Camera nghieng bang servo: goc + = ve MUI, 0 = thang xuong (camera_tilt_node, /camera/tilt).
 CAM_ENROUTE_DEG = 20.0          # bay toi diem: nhin ve phia truoc
 CAM_DOWN_DEG = 0.0              # tim / can tam / ha theo tag
-CAM_BOX_DEG = -20.0             # gap hang: tag tren hop o sau camera (camera 9 cm truoc tam)
+CAM_BOX_DEG = -20.0             # xuong theo tag hop: tag o sau camera (camera 9 cm truoc tam)
+# Doan cuoi (ToF <= box_cam_switch_m): tag hop sat duoi, sau ong kinh ~6 cm -> nghieng them (user 10-22,
+# do that: hop nang, mat tag ~1 cm duoi chan doc duoc 1150..1050 us, giua 1100 us = bang camera_tilt).
+CAM_GRIP_DEG = -36.0
 CAM_TOL_DEG = 0.5               # /camera/tilt lech goc mong muon duoi muc nay = da toi
 CAM_SETTLE_TIMEOUT_S = 5.0      # camera khong toi goc (FC tu choi servo) -> mot lan that bai
 # ENROUTE -> MARKER_SEARCH khi cach ngang <= he so nay x do cao (user dong y 10-22): camera thang
@@ -145,17 +148,35 @@ ALIGN_HEADING_DONE_DEG = 5.0
 ALIGN_HEADING_HOLD_S = 1.0
 ALIGN_HEADING_TIMEOUT_S = 20.0  # qua han (gio xoay) -> ha voi mui dang co
 # Gap / tha hang khi TREO: co cau gap o tam drone, ToF (10 cm sau tam) chieu xuong dat chu khong
-# vao hop - user 10-22: ToF 0,20 m la gap duoc.
-GRIP_HOVER_M = 0.20
+# vao hop. User 10-22: gap khi nap hop (12 cm) NGANG CHAN: chan 0,155 - mat ToF 0,009 + hop 0,12 =
+# 0,266 m (truoc: 0,20). Tha cung muc nay: day hop vua cham dat.
+GRIP_HOVER_M = 0.27
 GRIP_HOLD_KP = 1.0              # giu do cao: vz = kp x (dich - ToF), kep +-LAND_DESCENT_NEAR_MPS
-# FINAL_APPROACH (lay hang): ha theo tag to toi muc nay, lui ve vi tri hop khai bao (tag to con trong
-# khung), tim tag tren hop; khong thay trong BOX_SEARCH_TIMEOUT_S la mot lan that bai (user 10-22).
-BOX_SEARCH_ALT_M = 0.6
+# Doan cuoi toi do cao gap/tha ha cham: mo phong ToF theo tia 10-22, xuong 0,10 m/s thi FC tre lam lo
+# xuong 0,15 m (drone ngoi len chan).
+GRIP_SLOW_BELOW_M = 0.33
+GRIP_FINAL_MPS = 0.05
+GRIP_STOP_LEAD_M = 0.015        # dung ha som chung nay: FC tre con xuong them ~2 cm (mo phong 10-22)
+# Chi kep khi EKF bao da vao tam hop: luc doi tu ha sang treo, luc day doi + trong tam lech day ngang
+# ~3 cm roi moi ve (mo phong 10-22). Cho toi da GRIP_CENTER_WAIT_S sau thoi gian on dinh roi kep luon -
+# tong (on dinh 2 + cho 2 + servo 0,5 s) phai < safety.yaml grip_confirm_timeout_s (5 s).
+GRIP_CENTER_TOL_M = 0.015
+GRIP_CENTER_WAIT_S = 2.0
+# Tam hop chi lay tu cac lan do khi tag hop con TRON khung (ToF tren nguong doi camera + bien nay, hoac
+# da o goc CAM_GRIP_DEG); lay trung vi BOX_OBS_N lan gan nhat. Lan do sat mep khung lech toi 5 cm (mo
+# phong 10-22).
+BOX_OBS_MARGIN_M = 0.05
+BOX_OBS_N = 15
+# FINAL_APPROACH (lay hang): ha theo tag to toi muc nay, lui ve vi tri hop khai bao, tim tag tren hop;
+# khong thay trong BOX_SEARCH_TIMEOUT_S la mot lan that bai (user 10-22). 0,6 -> 0,80 (user 10-22,
+# hinh hoc URDF Version2.0): dung tren hop, tag to phia mui con TRON khung (bien 6 do cho than nghieng
+# khi phanh), tag hop ~50 px. O 0,6 m tag to da bi cat mep -> mat neo EKF dung luc tim hop.
+BOX_SEARCH_ALT_M = 0.80
 BOX_SEARCH_TIMEOUT_S = 10.0
-# Camera -20 do: tag 10 cm tren hop 12 cm con tron trong khung toi ToF ~0,23 m (camera ngang ToF);
-# duoi muc nay ha mu (giu vi tri EKF) toi GRIP_HOVER_M. Mac dinh cua Params.box_blind_below_m - phu
-# thuoc do cao lap camera so voi ToF (chua do, M2; Gazebo camera thap hon 6 cm -> 0,32).
-BOX_BLIND_BELOW_M = 0.26
+# Duoi ToF nay tag hop ra khoi khung o CAM_BOX_DEG: dung lai, nghieng camera CAM_GRIP_DEG roi bam tag
+# tiep toi GRIP_HOVER_M (user 10-22, thay ha mu). Khung Version2.0: tag cach ong kinh ~11 cm theo phuong
+# dung - bien ~5 do o -20, ~2 do o -36. Mac dinh cua Params.box_cam_switch_m.
+BOX_CAM_SWITCH_M = 0.32
 # Dau chang (10-11, yeu cau user): giu nguyen x, y (leo thang dung toi alt_m) va quay mui tai cho ve
 # phia diem den, lech duoi muc nay moi bay ngang. Quay mui trong luc bay ngang lam flow troi them
 # va camera chua nhin ve phia bai.
@@ -284,6 +305,8 @@ class Snapshot:
     target_offset_m: float = None
     # Goc camera da on dinh (do, + ve mui) tu camera_tilt_node; None = servo dang quay / khong biet.
     camera_tilt_deg: float = CAM_DOWN_DEG
+    # Tam hop (x, y) trong odom DO tu tag hop (mission_manager_node); None = khong thay.
+    box_obs: tuple = None
 
 
 @dataclass
@@ -302,7 +325,7 @@ class Params:
     # box_forward_m theo huong bai (am = ve phia "duoi").
     small_id_offset: int = 10
     box_forward_m: float = -0.30
-    box_blind_below_m: float = BOX_BLIND_BELOW_M
+    box_cam_switch_m: float = BOX_CAM_SWITCH_M
 
 
 @dataclass
@@ -323,6 +346,8 @@ class Action:
     yaw_target: float = None
     # Goc camera mong muon (do, + ve mui) cho camera_tilt_node; None = khong doi.
     camera_tilt_deg: float = None
+    # Dang o pha hop hang (range_vertical_node bu laser khi vet sang tren nap hop).
+    box_mode: bool = False
     detail: str = ''
 
 
@@ -363,6 +388,9 @@ class MissionFsm:
     box_phase_s: float = None
     # Vua gap hang o bai nay: TAKEOFF phai thay lai tag to cua no (neo lai EKF) moi bay tiep.
     reanchor_id: int = None
+    box_xy: tuple = None            # tam hop DO duoc (trung vi) - FINAL_APPROACH -> ACTUATE_GRIPPER
+    box_obs_list: list = field(default_factory=list)
+    box_takeoff: bool = False       # TAKEOFF ngay sau khi gap: vet ToF con quet qua nap hop
     # Quay mui tai cho dau chang ENROUTE: diem x, y giu trong luc quay; da quay xong chua.
     enroute_hold: tuple = None
     enroute_turned: bool = False
@@ -473,6 +501,10 @@ class MissionFsm:
             self.heading_ok_since = None
         if new_state == FINAL_APPROACH:
             self.box_phase, self.box_phase_s = 'search', now_s
+            self.box_xy = None
+            self.box_obs_list = []
+        if new_state in (ENROUTE, IDLE):
+            self.box_takeoff = False
             self.tag_lost_since = None
         self.cam_cmd = CAM_FOR_STATE.get(new_state, self.cam_cmd)
         if new_state == ENROUTE:
@@ -500,6 +532,16 @@ class MissionFsm:
             self.abort_requested = False
         return Action(detail=detail)
 
+    def _box_mode(self):
+        """Pha ma vet ToF co the nam tren nap hop: tim/ha toi hop, gap, bay len sau gap (cho toi khi
+        thay lai tag to)."""
+        wp = self.current_waypoint()
+        if self.state == FINAL_APPROACH:
+            return True
+        if self.state == ACTUATE_GRIPPER:
+            return wp is not None and wp.action == ACTION_PICKUP
+        return self.state == TAKEOFF and self.box_takeoff
+
     def _cam_at(self, snap, deg):
         """Camera da on dinh o goc deg (khong dang quay)."""
         return snap.camera_tilt_deg is not None and abs(snap.camera_tilt_deg - deg) <= CAM_TOL_DEG
@@ -515,6 +557,7 @@ class MissionFsm:
         """Chay mot chu ky FSM (_step), kem goc camera dang ra lenh vao Action."""
         act = self._step(snap)
         act.camera_tilt_deg = self.cam_cmd
+        act.box_mode = self._box_mode()
         return act
 
     def _step(self, snap):
@@ -553,8 +596,9 @@ class MissionFsm:
             MARKER_SEARCH, cung la mot lan that bai (khong ha mu); DROPOFF toi ToF GRIP_HOVER_M ->
             ACTUATE_GRIPPER (treo); PICKUP toi BOX_SEARCH_ALT_M -> FINAL_APPROACH; landed (diem
             khong hanh dong) -> ACTUATE_GRIPPER;
-          - FINAL_APPROACH: tim tag hop, camera -20 do, ha bam tag hop toi GRIP_HOVER_M ->
-            ACTUATE_GRIPPER; khong thay / mat tag hop -> mot lan that bai;
+          - FINAL_APPROACH: tim tag hop, camera -20 do, ha bam tag hop; ToF box_cam_switch_m dung,
+            camera -36 do, bam tiep toi GRIP_HOVER_M -> ACTUATE_GRIPPER; khong thay / mat tag hop
+            -> mot lan that bai;
           - gap xong: TAKEOFF chi roi khi da thay lai tag to (neo lai EKF);
           - moi lan that bai retry_count += 1; qua max_retries -> EMERGENCY_LAND tai cho (RTH
             tam thoi); con luot -> RETRY_LOITER giu tai diem RETRY_LOITER_S roi tim lai.
@@ -960,10 +1004,14 @@ class MissionFsm:
         xong = snap.gripper_sensor_confirmed if dong else not snap.gripper_sensor_confirmed
         viec = 'gap' if dong else 'tha'
         vz = self._hold_range(snap.range_m, GRIP_HOVER_M)
+        # Giu xy tai tam hop (lay) / tam bai (tha): de tu do thi drone troi (mo phong 10-22: lech 4 cm,
+        # vet ToF len nap hop -> "mat laser" dung luc gap).
+        xy = (self.box_xy or self._box_point(wp)) if dong else self._pad_pose(wp)[0][:2]
+        giu = dict(position_target=(xy[0], xy[1], wp.target[2]), max_vel_mps=LAND_EKF_MAX_VEL_MPS)
 
         # Vua toi do cao gap, may con dao dong: giu yen roi moi cho co cau chay.
         if self.time_in_state(now) < self.params.pre_dropoff_settle_s:
-            return Action(velocity_up_mps=vz, detail=f'giu on dinh truoc khi {viec}')
+            return Action(velocity_up_mps=vz, detail=f'giu on dinh truoc khi {viec}', **giu)
 
         if xong:
             return self._xong_hanh_dong(now, wp, viec)
@@ -973,12 +1021,23 @@ class MissionFsm:
             return self._search_failed(now, RETRY_LOITER,
                                        f'gripper khong xac nhan khi {viec} tai tag {wp.marker_id}')
 
-        act = Action(velocity_up_mps=vz, detail=f'{viec} hang tai tag {wp.marker_id}')
+        if dong and self.last_gripper_command_s is None and snap.position is not None:
+            lech = math.hypot(snap.position[0] - xy[0], snap.position[1] - xy[1])
+            if (lech > GRIP_CENTER_TOL_M and self.time_in_state(now)
+                    < self.params.pre_dropoff_settle_s + GRIP_CENTER_WAIT_S):
+                return Action(velocity_up_mps=vz, detail=f'cho vao tam hop: lech {lech * 100:.1f} cm',
+                              **giu)
+
+        act = Action(velocity_up_mps=vz, detail=f'{viec} hang tai tag {wp.marker_id}', **giu)
         if (self.last_gripper_command_s is None
                 or now - self.last_gripper_command_s >= GRIPPER_RETRY_S):
             act.gripper_command = 'close' if dong else 'open'
             self.last_gripper_command_s = now
         return act
+
+    def _grip_descent(self, range_m):
+        """Toc do xuong (duong) khi toi do cao gap/tha: cham han o doan cuoi."""
+        return GRIP_FINAL_MPS if range_m <= GRIP_SLOW_BELOW_M else LAND_DESCENT_NEAR_MPS
 
     def _hold_range(self, range_m, target_m):
         """vz giu ToF quanh target_m (treo gap/tha); mat laser thi giu vz = 0."""
@@ -991,6 +1050,7 @@ class MissionFsm:
         """Xong viec tai diem: con diem sau thi cat canh lai, het thi ha canh va disarm."""
         if wp.action == ACTION_PICKUP:
             self.reanchor_id = wp.marker_id     # tag hop KHONG neo EKF: phai thay lai tag to
+            self.box_takeoff = True
         self.current_wp_index += 1
         if self.current_wp_index >= len(self.waypoints):
             # Dang nam dat: _step_land thay landed se DISARM ngay, khong xuong them.
@@ -1031,7 +1091,7 @@ class MissionFsm:
                                       f'{snap.range_m:.2f} m tren bai {wp.marker_id} - tim hop')
                 act.expected_marker_id = wp.marker_id + self.params.small_id_offset
                 return act
-            if wp.action == ACTION_DROPOFF and snap.range_m <= GRIP_HOVER_M:
+            if wp.action == ACTION_DROPOFF and snap.range_m <= GRIP_HOVER_M + GRIP_STOP_LEAD_M:
                 return self.transition(ACTUATE_GRIPPER, now,
                                        f'treo {snap.range_m:.2f} m tren tag {wp.marker_id} - tha')
         pad = self._pad_pose(wp)[0]
@@ -1044,7 +1104,8 @@ class MissionFsm:
         low = snap.range_m is not None and snap.range_m <= PRECISION_BLIND_BELOW_M
         if snap.landed or low:
             # Tha hang khi treo: doan mu xuong cham, khong lao nhanh nhu luc cham dat.
-            act.velocity_up_mps = -(LAND_DESCENT_NEAR_MPS if hover else descent_mps(snap.range_m))
+            act.velocity_up_mps = -(self._grip_descent(snap.range_m) if hover
+                                    else descent_mps(snap.range_m))
             act.detail = 'sat dat - xuong tiep'
             return self._descend_and_disarm(snap, act) if final else act
         if snap.target_offset_m is None:
@@ -1093,19 +1154,29 @@ class MissionFsm:
         return pad[0] + f * math.cos(yaw), pad[1] + f * math.sin(yaw)
 
     def _step_final_approach(self, snap):
-        """Lay hang (docs/ke_hoach_camera_servo_gap_hang.md muc 3), ba pha:
+        """Lay hang (docs/ke_hoach_camera_servo_gap_hang.md muc 3), nam pha:
 
-        'search'  - giu BOX_SEARCH_ALT_M, lui ve vi tri hop khai bao (camera thang xuong, tag to con
-                    trong khung), cho bridge thay tag hop (id_to + offset) -> 'tilt';
+        'search'  - giu BOX_SEARCH_ALT_M theo z EKF (neo bang tag to - KHONG theo ToF: vet sang quet
+                    qua nap hop), lui ve vi tri hop khai bao (camera thang xuong, tag to con trong
+                    khung), cho bridge thay tag hop (id_to + offset) -> 'tilt';
         'tilt'    - nghieng camera CAM_BOX_DEG (ve duoi), giu nguyen cho toi khi on dinh -> 'descend';
-        'descend' - bam tag hop (controller dat TAM DRONE = co cau gap len tag), ha cham; duoi
-                    box_blind_below_m ha mu; ToF <= GRIP_HOVER_M -> ACTUATE_GRIPPER.
+        'descend' - bam tag hop (controller dat TAM DRONE = co cau gap len tag), ha cham; ToF <=
+                    box_cam_switch_m -> 'grip_tilt';
+        'grip_tilt' - dung (vz 0, giu tam hop), nghieng camera CAM_GRIP_DEG -> 'final';
+        'final'   - bam tag hop nhu 'descend'; ToF <= GRIP_HOVER_M -> ACTUATE_GRIPPER.
         Khong thay / mat tag hop / camera khong toi goc -> mot lan that bai (RETRY_LOITER).
         """
         now = snap.now_s
         wp = self.current_waypoint()
         box_id = wp.marker_id + self.params.small_id_offset
-        bx, by = self._box_point(wp)
+        if (snap.box_obs is not None and snap.range_m is not None
+                and (snap.range_m > self.params.box_cam_switch_m + BOX_OBS_MARGIN_M
+                     or self.box_phase == 'final')):
+            self.box_obs_list = (self.box_obs_list + [snap.box_obs[:2]])[-BOX_OBS_N:]
+            xs = sorted(o[0] for o in self.box_obs_list)
+            ys = sorted(o[1] for o in self.box_obs_list)
+            self.box_xy = (xs[len(xs) // 2], ys[len(ys) // 2])
+        bx, by = self.box_xy or self._box_point(wp)
         act = Action(expected_marker_id=box_id, velocity_up_mps=0.0, yaw_target=self._hold_yaw(wp),
                      position_target=(bx, by, wp.pad[2] + BOX_SEARCH_ALT_M),
                      max_vel_mps=LAND_EKF_MAX_VEL_MPS)
@@ -1117,7 +1188,7 @@ class MissionFsm:
             return act
         seen = snap.target_offset_m is not None
         if self.box_phase == 'search':
-            act.velocity_up_mps = self._hold_range(snap.range_m, BOX_SEARCH_ALT_M)
+            act.velocity_up_mps = None          # z theo position_target (EKF), xem docstring
             if seen and self._cam_at(snap, CAM_DOWN_DEG):
                 self.box_phase, self.box_phase_s = 'tilt', now
                 self.cam_cmd = CAM_BOX_DEG
@@ -1130,7 +1201,7 @@ class MissionFsm:
             act.detail = f'tim tag hop {box_id}'
             return act
         if self.box_phase == 'tilt':
-            act.velocity_up_mps = self._hold_range(snap.range_m, BOX_SEARCH_ALT_M)
+            act.velocity_up_mps = None
             if self._cam_at(snap, CAM_BOX_DEG):
                 self.box_phase, self.box_phase_s = 'descend', now
                 self.tag_lost_since = None
@@ -1142,13 +1213,26 @@ class MissionFsm:
                                            f'{CAM_SETTLE_TIMEOUT_S:.0f} s')
             act.detail = f'cho camera nghieng {CAM_BOX_DEG:+.0f} do'
             return act
-        if snap.range_m <= GRIP_HOVER_M:
+        if self.box_phase == 'descend' and snap.range_m <= self.params.box_cam_switch_m:
+            self.box_phase, self.box_phase_s = 'grip_tilt', now
+            self.cam_cmd = CAM_GRIP_DEG
+            act.detail = f'sat hop - dung, nghieng camera {CAM_GRIP_DEG:+.0f} do'
+            return act
+        if self.box_phase == 'grip_tilt':
+            if self._cam_at(snap, CAM_GRIP_DEG):
+                self.box_phase, self.box_phase_s = 'final', now
+                self.tag_lost_since = None
+                act.detail = f'camera {CAM_GRIP_DEG:+.0f} do - ha toi do cao gap'
+                return act
+            if now - self.box_phase_s >= CAM_SETTLE_TIMEOUT_S:
+                return self._search_failed(now, RETRY_LOITER,
+                                           f'camera khong toi {CAM_GRIP_DEG:+.0f} do sau '
+                                           f'{CAM_SETTLE_TIMEOUT_S:.0f} s')
+            act.detail = f'cho camera nghieng {CAM_GRIP_DEG:+.0f} do'
+            return act
+        if snap.range_m <= GRIP_HOVER_M + GRIP_STOP_LEAD_M:
             return self.transition(ACTUATE_GRIPPER, now,
                                    f'treo {snap.range_m:.2f} m tren hop {box_id} - gap')
-        if snap.range_m <= self.params.box_blind_below_m:
-            act.velocity_up_mps = -LAND_DESCENT_NEAR_MPS
-            act.detail = 'sat hop - ha mu toi do cao gap'
-            return act
         if not seen:
             if self.tag_lost_since is None:
                 self.tag_lost_since = now
@@ -1162,7 +1246,7 @@ class MissionFsm:
         if snap.target_offset_m > allowed:
             act.detail = f'can tam hop: lech {snap.target_offset_m:.2f} m > {allowed:.2f} m'
             return act
-        act.velocity_up_mps = -LAND_DESCENT_NEAR_MPS
+        act.velocity_up_mps = -self._grip_descent(snap.range_m)
         act.detail = f'xuong theo tag hop, lech {snap.target_offset_m:.2f} m'
         return act
 

@@ -51,6 +51,16 @@ def approach_moves(current_us, target_us, overshoot_us):
     return [target_us - overshoot_us, target_us]
 
 
+def camera_position(pivot_xyz, lens_xyz, tilt_deg):
+    """Vi tri ong kinh trong base_link: truc servo pivot_xyz + ong kinh lens_xyz (khung camera_tilt_link
+    o goc 0) xoay quanh -Y mot goc tilt_deg (URDF drone_v2 camera_tilt_joint, axis 0 -1 0)."""
+    t = math.radians(tilt_deg)
+    x, y, z = lens_xyz
+    return (pivot_xyz[0] + x * math.cos(t) - z * math.sin(t),
+            pivot_xyz[1] + y,
+            pivot_xyz[2] + x * math.sin(t) + z * math.cos(t))
+
+
 def camera_link_pitch(tilt_deg):
     """Pitch (rad) cua base_link -> camera_link (quy uoc static_transform_publisher, x toi):
     90 do = nhin thang xuong; nghieng 20 do ve mui = 70 do (gia tri cung cu 1,2217)."""

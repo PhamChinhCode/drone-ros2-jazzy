@@ -66,8 +66,9 @@ class MissionManagerNode(Node):
         # Tag nho tren hop hang (tags.yaml) - FSM suy vi tri hop tu tam + huong bai.
         self.declare_parameter('pad_small_tag_id_offset', 10)
         self.declare_parameter('pad_small_tag_forward_m', -0.30)
-        # Duoi ToF nay ha mu toi hop (tag hop ra khoi khung) - xem mission_fsm.BOX_BLIND_BELOW_M.
-        self.declare_parameter('box_blind_below_m', mission_fsm.BOX_BLIND_BELOW_M)
+        self.declare_parameter('pad_small_tag_height_m', 0.12)   # cao nap hop (bu laser)
+        # Duoi ToF nay dung lai, nghieng camera goc gap - xem mission_fsm.BOX_CAM_SWITCH_M.
+        self.declare_parameter('box_cam_switch_m', mission_fsm.BOX_CAM_SWITCH_M)
 
         self.fsm = mission_fsm.MissionFsm(params=mission_fsm.Params(
             search_timeout_s=self.get_parameter('search_timeout_s').value,
@@ -80,7 +81,7 @@ class MissionManagerNode(Node):
             yaw_control=self.get_parameter('yaw_control').value,
             small_id_offset=self.get_parameter('pad_small_tag_id_offset').value,
             box_forward_m=self.get_parameter('pad_small_tag_forward_m').value,
-            box_blind_below_m=self.get_parameter('box_blind_below_m').value))
+            box_cam_switch_m=self.get_parameter('box_cam_switch_m').value))
 
         self.snapshot = mission_fsm.Snapshot()
         try:
@@ -105,6 +106,8 @@ class MissionManagerNode(Node):
         self.failsafe_active = {}         # FailsafeEvent.type -> escalate_to dang bat
         self.target_offset_m = None
         self.target_stamp_s = None
+        self.box_obs = None              # tam hop (x, y) odom do tu tag hop
+        self.box_stamp_s = None
         self.position = None
         self.position_stamp_s = None
         self.yaw = None
@@ -160,6 +163,8 @@ class MissionManagerNode(Node):
         self.pub_yaw = self.create_publisher(Float32, '/mission/yaw', EVENT_QOS)
         # Goc camera mong muon (do, + ve mui) cho camera_tilt_node - phat moi chu ky.
         self.pub_camera_tilt = self.create_publisher(Float32, '/mission/camera_tilt', EVENT_QOS)
+        # Chieu cao nap hop khi dang o pha hop hang, 0 ngoai pha do (range_vertical_node bu laser).
+        self.pub_box_height = self.create_publisher(Float32, '/mission/box_height', EVENT_QOS)
         # Phan quyet ve ke hoach, cho gcs_link_node dich thanh DRONE_MISSION_ACK (muc 3.2).
         self.pub_plan_ack = self.create_publisher(
             MissionPlanAck, '/mission/plan_ack', EVENT_QOS)
@@ -261,6 +266,13 @@ class MissionManagerNode(Node):
     def on_landing_target_pose(self, msg):
         self.target_offset_m = math.hypot(msg.pose.position.x, msg.pose.position.y)
         self.target_stamp_s = self.now_s()
+        # Dang bam tag HOP: quy ve odom (base_level cung huong mui voi base_link) - FSM giu dung tam
+        # hop do duoc khi tag ra khoi khung (ha mu, gap).
+        if self.fsm.state == mission_fsm.FINAL_APPROACH and self.position is not None:
+            x, y = msg.pose.position.x, msg.pose.position.y
+            c, s = math.cos(self.yaw), math.sin(self.yaw)
+            self.box_obs = (self.position[0] + c * x - s * y, self.position[1] + s * x + c * y)
+            self.box_stamp_s = self.target_stamp_s
 
     def pad_key(self):
         return (self.fsm.mission_id, self.fsm.current_wp_index)
@@ -355,6 +367,8 @@ class MissionManagerNode(Node):
         snap.yaw = self.yaw if odom_fresh else None
         snap.pad_obs = (self.pad_filter.value() if self.pad_filter_key == self.pad_key()
                         else None)
+        box_fresh = self.box_stamp_s is not None and now - self.box_stamp_s <= TARGET_STALE_S
+        snap.box_obs = self.box_obs if box_fresh else None
         tilt_fresh = self.tilt_stamp_s is not None and now - self.tilt_stamp_s <= TILT_STALE_S
         snap.camera_tilt_deg = self.tilt_deg if tilt_fresh else None
 
@@ -395,6 +409,8 @@ class MissionManagerNode(Node):
             self.pub_yaw.publish(Float32(data=float(action.yaw_target)))
         if action.camera_tilt_deg is not None:
             self.pub_camera_tilt.publish(Float32(data=float(action.camera_tilt_deg)))
+        self.pub_box_height.publish(Float32(data=float(
+            self.get_parameter('pad_small_tag_height_m').value if action.box_mode else 0.0)))
         self.publish_mission_state(action.detail, action.expected_marker_id)
 
     def send_gripper(self, lenh):

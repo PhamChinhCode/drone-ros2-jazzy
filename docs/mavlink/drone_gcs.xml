@@ -96,13 +96,13 @@
       <entry value="9" name="DRONE_STATE_MISSION_COMPLETE"/>
       <entry value="10" name="DRONE_STATE_FAILSAFE"/>
       <entry value="11" name="DRONE_STATE_ALIGN_HEADING">
-        <description>Ban 0.8. Dang treo tren tag (da neo), quay mui ve phuong vi toi diem ke tiep truoc khi bay.</description>
+        <description>Ban 0.8 (nghia tu 2026-10-22). Dang treo tren tam bai bam tag to (camera nhin thang xuong), quay mui theo huong bai (yaw_cdeg) roi moi ha thang dung.</description>
       </entry>
       <entry value="12" name="DRONE_STATE_PAD_ALIGN">
-        <description>Ban 0.8. Tiep can THANG HANG truc bai: qua cong G (sau bai, nguoc huong yaw_cdeg) roi bay doc truc bai, mui = huong bai, ha doc toi tren tam bai - toi noi da dung huong, khong quay tai cho (tag nho vao khung khi ha thap). Het thoi han chua thang hang -> ha tiep bang tag to.</description>
+        <description>Ban 0.8. KHONG CON DUNG tu 2026-10-22 (bo cong G); giu gia tri de tuong thich. Truoc do: tiep can thang hang truc bai qua cong G.</description>
       </entry>
       <entry value="13" name="DRONE_STATE_FINAL_APPROACH">
-        <description>Ban 0.8. Ha doan cuoi theo tag nho cua bai (tag to da ra khoi khung hinh), ha mu doan sat dat.</description>
+        <description>Ban 0.8 (nghia tu 2026-10-22). Lay hang: treo ~0,6 m tren bai, tim tag nho dan tren nap hop hang, nghieng camera ve duoi, ha toi do cao gap (ToF 0,20 m).</description>
       </entry>
     </enum>
 

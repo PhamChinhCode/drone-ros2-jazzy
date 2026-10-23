@@ -12,6 +12,9 @@ mission_manager_node:
     # dat WP0 (log 074903) + kiem dau tren ban: muc tieu lech trai 30 do -> Pi +0,523 rad/s FLU ->
     # FC OB_T_YAWR -29,96 do/s (FC + = phai) - dung dau, dung do lon.
     yaw_control: true
+    # Duoi ToF nay tag hop ra khoi khung o -20 do: dung, nghieng camera -36 do (1100 us) roi bam tag
+    # tiep toi do cao gap ToF 0,27 (user 10-22, thay ha mu). Xem mission_fsm.BOX_CAM_SWITCH_M.
+    box_cam_switch_m: 0.32
 
 gripper_controller_node:
   ros__parameters:
@@ -24,16 +27,23 @@ camera_tilt_node:
   ros__parameters:
     # Bang goc (do, + ve MUI, 0 = thang xuong) <-> xung servo camera, do 2026-10-22 bang tag 36h11
     # (docs/ke_hoach_camera_servo_gap_hang.md muc 1). Phi tuyen - noi suy tung doan. Diem -20 do
-    # (1244 us) NGOAI SUY tu doc 0,073 do/us phia duoi - chua do (camera chi do toi -15,9 do).
-    tilt_deg: [-20.0, -15.9, -12.2, -8.5, -4.8, -1.1, 0.0, 2.8, 6.6, 10.6, 14.7, 19.0, 20.0, 23.4,
-               28.0, 32.8, 37.9, 43.2, 48.8]
-    pulse_us: [1244, 1300, 1350, 1400, 1450, 1500, 1514, 1550, 1600, 1650, 1700, 1750, 1762, 1800,
-               1850, 1900, 1950, 2000, 2050]
+    # (1244 us) NGOAI SUY tu doc 0,073 do/us phia duoi - chua do (camera chi do toi -15,9 do). Diem -36
+    # (1100 us): goc gap chon tu tag tren hop that 10-22 (mat tag doc duoc 1150..1050 us). Do tren tag hop
+    # (chua kiem thang bang): 1244 us = -24 do, 1100 us = -36 do -> phia duoi con lech ~4 do, cho do lai.
+    tilt_deg: [-36.0, -20.0, -15.9, -12.2, -8.5, -4.8, -1.1, 0.0, 2.8, 6.6, 10.6, 14.7, 19.0, 20.0,
+               23.4, 28.0, 32.8, 37.9, 43.2, 48.8]
+    pulse_us: [1100, 1244, 1300, 1350, 1400, 1450, 1500, 1514, 1550, 1600, 1650, 1700, 1750, 1762,
+               1800, 1850, 1900, 1950, 2000, 2050]
     overshoot_us: 100            # chong ro ~1,9 do: luon tien toi tu phia us thap
     overshoot_wait_s: 0.3
     settle_s: 0.8                # servo chay + khung hinh het nhoe truoc khi bao goc moi
     initial_tilt_deg: 0.0        # luc khoi dong coi camera nhin thang xuong (nguoi lai dat bang RC)
-    camera_xyz: [0.09, 0.0, 0.0] # truoc tam 90 mm, ngang ToF (do 10-08)
+    # Hinh hoc tu URDF khung Version2.0 (3DModels/Version2.0/assembly_urdf/drone_v2.urdf, 10-22): truc
+    # servo (camera_tilt_joint) va tam ong kinh (day ong kinh trong mesh camera_tilt_link). z tinh tu
+    # MAT ToF (MTF-01 0,009 m duoi mat FC) vi optical_flow coi laser o goc base_link: truc servo
+    # -0,05218 + 0,009. Truoc 10-22: [0.09, 0, 0] "ngang ToF" - sai 8,5 cm voi khung nay.
+    camera_xyz: [0.09525, -0.018, -0.04318]
+    lens_xyz: [0.0, 0.017, -0.0418]   # ong kinh so voi truc servo, khung camera_tilt_link o goc 0
 
 fc_command_bridge_node:
   ros__parameters:

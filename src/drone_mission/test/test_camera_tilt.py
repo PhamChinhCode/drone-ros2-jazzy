@@ -2,7 +2,7 @@ import math
 
 import pytest
 
-from drone_mission.camera_tilt import approach_moves, camera_link_pitch, TiltTable
+from drone_mission.camera_tilt import approach_moves, camera_link_pitch, camera_position, TiltTable
 
 # Bang do 2026-10-22 (mission.yaml).
 BANG = TiltTable([-20.0, -15.9, -1.1, 0.0, 19.0, 20.0, 48.8],
@@ -44,3 +44,12 @@ def test_pitch_camera_link_khop_gia_tri_cu():
     assert camera_link_pitch(20.0) == pytest.approx(1.2217, abs=1e-4)
     assert camera_link_pitch(0.0) == pytest.approx(math.pi / 2)
     assert camera_link_pitch(-20.0) == pytest.approx(math.radians(110))
+
+
+def test_ong_kinh_xoay_quanh_truc_servo():
+    pivot, lens = (0.09525, -0.018, -0.05218), (0.0, 0.017, -0.0418)     # URDF drone_v2
+    assert camera_position(pivot, lens, 0.0) == pytest.approx((0.09525, -0.001, -0.09398))
+    # Ngoc ve mui 90 do: ong kinh (duoi truc servo 41,8 mm) quay ra truoc truc.
+    assert camera_position(pivot, lens, 90.0) == pytest.approx((0.09525 + 0.0418, -0.001, -0.05218))
+    # Lech ong kinh 0 = cach cu (xoay tai cho).
+    assert camera_position(pivot, (0.0, 0.0, 0.0), 37.0) == pytest.approx(pivot)

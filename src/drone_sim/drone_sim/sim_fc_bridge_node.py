@@ -25,11 +25,13 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from geometry_msgs.msg import TransformStamped
 from sensor_msgs.msg import Imu, Range
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool, Float64
 from tf2_ros import TransformBroadcaster
 
 from drone_interfaces.msg import MissionState
+from drone_mission.camera_tilt import TiltTable
 from drone_sim import sim_fc
+from drone_sim.sim_tof import quat_to_mat, tof_range
 
 SENSOR_QOS = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.BEST_EFFORT)
 RELIABLE_QOS = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RELIABLE)
@@ -62,12 +64,43 @@ class SimFcBridgeNode(Node):
         # tune trong sim (drift_comp ki 0,15) dao dong +-0,25 m/s khi bay that 10-09. 0 = tat.
         self.declare_parameter('vel_delay_s', 0.0)
         self.declare_parameter('vel_tau_s', 0.0)
+        # Laser doc khi nam dat (m): X3 0,17 nhu drone cu; drone_v2 0,146 (URDF: chan 0,155 duoi FC,
+        # mat MTF-01 0,009 duoi FC).
+        self.declare_parameter('ground_range_m', sim_fc.GROUND_RANGE_M)
+        # Servo camera (lenh 183 servo 2): xung -> goc theo CUNG bang voi camera_tilt_node, phat goc
+        # (rad) cho JointPositionController cua camera_tilt_joint. Topic rong = model khong co servo.
+        self.declare_parameter('camera_joint_topic', '')
+        # Laser theo TIA that (sim_tof): vi tri ToF trong base_link + hop hang [x, y, yaw, ...] tren
+        # dat (nua canh, cao nap chung). tof_xyz rong = laser cu (do cao than + ground_range_m).
+        self.declare_parameter('tof_xyz', [0.0])
+        self.declare_parameter('boxes', [0.0])
+        self.declare_parameter('box_half_m', 0.06)
+        self.declare_parameter('box_height_m', 0.12)
+        # false: chi phat laser THO (/mavros/mtf01p) - range_vertical_node that tinh /range/vertical
+        # (bu nghieng, bu hop hang) nhu tren drone.
+        self.declare_parameter('publish_range_vertical', True)
+        # Khau I van toc ngang nhu vong van toc FC that (kp 16 ki 3, 10-10): plugin Gazebo khong co
+        # khau I nen trong tam lech (drone_v2: 5 mm + camera) thanh troi tinh ~3 cm/s ma Pi phai tu
+        # bu cham. 0 = tat (X3, giu nguyen cac lan tune cu).
+        self.declare_parameter('vel_ki', 0.0)
+        self.declare_parameter('vel_i_limit_mps', 0.3)
+        self.declare_parameter('tilt_deg', [-20.0, 0.0, 20.0])
+        self.declare_parameter('pulse_us', [1244, 1514, 1762])
 
         g = lambda name: self.get_parameter(name).value  # noqa: E731
-        self.fc = sim_fc.SimFc(auto_arm=g('auto_arm'))
+        self.fc = sim_fc.SimFc(auto_arm=g('auto_arm'), ground_range_m=g('ground_range_m'))
+        self.tilt_table = TiltTable(g('tilt_deg'), g('pulse_us'))
+        self.tof_xyz = tuple(g('tof_xyz')) if len(g('tof_xyz')) == 3 else None
+        b = g('boxes')
+        self.boxes = [(b[i], b[i + 1], b[i + 2], g('box_half_m'), g('box_height_m'))
+                      for i in range(0, len(b) - 2, 3)]
+        self.pub_cam_joint = (self.create_publisher(Float64, g('camera_joint_topic'), RELIABLE_QOS)
+                              if g('camera_joint_topic') else None)
         self.odom_queue = deque()
         self.vel_queue = deque()        # (t, vx, vy) cho tre thuan
         self.vel_lag = (0.0, 0.0)
+        self.v_body = (0.0, 0.0)        # van toc ngang that (khung than) tu odometry Gazebo
+        self.vel_i = (0.0, 0.0)
         self.last_enable = None
         self.rx_ok = self.rx_rej = 0
 
@@ -115,6 +148,10 @@ class SimFcBridgeNode(Node):
         armed_before = self.fc.armed
         response.result = self.fc.command(request.command, request.param1, request.param2)
         response.success = response.result == sim_fc.MAV_RESULT_ACCEPTED
+        if (response.success and self.pub_cam_joint is not None
+                and request.command == sim_fc.MAV_CMD_DO_SET_SERVO and round(request.param1) == 2):
+            deg = self.tilt_table.to_deg(request.param2)
+            self.pub_cam_joint.publish(Float64(data=math.radians(deg)))
         self.get_logger().info(
             f'COMMAND_LONG {request.command} p1={request.param1:.0f} p2={request.param2:.0f} '
             f'-> result {response.result} (armed {armed_before} -> {self.fc.armed})')
@@ -122,6 +159,7 @@ class SimFcBridgeNode(Node):
 
     def on_odometry(self, msg):
         self.fc.on_odometry(msg.pose.pose.position.z)
+        self.v_body = (msg.twist.twist.linear.x, msg.twist.twist.linear.y)
         now = self.now_s()
         stamp = self.get_clock().now().to_msg()
 
@@ -142,9 +180,15 @@ class SimFcBridgeNode(Node):
         rng.radiation_type = Range.INFRARED
         rng.min_range, rng.max_range = sim_fc.RANGE_MIN_M, sim_fc.RANGE_MAX_M
         r = self.fc.range_m()
+        if self.tof_xyz is not None:
+            p, q = msg.pose.pose.position, msg.pose.pose.orientation
+            r = tof_range((p.x, p.y, p.z), quat_to_mat(q.x, q.y, q.z, q.w), self.tof_xyz, self.boxes)
+            if r is not None and not sim_fc.RANGE_MIN_M <= r <= sim_fc.RANGE_MAX_M:
+                r = None
         rng.range = 0.0 if r is None else r      # hop dong 1.6: FC gui 0 khi mat laser
         self.pub_range.publish(rng)
-        self.pub_range_v.publish(rng)
+        if self.get_parameter('publish_range_vertical').value:
+            self.pub_range_v.publish(rng)
 
         imu = Imu()
         imu.header.stamp = stamp
@@ -193,6 +237,15 @@ class SimFcBridgeNode(Node):
             self.last_enable = enable
         vx, vy = self.lag_horizontal(enable, vx, vy)
         h = self.fc.height_m()
+        ki = self.get_parameter('vel_ki').value
+        if ki > 0.0 and enable and h is not None and h > 0.05:
+            dt = 1.0 / self.get_parameter('control_rate_hz').value
+            lim = self.get_parameter('vel_i_limit_mps').value
+            self.vel_i = tuple(max(-lim, min(lim, i + ki * (c - v) * dt))
+                               for i, c, v in zip(self.vel_i, (vx, vy), self.v_body))
+            vx, vy = vx + self.vel_i[0], vy + self.vel_i[1]
+        elif not enable:
+            self.vel_i = (0.0, 0.0)
         # Gio/troi tac dung toi sat dat (cang ~5 cm). Truoc 10-11 la > 0,3 m: gio tat dot ngot luc ha
         # mu, bu troi Pi da hoc (-0,16 m/s) day lui 19 cm - gio that khong tat o 0,3 m.
         if enable and h is not None and h > 0.1:

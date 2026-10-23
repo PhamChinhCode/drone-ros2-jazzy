@@ -971,16 +971,17 @@ bốn, không sửa gì.**
 | 12 | `PAD_ALIGN` *(0.8)* | | |
 | 13 | `FINAL_APPROACH` *(0.8)* | | |
 
-**Ba trạng thái 0.8 (11–13)** thuộc phương án bay quay mũi về đích và hạ cánh bằng hai tag
-(`docs/ke_hoach_huong_bay_hai_tag.md` phía Pi):
+**Ba trạng thái 0.8 (11–13).** Từ 2026-10-22 camera nghiêng bằng servo và bỏ cổng G
+(`docs/ke_hoach_camera_servo_gap_hang.md` phía Pi); giá trị trên dây giữ nguyên, chỉ đổi nghĩa:
 
-- `ALIGN_HEADING` — đang treo trên tag (đã neo), quay mũi về phương vị tới điểm kế tiếp rồi mới bay.
-- `PAD_ALIGN` — **tiếp cận thẳng hàng trục bãi**: qua cổng tiếp cận phía SAU bãi (ngược hướng
-  `yaw_cdeg`, 8.7) rồi bay dọc trục bãi với mũi đã đúng hướng bãi, hạ dốc tới trên tâm bãi — tới nơi
-  không phải quay tại chỗ (quay lúc đó làm camera mất tag). Hết thời hạn mà chưa thẳng hàng thì **hạ
-  tiếp bằng tag to**, không tính là thất bại. *(Sửa nghĩa 2026-10-08 trước khi 0.8 lên dây; bản đầu
-  là "treo rồi quay tại chỗ".)*
-- `FINAL_APPROACH` — hạ đoạn cuối theo tag nhỏ (tag to đã ra khỏi khung hình), hạ mù đoạn sát đất.
+- `ALIGN_HEADING` — đang treo trên tâm bãi, bám tag to (camera nhìn thẳng xuống), quay mũi theo
+  hướng bãi (`yaw_cdeg`, 8.7) rồi mới hạ thẳng đứng. Hết thời hạn mà chưa quay xong thì hạ với mũi
+  đang có, không tính là thất bại.
+- `PAD_ALIGN` — **không còn dùng** từ 2026-10-22 (trước đó: tiếp cận thẳng hàng trục bãi qua cổng
+  phía sau bãi). Giữ giá trị để GCS cũ không lệch bảng.
+- `FINAL_APPROACH` — **lấy hàng**: treo ~0,6 m trên bãi, tìm tag nhỏ dán trên nắp hộp hàng, nghiêng
+  camera về phía đuôi, hạ tới độ cao gắp (ToF 0,20 m). Không thấy / mất tag hộp là một lần thất bại
+  (`retry_count` tăng). Thả hàng không qua trạng thái này: hạ thẳng tới ToF 0,20 m rồi thả.
 
 GCS cũ (< 0.8) không biết ba giá trị này: theo R1 phải hiện "không rõ" chứ không được crash.
 
@@ -1184,11 +1185,14 @@ GCS gửi thì chỉ thêm một chỗ có thể lệch mà không ai thấy (11
    khởi động lại (dịch vụ ROS `~/clear_plan` trên `mission_manager_node`), và báo bằng `STATUSTEXT`.
 
 **Tag nhỏ của bãi (0.8) — Pi tự suy, không đi qua dây.** Mỗi bãi có thể có một tag nhỏ cùng hướng,
-đặt về phía "trên" của tag to, `id = id_to + 10`. Mọi bãi dùng **chung một mẫu** khai ở `tags.yaml`
-phía Pi (`pad_small_tag_id_offset`, `pad_small_tag_size_m`, `pad_small_tag_forward_m`; đề xuất
-10 / 0,10 m / 0,21 m — 0,22 đổi thành 0,21 ngày 2026-10-09 theo tờ in A3). Pi tính vị trí tag nhỏ từ vị trí + hướng tag to, nên tag to **không khai
-hướng thì không có tag nhỏ**. CRC chỉ phủ tag to. GCS muốn vẽ tag nhỏ thì đọc mẫu này từ tài liệu,
-không có trường nào trên dây mang nó.
+`id = id_to + 10`. Từ 2026-10-22 tag nhỏ **dán trên nắp hộp hàng**, không in trên tờ bãi nữa: tâm hộp
+cách tâm tag to 0,30 m về phía "dưới" (ngược `yaw_cdeg`), nắp hộp cao 0,12 m. Mọi bãi dùng **chung
+một mẫu** khai ở `tags.yaml` phía Pi (`pad_small_tag_id_offset`, `pad_small_tag_size_m`,
+`pad_small_tag_forward_m`, `pad_small_tag_height_m` = 10 / 0,10 m / −0,30 m / 0,12 m; trước
+2026-10-22 là +0,21 m trên cùng tờ A3). Tag nhỏ chỉ để căn cơ cấu gắp, **không neo EKF**. Pi tính vị
+trí hộp từ vị trí + hướng tag to. CRC chỉ phủ tag to. GCS muốn vẽ hộp thì đọc mẫu này từ tài liệu,
+không có trường nào trên dây mang nó. **Tờ in bãi không được có tag id 10–19**: camera thấy hai tag
+cùng id thì drone có thể căn nhầm vào tờ giấy thay vì hộp.
 
 **Giới hạn đã biết, không phải lỗi:** nạp qua dây chỉ đổi được toạ độ của tag **đã khai** trong
 `apriltag.yaml`. Thêm tag mới vẫn phải sửa `apriltag.yaml` trên Pi bằng tay và khởi động lại — vì
