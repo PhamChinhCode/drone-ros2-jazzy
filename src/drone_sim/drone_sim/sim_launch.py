@@ -12,6 +12,8 @@ from launch_ros.descriptions import ComposableNode
 from launch_ros.parameter_descriptions import ParameterValue
 import yaml
 
+from drone_sim.gripper_sim import joint_targets
+
 SHARE = get_package_share_directory('drone_sim')
 WORLD = os.path.join(SHARE, 'worlds', 'drone_tune.sdf')
 MODELS = os.path.join(SHARE, 'models')
@@ -24,13 +26,16 @@ SIM_TIME = {'use_sim_time': True}
 # Vi tri camera duoi bung X3 - PHAI khop <sensor camera_down> trong worlds/drone_tune.sdf. x nhu
 # drone that; z xem chu thich world. Goc nghieng do camera_tilt_node phat theo servo.
 CAM_XYZ = ('0.09', '0', '-0.06')
+# Joint kep (drone_v2.urdf) va hop (hop_<ten> / hang_<ten> trong worlds/drone_v2.sdf).
+GRIPPER_JOINTS = tuple(joint_targets(0.0))
+BOX_NAMES = ('a', 'b')
 
 # Hai drone mo phong (sim_mission.launch.py drone:=...). Moi so lieu phai khop world tuong ung.
 DRONES = {
     # X3 Gazebo Fuel, camera gan cung (khong co servo trong Gazebo - camera:=true chi dung o 20 do).
     'x3': dict(world='drone_tune.sdf', model='X3', pivot=[float(v) for v in CAM_XYZ], lens=[0.0, 0.0, 0.0],
                ground_range_m=0.17, camera_joint_topic='', tof_xyz=[0.0], boxes=[0.0],
-               range_node=False, vel_ki=0.0,
+               range_node=False, vel_ki=0.0, gripper=False,
                # Camera thap hon base_link 6 cm: tag hop ra khoi khung tu ToF ~0,30 m.
                box_cam_switch_m=0.32),
     # Khung Version2.0 (models/drone_v2 <- drone_v2.urdf): truc servo + ong kinh theo URDF, laser 0,146 m
@@ -44,6 +49,9 @@ DRONES = {
                range_node=True,
                # Khau I van toc ngang nhu FC that (Gazebo khong co): khu troi tinh do trong tam lech.
                vel_ki=1.0,
+               # Kep MG90 that trong Gazebo (sim_gripper_node): ham theo co cau 4 khau, nhac hop
+               # 120 g.
+               gripper=True,
                # Doi camera -20 -> -36 do o cung ToF 0,32 nhu drone that (mission.yaml). Che do tag tong
                # hop (camera:=false): sim_tag_node bo tag gan hon min_range 0,15 m - doan cuoi mat tag.
                box_cam_switch_m=0.32),
@@ -80,7 +88,19 @@ def gz_bridge():
                            '/X3/enable@std_msgs/msg/Bool]gz.msgs.Boolean',
                            '/model/X3/odometry@nav_msgs/msg/Odometry[gz.msgs.Odometry',
                            # Goc servo camera (rad) -> JointPositionController (chi world drone_v2).
-                           '/X3/camera_tilt/cmd@std_msgs/msg/Float64]gz.msgs.Double'],
+                           '/X3/camera_tilt/cmd@std_msgs/msg/Float64]gz.msgs.Double',
+                           # Kep (chi world drone_v2): goc 5 joint + tach hop (sim_gripper_node).
+                           *[f'/X3/gripper/{j}/cmd@std_msgs/msg/Float64]gz.msgs.Double'
+                             for j in GRIPPER_JOINTS],
+                           *[f'/X3/gripper/detach_{n}@std_msgs/msg/Empty]gz.msgs.Empty'
+                             for n in BOX_NAMES]],
+                output='screen')
+
+
+def sim_gripper(boxes):
+    """Kep MG90 trong Gazebo: /gripper/command -> 5 joint kep + gan/tach hop (drone_v2.sdf)."""
+    return Node(package='drone_sim', executable='sim_gripper_node', name='sim_gripper_node',
+                parameters=[{'boxes': boxes, 'box_names': list(BOX_NAMES)}, SIM_TIME],
                 output='screen')
 
 

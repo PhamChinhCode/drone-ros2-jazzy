@@ -185,6 +185,9 @@
       <uri>model://drone_v2</uri>
       <name>drone_v2</name>
       <pose>0 0 0.156 0 0 0</pose>
+      <!-- Luc day: X2212 1400KV + canh 8x4.5 o 3S toi da ~830 g/motor (ClaudeRS/ngan_sach_trong_luong)
+           -> motorConstant = forceConstant = 8,14 N / 800^2 = 1,272e-5 (X3: 8,55e-6). Voi drone 1,5 kg
+           (model, xem tools/sinh_model_drone_v2.py) ga treo ~45 %, khop ga hover do 0,43..0,49. -->
       <plugin
         filename="gz-sim-multicopter-motor-model-system"
         name="gz::sim::systems::MulticopterMotorModel">
@@ -195,7 +198,7 @@
         <timeConstantUp>0.0125</timeConstantUp>
         <timeConstantDown>0.025</timeConstantDown>
         <maxRotVelocity>800.0</maxRotVelocity>
-        <motorConstant>8.54858e-06</motorConstant>
+        <motorConstant>1.272e-05</motorConstant>
         <momentConstant>0.016</momentConstant>
         <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
         <actuator_number>0</actuator_number>
@@ -215,7 +218,7 @@
         <timeConstantUp>0.0125</timeConstantUp>
         <timeConstantDown>0.025</timeConstantDown>
         <maxRotVelocity>800.0</maxRotVelocity>
-        <motorConstant>8.54858e-06</motorConstant>
+        <motorConstant>1.272e-05</motorConstant>
         <momentConstant>0.016</momentConstant>
         <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
         <actuator_number>1</actuator_number>
@@ -235,7 +238,7 @@
         <timeConstantUp>0.0125</timeConstantUp>
         <timeConstantDown>0.025</timeConstantDown>
         <maxRotVelocity>800.0</maxRotVelocity>
-        <motorConstant>8.54858e-06</motorConstant>
+        <motorConstant>1.272e-05</motorConstant>
         <momentConstant>0.016</momentConstant>
         <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
         <actuator_number>2</actuator_number>
@@ -255,7 +258,7 @@
         <timeConstantUp>0.0125</timeConstantUp>
         <timeConstantDown>0.025</timeConstantDown>
         <maxRotVelocity>800.0</maxRotVelocity>
-        <motorConstant>8.54858e-06</motorConstant>
+        <motorConstant>1.272e-05</motorConstant>
         <momentConstant>0.016</momentConstant>
         <commandSubTopic>gazebo/command/motor_speed</commandSubTopic>
         <actuator_number>3</actuator_number>
@@ -280,25 +283,25 @@
         <rotorConfiguration>
           <rotor>
             <jointName>prop_front_left_joint</jointName>
-            <forceConstant>8.54858e-06</forceConstant>
+            <forceConstant>1.272e-05</forceConstant>
             <momentConstant>0.016</momentConstant>
             <direction>-1</direction>
           </rotor>
           <rotor>
             <jointName>prop_front_right_joint</jointName>
-            <forceConstant>8.54858e-06</forceConstant>
+            <forceConstant>1.272e-05</forceConstant>
             <momentConstant>0.016</momentConstant>
             <direction>1</direction>
           </rotor>
           <rotor>
             <jointName>prop_rear_left_joint</jointName>
-            <forceConstant>8.54858e-06</forceConstant>
+            <forceConstant>1.272e-05</forceConstant>
             <momentConstant>0.016</momentConstant>
             <direction>1</direction>
           </rotor>
           <rotor>
             <jointName>prop_rear_right_joint</jointName>
-            <forceConstant>8.54858e-06</forceConstant>
+            <forceConstant>1.272e-05</forceConstant>
             <momentConstant>0.016</momentConstant>
             <direction>-1</direction>
           </rotor>
@@ -325,6 +328,61 @@
         <p_gain>20</p_gain>
         <cmd_max>10.5</cmd_max>
         <cmd_min>-10.5</cmd_min>
+      </plugin>
+      <!-- Kep MG90: sim_gripper_node dat goc CA 5 joint theo loi giai 4 khau chinh xac (gripper_sim) -
+           URDF cat vong kin o chot tai ham va mimic tuyen tinh, model sinh ra bo mimic. Lenh van toc
+           nhu servo camera (link vai gam). -->
+      <plugin filename="gz-sim-joint-position-controller-system"
+              name="gz::sim::systems::JointPositionController">
+        <joint_name>gripper_servo_joint</joint_name>
+        <topic>/X3/gripper/gripper_servo_joint/cmd</topic>
+        <use_velocity_commands>true</use_velocity_commands>
+        <p_gain>20</p_gain><cmd_max>20</cmd_max><cmd_min>-20</cmd_min>
+      </plugin>
+      <plugin filename="gz-sim-joint-position-controller-system"
+              name="gz::sim::systems::JointPositionController">
+        <joint_name>gripper_rod_left_joint</joint_name>
+        <topic>/X3/gripper/gripper_rod_left_joint/cmd</topic>
+        <use_velocity_commands>true</use_velocity_commands>
+        <p_gain>20</p_gain><cmd_max>20</cmd_max><cmd_min>-20</cmd_min>
+      </plugin>
+      <plugin filename="gz-sim-joint-position-controller-system"
+              name="gz::sim::systems::JointPositionController">
+        <joint_name>gripper_rod_right_joint</joint_name>
+        <topic>/X3/gripper/gripper_rod_right_joint/cmd</topic>
+        <use_velocity_commands>true</use_velocity_commands>
+        <p_gain>20</p_gain><cmd_max>20</cmd_max><cmd_min>-20</cmd_min>
+      </plugin>
+      <plugin filename="gz-sim-joint-position-controller-system"
+              name="gz::sim::systems::JointPositionController">
+        <joint_name>gripper_jaw_left_joint</joint_name>
+        <topic>/X3/gripper/gripper_jaw_left_joint/cmd</topic>
+        <use_velocity_commands>true</use_velocity_commands>
+        <p_gain>20</p_gain><cmd_max>20</cmd_max><cmd_min>-20</cmd_min>
+      </plugin>
+      <plugin filename="gz-sim-joint-position-controller-system"
+              name="gz::sim::systems::JointPositionController">
+        <joint_name>gripper_jaw_right_joint</joint_name>
+        <topic>/X3/gripper/gripper_jaw_right_joint/cmd</topic>
+        <use_velocity_commands>true</use_velocity_commands>
+        <p_gain>20</p_gain><cmd_max>20</cmd_max><cmd_min>-20</cmd_min>
+      </plugin>
+      <!-- Gan hop vao drone khi kep: plugin gan NGAY khi model con xuat hien (gz-sim 8), nen hop o bai
+           la hop TINH hop_<n>; kep trung thi sim_gripper_node thay bang hop dong hang_<n> 120 g tai
+           cho -> plugin gan, drone mang tai that. Mo kep -> /X3/gripper/detach_<n> -> hop roi. -->
+      <plugin filename="gz-sim-detachable-joint-system" name="gz::sim::systems::DetachableJoint">
+        <parent_link>base_link</parent_link>
+        <child_model>hang_a</child_model>
+        <child_link>link</child_link>
+        <detach_topic>/X3/gripper/detach_a</detach_topic>
+        <suppress_child_warning>true</suppress_child_warning>
+      </plugin>
+      <plugin filename="gz-sim-detachable-joint-system" name="gz::sim::systems::DetachableJoint">
+        <parent_link>base_link</parent_link>
+        <child_model>hang_b</child_model>
+        <child_link>link</child_link>
+        <detach_topic>/X3/gripper/detach_b</detach_topic>
+        <suppress_child_warning>true</suppress_child_warning>
       </plugin>
       <!-- Camera OV9281 tai TAM ONG KINH tren camera_tilt_link (mesh: day ong kinh 14 x 14 mm o
            (0, 0,017, -0,0418) m), nhin theo -Z cua link (pitch 90 do: truc nhin +X cua sensor -> -Z), mep
@@ -354,7 +412,8 @@
     </include>
     <!-- Hop hang 12 x 12 x 12 cm tai bai A (tag 1): tag nho id 11 (10 cm + vien trang 1 o) dan tren nap,
          CUNG huong tag to cua bai; tam hop cach tam tag to 0,30 m ve phia "duoi" (config/sim_tags.yaml).
-         Khong co va cham: drone treo gap ngay tren hop, khung va cham cua than (hop bao) se chong len. -->
+         Hop TINH chi de nhin (khong va cham); kep trung thi sim_gripper_node xoa no va sinh hop dong
+         hang_<n> (120 g, va cham chi voi mat dat - collide_bitmask 0x02, drone 0x01) cung cho. -->
     <model name="hop_a">
       <static>true</static>
       <pose>10 -0.3 0 0 0 1.5708</pose>
@@ -377,7 +436,8 @@
     </model>
     <!-- Hop hang 12 x 12 x 12 cm tai bai B (tag 2): tag nho id 12 (10 cm + vien trang 1 o) dan tren nap,
          CUNG huong tag to cua bai; tam hop cach tam tag to 0,30 m ve phia "duoi" (config/sim_tags.yaml).
-         Khong co va cham: drone treo gap ngay tren hop, khung va cham cua than (hop bao) se chong len. -->
+         Hop TINH chi de nhin (khong va cham); kep trung thi sim_gripper_node xoa no va sinh hop dong
+         hang_<n> (120 g, va cham chi voi mat dat - collide_bitmask 0x02, drone 0x01) cung cho. -->
     <model name="hop_b">
       <static>true</static>
       <pose>5 -5.7 0 0 0 -1.5708</pose>

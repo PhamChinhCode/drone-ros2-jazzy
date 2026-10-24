@@ -31,7 +31,7 @@ from drone_sim.sim_launch import (DRONES, SHARE, TAGS_YAML, camera_pipeline, cam
                                   camera_view, controller_node, gazebo, gcs_link, gripper_node,
                                   gui_follow, range_vertical,
                                   gz_bridge, landing_bridge, marker_republisher,
-                                  sim_fc_bridge, sim_tag, telemetry_aggregator)
+                                  sim_fc_bridge, sim_gripper, sim_tag, telemetry_aggregator)
 
 CONFIG = os.path.join(get_package_share_directory('drone_bringup'), 'config')
 SIM_TIME = {'use_sim_time': True}
@@ -55,6 +55,7 @@ def theo_drone(context):
                       drone=drone),
         camera_tilt(drone),
         *([range_vertical()] if d['range_node'] else []),
+        *([sim_gripper(d['boxes'])] if d['gripper'] else []),
         gui_follow(d['model'], IfCondition(LaunchConfiguration('gui'))),
         Node(package='drone_mission', executable='mission_manager_node',
              name='mission_manager_node',
