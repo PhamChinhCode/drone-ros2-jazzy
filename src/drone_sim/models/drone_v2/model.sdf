@@ -3,15 +3,15 @@
   <model name='drone_v2'>
     <link name='base_link'>
       <inertial>
-        <pose>0.00513 -6.9999999999999994e-05 -0.02452 0 0 0</pose>
-        <mass>0.73431999999999997</mass>
+        <pose>0.0046800000000000001 -0.00017000000000000001 -0.025649999999999999 0 0 0</pose>
+        <mass>1.43281</mass>
         <inertia>
-          <ixx>0.0065319999999999996</ixx>
-          <ixy>-2.9349999999999999e-06</ixy>
-          <ixz>8.0359999999999996e-05</ixz>
-          <iyy>0.0071314999999999998</iyy>
-          <iyz>1.7999999999999999e-06</iyz>
-          <izz>0.012697999999999999</izz>
+          <ixx>0.0125673</ixx>
+          <ixy>-1.274e-05</ixy>
+          <ixz>0.000116942</ixz>
+          <iyy>0.0137163</iyy>
+          <iyz>-1.25148e-06</iyz>
+          <izz>0.0242644</izz>
         </inertia>
       </inertial>
       <collision name='base_link_collision'>
@@ -21,7 +21,7 @@
             <size>0.44940000000000002 0.44940000000000002 0.23300000000000001</size>
           </box>
         </geometry>
-      </collision>
+      <surface><contact><collide_bitmask>1</collide_bitmask></contact></surface></collision>
       <visual name='base_link_visual'>
         <pose>0 0 0 0 0 0</pose>
         <geometry>
@@ -75,7 +75,7 @@
             <size>0.0275 0.040000000000000001 0.051799999999999999</size>
           </box>
         </geometry>
-      </collision>
+      <surface><contact><collide_bitmask>1</collide_bitmask></contact></surface></collision>
       <visual name='camera_tilt_link_visual'>
         <pose>0 0 0 0 0 0</pose>
         <geometry>
@@ -87,6 +87,236 @@
         <material>
           <diffuse>0.125 0.625 0.37500003 1</diffuse>
           <ambient>0.125 0.625 0.37500003 1</ambient>
+        </material>
+      </visual>
+    </link>
+    <joint name='gripper_jaw_left_joint' type='revolute'>
+      <pose relative_to='base_link'>0.0025000000000000001 0.031510000000000003 -0.0625 0 0 0</pose>
+      <parent>base_link</parent>
+      <child>gripper_jaw_left</child>
+      <axis>
+        <xyz>1 0 0</xyz>
+        <limit>
+          <lower>0</lower>
+          <upper>0.73338999999999999</upper>
+          <effort>1</effort>
+          <velocity>10</velocity>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='gripper_jaw_left'>
+      <pose relative_to='gripper_jaw_left_joint'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>-0.0030000000000000001 0.024109999999999999 -0.044019999999999997 0 0 0</pose>
+        <mass>0.01576</mass>
+        <inertia>
+          <ixx>2.4303000000000001e-05</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>2.4654000000000001e-05</iyy>
+          <iyz>6.5570000000000001e-06</iyz>
+          <izz>6.3362000000000004e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name='gripper_jaw_left_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://drone_v2/meshes/gripper_jaw_left.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>1 0.625 0.125 1</diffuse>
+          <ambient>1 0.625 0.125 1</ambient>
+        </material>
+      </visual>
+    </link>
+    <joint name='gripper_jaw_right_joint' type='revolute'>
+      <pose relative_to='base_link'>0.0025000000000000001 -0.0315 -0.0625 0 0 0</pose>
+      <parent>base_link</parent>
+      <child>gripper_jaw_right</child>
+      <axis>
+        <xyz>1 0 0</xyz>
+        <limit>
+          <lower>-0.58991000000000005</lower>
+          <upper>0</upper>
+          <effort>1</effort>
+          <velocity>10</velocity>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='gripper_jaw_right'>
+      <pose relative_to='gripper_jaw_right_joint'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>-0.0030000000000000001 -0.0241 -0.04403 0 0 0</pose>
+        <mass>0.01576</mass>
+        <inertia>
+          <ixx>2.4303000000000001e-05</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>2.4660000000000001e-05</iyy>
+          <iyz>-6.55e-06</iyz>
+          <izz>6.3307999999999996e-06</izz>
+        </inertia>
+      </inertial>
+      <visual name='gripper_jaw_right_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://drone_v2/meshes/gripper_jaw_right.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>1 0.625 0.125 1</diffuse>
+          <ambient>1 0.625 0.125 1</ambient>
+        </material>
+      </visual>
+    </link>
+    <joint name='gripper_servo_joint' type='revolute'>
+      <pose relative_to='base_link'>-0.0022499999999999998 0 -0.084620000000000001 0 0 0</pose>
+      <parent>base_link</parent>
+      <child>gripper_servo_link</child>
+      <axis>
+        <xyz>1 0 0</xyz>
+        <limit>
+          <lower>-2.0943999999999998</lower>
+          <upper>0</upper>
+          <effort>0.17999999999999999</effort>
+          <velocity>10.5</velocity>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='gripper_servo_link'>
+      <pose relative_to='gripper_servo_joint'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>-0.0015299999999999999 0 0 0 0 0</pose>
+        <mass>0.00052999999999999998</mass>
+        <inertia>
+          <ixx>3.4802000000000003e-08</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>4.1396999999999997e-09</iyy>
+          <iyz>-2.2570000000000001e-10</iyz>
+          <izz>3.2305999999999998e-08</izz>
+        </inertia>
+      </inertial>
+      <visual name='gripper_servo_link_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://drone_v2/meshes/gripper_servo_link.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>1 1 1 1</diffuse>
+          <ambient>1 1 1 1</ambient>
+        </material>
+      </visual>
+    </link>
+    <joint name='gripper_rod_left_joint' type='revolute'>
+      <pose relative_to='gripper_servo_link'>0 -0.0092700000000000005 -8.0000000000000007e-05 0 0 0</pose>
+      <parent>gripper_servo_link</parent>
+      <child>gripper_rod_left</child>
+      <axis>
+        <xyz>1 0 0</xyz>
+        <limit>
+          <lower>0</lower>
+          <upper>2.0829800000000001</upper>
+          <effort>1</effort>
+          <velocity>20</velocity>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='gripper_rod_left'>
+      <pose relative_to='gripper_rod_left_joint'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>0.0015 0.022270000000000002 0.0022399999999999998 0 0 0</pose>
+        <mass>0.00077999999999999999</mass>
+        <inertia>
+          <ixx>1.6920000000000001e-07</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>6.7631000000000004e-09</iyy>
+          <iyz>8.7769999999999998e-09</iyz>
+          <izz>1.6360000000000001e-07</izz>
+        </inertia>
+      </inertial>
+      <visual name='gripper_rod_left_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://drone_v2/meshes/gripper_rod_left.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>1 1 1 1</diffuse>
+          <ambient>1 1 1 1</ambient>
+        </material>
+      </visual>
+    </link>
+    <joint name='gripper_rod_right_joint' type='revolute'>
+      <pose relative_to='gripper_servo_link'>0 0.0092700000000000005 6.9999999999999994e-05 0 0 0</pose>
+      <parent>gripper_servo_link</parent>
+      <child>gripper_rod_right</child>
+      <axis>
+        <xyz>1 0 0</xyz>
+        <limit>
+          <lower>0</lower>
+          <upper>1.7804500000000001</upper>
+          <effort>1</effort>
+          <velocity>20</velocity>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='gripper_rod_right'>
+      <pose relative_to='gripper_rod_right_joint'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>0.0015 -0.0223 -0.0019599999999999999 0 0 0</pose>
+        <mass>0.00077999999999999999</mass>
+        <inertia>
+          <ixx>1.6920000000000001e-07</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>7.0116999999999997e-09</iyy>
+          <iyz>1.077e-08</iyz>
+          <izz>1.6334999999999999e-07</izz>
+        </inertia>
+      </inertial>
+      <visual name='gripper_rod_right_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://drone_v2/meshes/gripper_rod_right.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>1 1 1 1</diffuse>
+          <ambient>1 1 1 1</ambient>
         </material>
       </visual>
     </link>
@@ -128,7 +358,7 @@
             <radius>0.1016</radius>
           </cylinder>
         </geometry>
-      </collision>
+      <surface><contact><collide_bitmask>1</collide_bitmask></contact></surface></collision>
       <visual name='prop_front_left_visual'>
         <pose>0 0 0 0 0 0</pose>
         <geometry>
@@ -181,7 +411,7 @@
             <radius>0.1016</radius>
           </cylinder>
         </geometry>
-      </collision>
+      <surface><contact><collide_bitmask>1</collide_bitmask></contact></surface></collision>
       <visual name='prop_front_right_visual'>
         <pose>0 0 0 0 0 0</pose>
         <geometry>
@@ -234,7 +464,7 @@
             <radius>0.1016</radius>
           </cylinder>
         </geometry>
-      </collision>
+      <surface><contact><collide_bitmask>1</collide_bitmask></contact></surface></collision>
       <visual name='prop_rear_left_visual'>
         <pose>0 0 0 0 0 0</pose>
         <geometry>
@@ -287,7 +517,7 @@
             <radius>0.1016</radius>
           </cylinder>
         </geometry>
-      </collision>
+      <surface><contact><collide_bitmask>1</collide_bitmask></contact></surface></collision>
       <visual name='prop_rear_right_visual'>
         <pose>0 0 0 0 0 0</pose>
         <geometry>
