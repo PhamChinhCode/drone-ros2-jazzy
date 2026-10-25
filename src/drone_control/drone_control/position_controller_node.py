@@ -76,7 +76,11 @@ SOURCE_LANDING = 'landing'
 # Giu cho mac dinh (drone_control/hold.py): khong nguon nao ra lenh truc ngang -> chot vi tri EKF,
 # bam bang chinh PID cruise.
 SOURCE_HOLD = 'hold'
-PID_PHASE = {SOURCE_CRUISE: 'cruise', SOURCE_LANDING: 'landing', SOURCE_HOLD: 'cruise'}
+# Giu EKF tai tam hop luc gap (/mission/ekf_xy): nhu cruise nhung PID rieng, cung hon - gio giat lac
+# drone 15-25 cm voi kp cruise 0,7 (mo phong 10-25), ham chi om duoc lech ~3-5 cm.
+SOURCE_GRIP = 'grip'
+PID_PHASE = {SOURCE_CRUISE: 'cruise', SOURCE_LANDING: 'landing', SOURCE_HOLD: 'cruise',
+             SOURCE_GRIP: 'grip'}
 
 
 class PositionControllerNode(Node):
@@ -86,7 +90,7 @@ class PositionControllerNode(Node):
 
         # Gain rieng tung truc va rieng tung pha: pha ha canh thuong can dap ung nhanh hon.
         for axis in ('x', 'y', 'z'):
-            for phase in ('cruise', 'landing'):
+            for phase in ('cruise', 'landing', 'grip'):
                 self.declare_parameter(f'{phase}.{axis}.kp', 0.0)
                 self.declare_parameter(f'{phase}.{axis}.ki', 0.0)
                 self.declare_parameter(f'{phase}.{axis}.kd', 0.0)
@@ -116,9 +120,10 @@ class PositionControllerNode(Node):
         # Cung y cho bay toi diem / giu cho (PID cruise): bay that 10-10 FC tre 1-1,5 s, PAD_ALIGN
         # vuot qua truc bai 0,4-0,5 m roi vong lai 28-60 s (tai hien Gazebo vel_delay 0,5 tau 1,5).
         self.declare_parameter('cruise.vel_damping', 0.0)
+        self.declare_parameter('grip.vel_damping', 0.0)
 
         self.pids = {phase: {axis: self._make_pid(phase, axis) for axis in ('x', 'y', 'z')}
-                     for phase in ('cruise', 'landing')}
+                     for phase in ('cruise', 'landing', 'grip')}
         # Doi gain khi dang chay (ros2 param set) - de tune trong Gazebo khong phai khoi dong lai.
         self.add_on_set_parameters_callback(self.on_set_parameters)
 
@@ -332,6 +337,9 @@ class PositionControllerNode(Node):
         # Mission doi bam EKF (gap hop: pose tag tuong doi tre -> lac trong gio) - bo nguon landing.
         ekf_xy = (sp_fresh and self.ekf_xy_stamp_s is not None
                   and now_s - self.ekf_xy_stamp_s <= VELOCITY_STALE_S)
+        if ekf_xy and xy == SOURCE_CRUISE:
+            xy = SOURCE_GRIP
+            errors[SOURCE_GRIP] = errors[SOURCE_CRUISE]
         if (not ekf_xy and self.landing_stamp_s is not None
                 and now_s - self.landing_stamp_s <= LANDING_STALE_S):
             # Tag trong base_level (FLU, bo roll/pitch - landing_target_bridge_node): tag phia truoc
@@ -397,7 +405,8 @@ class PositionControllerNode(Node):
             # truoc 0,5 m) thi sai so la do DAN DUONG, khong phai troi: Gazebo 10-09 hoc nham thanh
             # +0,3 m/s ve phia truoc, sang bam tag thi bias day may bay lech 15-23 cm.
             v = self.odom.twist.twist.linear              # he than, cung he voi errors[xy]
-            learn = (speed <= DRIFT_LEARN_MAX_SPEED_MPS and (xy != SOURCE_CRUISE or target_still)
+            learn = (speed <= DRIFT_LEARN_MAX_SPEED_MPS
+                     and (xy not in (SOURCE_CRUISE, SOURCE_GRIP) or target_still)
                      and closing_speed(errors[xy][:2], (v.x, v.y)) <= DRIFT_LEARN_CLOSING_MPS)
             bias_w = (self.drift.update(body_to_world(errors[xy][:2], yaw), dt) if learn
                       else self.drift.bias)
@@ -407,7 +416,7 @@ class PositionControllerNode(Node):
             kv = self.get_parameter(f'{PID_PHASE[xy]}.vel_damping').value
             v = self.odom.twist.twist.linear              # he than base_link (child frame)
             vx, vy = vx - kv * v.x, vy - kv * v.y
-        if xy == SOURCE_CRUISE:
+        if xy in (SOURCE_CRUISE, SOURCE_GRIP):
             vx, vy = self.limit_waypoint_speed(now_s, vx, vy)
         # Yaw: FSM ra lenh (/mission/yaw) > giu huong mac dinh > yaw_rate cua lenh van toc / 0.
         if (yaw is not None and self.yaw_stamp_s is not None

@@ -180,6 +180,9 @@ GRIP_CENTER_TOL_M = 0.03
 # that khong co cam bien xac nhan kep (gripper_controller_node).
 GRIP_CAPTURE_MAX_M = 0.05
 GRIP_CENTER_WAIT_S = 2.0
+# Lech tinh tai luc ham DONG XONG, khong phai luc ra lenh: chu ky FSM 0,2 s + servo ~0,3 s. Gio giat lac
+# drone ~0,2 m/s -> ra lenh luc lech 3 cm, ham khep luc lech 5-6 cm, kep hut (mo phong 10-25).
+GRIP_CLOSE_LEAD_S = 0.4
 # Tam hop chi lay tu cac lan do khi tag hop con TRON khung (ToF tren nguong doi camera + bien nay, hoac
 # da o goc CAM_GRIP_DEG); lay trung vi BOX_OBS_N lan gan nhat. Lan do sat mep khung lech toi 5 cm (mo
 # phong 10-22).
@@ -347,6 +350,8 @@ class Snapshot:
     # Chi landing_target_bridge_node phat pose nay, va chi khi thay DUNG ID mong doi - day la
     # xac thuc marker duy nhat FSM dung (nguyen tac 1).
     target_offset_m: float = None
+    # Van toc ngang (vx, vy) odom tu EKF; None = khong co odom con moi.
+    velocity_xy: tuple = None
     # Goc camera da on dinh (do, + ve mui) tu camera_tilt_node; None = servo dang quay / khong biet.
     camera_tilt_deg: float = CAM_DOWN_DEG
     # Tam hop (x, y) trong odom DO tu tag hop (mission_manager_node); None = khong thay.
@@ -1117,7 +1122,11 @@ class MissionFsm:
             # Vi tri EKF HIEN TAI so voi tam hop (trung vi cac lan do sat hop, cap nhat ca luc cho).
             # Khong dung lech tuong doi tu tag: tre theo xu ly anh - drone lac trong gio bao 3 cm
             # trong khi that 10 cm, kep hut (mo phong 10-25).
-            lech = math.hypot(snap.position[0] - xy[0], snap.position[1] - xy[1])
+            px, py = snap.position[0], snap.position[1]
+            if dong and snap.velocity_xy is not None:
+                px += snap.velocity_xy[0] * GRIP_CLOSE_LEAD_S
+                py += snap.velocity_xy[1] * GRIP_CLOSE_LEAD_S
+            lech = math.hypot(px - xy[0], py - xy[1])
             tol, cho = ((GRIP_CENTER_TOL_M, GRIP_CENTER_WAIT_S) if dong
                         else (DROP_RELEASE_TOL_M, DROP_RELEASE_WAIT_S))
             # Gap: chi dong khi da xuong toi GRIP_CLOSE_M (con cao thi ngon kep sat mep nap).

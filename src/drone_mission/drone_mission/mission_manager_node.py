@@ -111,6 +111,7 @@ class MissionManagerNode(Node):
         self.position = None
         self.position_stamp_s = None
         self.yaw = None
+        self.velocity_xy = None
         # Tu the bai do tu tag cua DIEM HIEN TAI; dat lai khi doi (mission_id, diem).
         self.pad_filter = PadObsFilter()
         self.pad_filter_key = None
@@ -318,6 +319,9 @@ class MissionManagerNode(Node):
         p, q = msg.pose.pose.position, msg.pose.pose.orientation
         self.position = (p.x, p.y, p.z)
         self.yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+        v = msg.twist.twist.linear              # khung than (child base_link) -> odom
+        c, s = math.cos(self.yaw), math.sin(self.yaw)
+        self.velocity_xy = (c * v.x - s * v.y, s * v.x + c * v.y)
         self.position_stamp_s = self.now_s()
 
     def on_fc_odom(self, msg):
@@ -375,6 +379,7 @@ class MissionManagerNode(Node):
         odom_fresh = self.position_stamp_s is not None and now - self.position_stamp_s <= ODOM_STALE_S
         snap.position = self.position if odom_fresh else None
         snap.yaw = self.yaw if odom_fresh else None
+        snap.velocity_xy = self.velocity_xy if odom_fresh else None
         snap.pad_obs = (self.pad_filter.value() if self.pad_filter_key == self.pad_key()
                         else None)
         snap.pad_seen = (snap.pad_obs is not None and self.pad_stamp_s is not None

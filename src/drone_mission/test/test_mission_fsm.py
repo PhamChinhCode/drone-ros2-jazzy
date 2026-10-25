@@ -1469,3 +1469,13 @@ def test_gap_giu_ekf_tai_tam_hop_khong_bam_tag():
     act = fsm.step(gap_snap(5.5, position=(bx + 0.10, by, 0.25), target_offset_m=0.01,
                             box_obs=(bx, by)))
     assert act.ekf_xy and act.expected_marker_id >= 0
+
+
+def test_gap_tinh_lech_luc_ham_dong_xong():
+    """Gio 10-25: dung tam nhung dang lac 0,2 m/s - ham khep xong da lech 8 cm, cho chu khong kep."""
+    fsm = fsm_dang_gap()
+    bx, by = fsm._box_point(fsm.current_waypoint())
+    act = fsm.step(gap_snap(5.5, position=(bx, by, 0.25), velocity_xy=(0.2, 0.0), box_obs=(bx, by)))
+    assert act.gripper_command == ''
+    act = fsm.step(gap_snap(5.7, position=(bx, by, 0.25), velocity_xy=(0.0, 0.0), box_obs=(bx, by)))
+    assert act.gripper_command == 'close'

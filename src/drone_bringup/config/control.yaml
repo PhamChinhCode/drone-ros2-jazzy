@@ -62,6 +62,20 @@ position_controller_node:
     cruise.z.kd: 0.0
     cruise.z.i_limit: 1.0
     cruise.z.out_limit: 1.5
+    # Giu EKF tai tam hop luc gap (mission ekf_xy, 10-25): cruise kp 0,7 de gio giat 4 m/s lac drone
+    # 15-25 cm quanh hop, ham chi om duoc ~3-5 cm. CHINH TRONG GAZEBO (FC gia khong tre van toc) -
+    # FC that tre 1-1,5 s: bay thu treo tren hop truoc, dao dong thi ha kp ve 0,7.
+    grip.vel_damping: 0.6
+    grip.x.kp: 1.5
+    grip.x.ki: 0.0
+    grip.x.kd: 0.0
+    grip.x.i_limit: 1.0
+    grip.x.out_limit: 1.0
+    grip.y.kp: 1.5
+    grip.y.ki: 0.0
+    grip.y.kd: 0.0
+    grip.y.i_limit: 1.0
+    grip.y.out_limit: 1.0
     # Giam chan bam tag: lenh vx, vy tru vel_damping x van toc than (position_controller_node).
     landing.vel_damping: 0.5
     landing.x.kp: 0.8           # 0,5 -> 0,8 (10-11): lech 10 cm chi ra lenh 5 cm/s, khong thang noi gio

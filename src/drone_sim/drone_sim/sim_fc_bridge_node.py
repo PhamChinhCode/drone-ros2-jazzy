@@ -89,6 +89,11 @@ class SimFcBridgeNode(Node):
         # ~0,3-0,4 m/s cho toi khi hop cham dat (mo phong 10-25).
         self.declare_parameter('vel_ki_z', 0.0)
         self.declare_parameter('vel_i_limit_z_mps', 0.5)
+        # FC that khi Pi mat quyen (KHOA) ve che do ch6 = POSHOLD (GIAO_UOC_FC_ROS2 6.2): tu giu vi tri.
+        # Truoc 10-25 FC gia chi lenh van toc 0 - gio 4 m/s day drone troi ra ngoai khu bay mai khong
+        # dung. Gia lap POSHOLD: P vi tri tu luc vao KHOA (ground truth thay flow). 0 = tat.
+        self.declare_parameter('poshold_kp', 1.0)
+        self.declare_parameter('poshold_max_mps', 1.0)
         self.declare_parameter('tilt_deg', [-20.0, 0.0, 20.0])
         self.declare_parameter('pulse_us', [1244, 1514, 1762])
 
@@ -108,6 +113,8 @@ class SimFcBridgeNode(Node):
         self.v_up = 0.0                 # van toc dung that (khung than ~ len)
         self.vel_i = (0.0, 0.0)
         self.vel_i_z = 0.0
+        self.pose = None                # (x, y, yaw) that tu odometry Gazebo
+        self.hold_xy = None             # diem POSHOLD khi KHOA
         self.last_enable = None
         self.rx_ok = self.rx_rej = 0
 
@@ -168,6 +175,9 @@ class SimFcBridgeNode(Node):
         self.fc.on_odometry(msg.pose.pose.position.z)
         self.v_body = (msg.twist.twist.linear.x, msg.twist.twist.linear.y)
         self.v_up = msg.twist.twist.linear.z
+        p, q = msg.pose.pose.position, msg.pose.pose.orientation
+        self.pose = (p.x, p.y, math.atan2(2.0 * (q.w * q.z + q.x * q.y),
+                                          1.0 - 2.0 * (q.y * q.y + q.z * q.z)))
         now = self.now_s()
         stamp = self.get_clock().now().to_msg()
 
@@ -243,6 +253,7 @@ class SimFcBridgeNode(Node):
             self.pub_enable.publish(Bool(data=enable))
             self.get_logger().info(f'dong co {"BAT" if enable else "TAT"}')
             self.last_enable = enable
+        vx, vy = self.poshold(enable, vx, vy)
         vx, vy = self.lag_horizontal(enable, vx, vy)
         h = self.fc.height_m()
         ki = self.get_parameter('vel_ki').value
@@ -273,6 +284,23 @@ class SimFcBridgeNode(Node):
         twist.linear.x, twist.linear.y, twist.linear.z = vx, vy, vz
         twist.angular.z = yaw_rate
         self.pub_twist.publish(twist)
+
+    def poshold(self, enable, vx, vy):
+        """Dang arm ma OFFBOARD khong chay (KHOA / TAT): giu vi tri nhu POSHOLD cua FC that."""
+        kp = self.get_parameter('poshold_kp').value
+        if not enable or self.fc.running or kp <= 0.0 or self.pose is None:
+            self.hold_xy = None
+            return vx, vy
+        x, y, yaw = self.pose
+        if self.hold_xy is None:
+            self.hold_xy = (x, y)
+            self.get_logger().warning(f'OFFBOARD khong chay - POSHOLD tai ({x:.2f}, {y:.2f})')
+        ex, ey = self.hold_xy[0] - x, self.hold_xy[1] - y
+        bx = kp * (math.cos(yaw) * ex + math.sin(yaw) * ey)
+        by = kp * (-math.sin(yaw) * ex + math.cos(yaw) * ey)
+        lim = self.get_parameter('poshold_max_mps').value
+        k = min(1.0, lim / max(math.hypot(bx, by), 1e-9))
+        return bx * k, by * k
 
     def lag_horizontal(self, enable, vx, vy):
         """Tre thuan + quan tinh bac 1 cho lenh van toc ngang (vel_delay_s, vel_tau_s)."""
