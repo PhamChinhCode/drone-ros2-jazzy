@@ -5,7 +5,9 @@ base_link, mat phang Y-Z (moi chot song song truc X). Moi ben la co cau 4 khau K
 thanh CauNoi -> tai ham GapHang -> chot ham tren GiaPin. URDF cat vong o chot tai ham va cho 4
 joint bi dong <mimic> tuyen tinh (sai toi ~10 do); o day giai CHINH XAC cho Gazebo.
 
-Goc servo: 0 = tu the CAD = DONG het (diem chet, khe ngon 119,2 mm om hop 120 mm), -120 do = MO.
+Goc servo: 0 = tu the CAD = DONG het (diem chet, khe ngon 119,2 mm om hop 120 mm), -180 do = MO HET
+co (het hanh trinh MG90, diem chet thu hai, hai ham 56 do, day ngon cao hon chan 45 mm) - user
+10-25: khong kep thi mo het co cho ngon khong cham dat.
 """
 
 import math
@@ -16,7 +18,7 @@ SIDES = {
     'left': ((-0.00927, -0.08469), (0.03453, -0.08434), (0.03151, -0.0625)),
     'right': ((0.00927, -0.08454), (-0.03452, -0.08434), (-0.0315, -0.0625)),
 }
-OPEN_RAD = math.radians(-120.0)
+OPEN_RAD = math.radians(-180.0)
 CLOSED_RAD = 0.0
 SERVO_RATE = 10.5                         # rad/s, MG90 0,10 s/60 do (URDF)
 
@@ -64,7 +66,9 @@ def four_bar(side, servo):
         if math.copysign(1.0, _cross(d, _sub(e, h))) == side_cad:
             break
     jaw = _wrap(_ang(_sub(e, p)) - _ang(_sub(e0, p)))
-    rod = _wrap(_ang(_sub(e, h)) - _ang(_sub(e0, h0)) - servo)
+    # Thanh quay qua 180 do khi mo het co: giu goc lien tuc trong [-90, 270) do.
+    rod = _ang(_sub(e, h)) - _ang(_sub(e0, h0)) - servo
+    rod = (rod + math.pi / 2) % (2 * math.pi) - math.pi / 2
     return jaw, rod
 
 
@@ -93,7 +97,7 @@ def box_in_jaws(box_body, box_yaw_rel, box_half, box_height):
     """
     x, y, z = box_body
     yaw = abs(_wrap(4 * box_yaw_rel)) / 4
-    open_half = INNER_Y + 0.061           # khe mo 242 mm
+    open_half = INNER_Y + 0.061           # khe o -120 do (242 mm) - mo het co con rong hon
     return (yaw <= math.radians(20)
             and abs(y) <= open_half - box_half
             and abs(x) <= box_half - FINGER_HALF_X

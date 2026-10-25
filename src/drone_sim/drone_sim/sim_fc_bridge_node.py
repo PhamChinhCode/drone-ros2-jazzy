@@ -84,6 +84,11 @@ class SimFcBridgeNode(Node):
         # bu cham. 0 = tat (X3, giu nguyen cac lan tune cu).
         self.declare_parameter('vel_ki', 0.0)
         self.declare_parameter('vel_i_limit_mps', 0.3)
+        # Khau I van toc DUNG (FC that giu do cao co khau I): MulticopterVelocityControl chi co P va lay
+        # luc day theo khoi luong model - mang them hop 120 g (DetachableJoint) thi lenh vz 0 van chim
+        # ~0,3-0,4 m/s cho toi khi hop cham dat (mo phong 10-25).
+        self.declare_parameter('vel_ki_z', 0.0)
+        self.declare_parameter('vel_i_limit_z_mps', 0.5)
         self.declare_parameter('tilt_deg', [-20.0, 0.0, 20.0])
         self.declare_parameter('pulse_us', [1244, 1514, 1762])
 
@@ -100,7 +105,9 @@ class SimFcBridgeNode(Node):
         self.vel_queue = deque()        # (t, vx, vy) cho tre thuan
         self.vel_lag = (0.0, 0.0)
         self.v_body = (0.0, 0.0)        # van toc ngang that (khung than) tu odometry Gazebo
+        self.v_up = 0.0                 # van toc dung that (khung than ~ len)
         self.vel_i = (0.0, 0.0)
+        self.vel_i_z = 0.0
         self.last_enable = None
         self.rx_ok = self.rx_rej = 0
 
@@ -160,6 +167,7 @@ class SimFcBridgeNode(Node):
     def on_odometry(self, msg):
         self.fc.on_odometry(msg.pose.pose.position.z)
         self.v_body = (msg.twist.twist.linear.x, msg.twist.twist.linear.y)
+        self.v_up = msg.twist.twist.linear.z
         now = self.now_s()
         stamp = self.get_clock().now().to_msg()
 
@@ -246,6 +254,14 @@ class SimFcBridgeNode(Node):
             vx, vy = vx + self.vel_i[0], vy + self.vel_i[1]
         elif not enable:
             self.vel_i = (0.0, 0.0)
+        kz = self.get_parameter('vel_ki_z').value
+        if kz > 0.0 and enable and h is not None and h > 0.05:
+            dt = 1.0 / self.get_parameter('control_rate_hz').value
+            lim = self.get_parameter('vel_i_limit_z_mps').value
+            self.vel_i_z = max(-lim, min(lim, self.vel_i_z + kz * (vz - self.v_up) * dt))
+            vz += self.vel_i_z
+        elif not enable:
+            self.vel_i_z = 0.0
         # Gio/troi tac dung toi sat dat (cang ~5 cm). Truoc 10-11 la > 0,3 m: gio tat dot ngot luc ha
         # mu, bu troi Pi da hoc (-0,16 m/s) day lui 19 cm - gio that khong tat o 0,3 m.
         if enable and h is not None and h > 0.1:

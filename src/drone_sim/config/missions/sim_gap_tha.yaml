@@ -1,0 +1,12 @@
+# Nhiem vu mo phong gap - tha (user 10-25): cat canh tu home, gap hop o pad_a (tag 1), tha o pad_b
+# (tag 2) - KHONG ha canh: can bang tag to, ha toi day hop cach dat ~5 cm tai diem hop cua bai (cung
+# cho hop nam o pad_a) roi mo kep - sau do bay ve home ha canh (tag 0, khong hanh dong).
+# Gui: ros2 run drone_mission send_mission_plan $(ros2 pkg prefix drone_sim)/share/drone_sim/config/missions/sim_gap_tha.yaml
+mission_id: 903
+plan_name: sim_gap_tha
+max_retries: 2
+search_timeout_s: 10.0
+waypoints:
+  - {marker_id: 1, action: pickup,  alt_m: 2.0, acceptance_radius_m: 0.5, max_vel_mps: 1.9, loiter_s: 1.0}
+  - {marker_id: 2, action: dropoff, alt_m: 2.0, acceptance_radius_m: 0.5, max_vel_mps: 1.9, loiter_s: 1.0}
+  - {marker_id: 0, action: none,    alt_m: 2.0, acceptance_radius_m: 0.5, max_vel_mps: 1.9, loiter_s: 1.0}

@@ -28,14 +28,14 @@ SIM_TIME = {'use_sim_time': True}
 CAM_XYZ = ('0.09', '0', '-0.06')
 # Joint kep (drone_v2.urdf) va hop (hop_<ten> / hang_<ten> trong worlds/drone_v2.sdf).
 GRIPPER_JOINTS = tuple(joint_targets(0.0))
-BOX_NAMES = ('a', 'b')
+BOX_NAMES = ('a',)
 
 # Hai drone mo phong (sim_mission.launch.py drone:=...). Moi so lieu phai khop world tuong ung.
 DRONES = {
     # X3 Gazebo Fuel, camera gan cung (khong co servo trong Gazebo - camera:=true chi dung o 20 do).
     'x3': dict(world='drone_tune.sdf', model='X3', pivot=[float(v) for v in CAM_XYZ], lens=[0.0, 0.0, 0.0],
                ground_range_m=0.17, camera_joint_topic='', tof_xyz=[0.0], boxes=[0.0],
-               range_node=False, vel_ki=0.0, gripper=False,
+               range_node=False, vel_ki=0.0, vel_ki_z=0.0, gripper=False,
                # Camera thap hon base_link 6 cm: tag hop ra khoi khung tu ToF ~0,30 m.
                box_cam_switch_m=0.32),
     # Khung Version2.0 (models/drone_v2 <- drone_v2.urdf): truc servo + ong kinh theo URDF, laser 0,146 m
@@ -43,12 +43,15 @@ DRONES = {
     'v2': dict(world='drone_v2.sdf', model='drone_v2', pivot=[0.09525, -0.018, -0.05218], lens=[0.0, 0.017, -0.0418],
                ground_range_m=0.146, camera_joint_topic='/X3/camera_tilt/cmd',
                # Laser theo tia (sim_tof): MTF-01 0,10 m sau tam, 0,009 m duoi FC (URDF); hop hang 12 cm
-               # [x, y, yaw] - PHAI khop hop_a / hop_b trong worlds/drone_v2.sdf.
-               tof_xyz=[-0.10, 0.0, -0.009], boxes=[10.0, -0.30, 1.5708, 5.0, -5.70, -1.5708],
+               # [x, y, yaw] - PHAI khop hop_a trong worlds/drone_v2.sdf (bai B trong de tha).
+               tof_xyz=[-0.10, 0.0, -0.009], boxes=[10.0, -0.30, 1.5708],
                # range_vertical_node THAT (bu nghieng + bu hop hang) thay laser da xu ly cua FC gia.
                range_node=True,
                # Khau I van toc ngang nhu FC that (Gazebo khong co): khu troi tinh do trong tam lech.
                vel_ki=1.0,
+               # Khau I van toc dung (FC that giu do cao): drone mang hop 120 g khong chim (sim_fc_bridge).
+               # 2,0 lam treo gap nhap nho +-3 cm chu ky ~2 s (cong voi vong ToF 5 Hz cua FSM) - 10-25.
+               vel_ki_z=0.7,
                # Kep MG90 that trong Gazebo (sim_gripper_node): ham theo co cau 4 khau, nhac hop
                # 120 g.
                gripper=True,
@@ -115,6 +118,7 @@ def sim_fc_bridge(auto_arm, heartbeat, delay, noise, drift=None, vel_lag=None, d
          'ground_range_m': d['ground_range_m'], 'camera_joint_topic': d['camera_joint_topic'],
          'tof_xyz': d['tof_xyz'], 'boxes': d['boxes'],
          'publish_range_vertical': not d['range_node'], 'vel_ki': d['vel_ki'],
+         'vel_ki_z': d['vel_ki_z'],
          'tilt_deg': tilt_deg, 'pulse_us': pulse_us}
     if drift is not None:
         for k, v in zip(('drift_vx_mps', 'drift_vy_mps', 'drift_yaw_dps'), drift):

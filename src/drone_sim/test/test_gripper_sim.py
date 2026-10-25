@@ -12,16 +12,16 @@ def test_goc_0_la_tu_the_cad():
 
 
 def test_mo_khop_gia_tri_urdf():
-    # Gioi han joint trong drone_v2.urdf = loi giai chinh xac o -120 do (build_meshes.py); hang so
+    # Gioi han joint trong drone_v2.urdf = loi giai chinh xac o -180 do (build_meshes.py); hang so
     # o day lam tron 0,01 mm nen lech toi 0,02 do.
     t = joint_targets(OPEN_RAD)
-    assert t['gripper_jaw_left_joint'] == pytest.approx(0.73339, abs=1e-3)
-    assert t['gripper_jaw_right_joint'] == pytest.approx(-0.58991, abs=1e-3)
-    assert t['gripper_rod_left_joint'] == pytest.approx(2.08298, abs=1e-3)
-    assert t['gripper_rod_right_joint'] == pytest.approx(1.78045, abs=1e-3)
+    assert t['gripper_jaw_left_joint'] == pytest.approx(0.97716, abs=1e-3)
+    assert t['gripper_jaw_right_joint'] == pytest.approx(-0.97425, abs=1e-3)
+    assert t['gripper_rod_left_joint'] == pytest.approx(3.41901, abs=1e-3)
+    assert t['gripper_rod_right_joint'] == pytest.approx(2.85854, abs=1e-3)
 
 
-@pytest.mark.parametrize('deg', [-120, -90, -45, -10])
+@pytest.mark.parametrize('deg', [-180, -150, -120, -90, -45, -10])
 def test_vong_kin_khep(deg):
     """Dau thanh (quay theo horn + thanh) trung tai ham (quay quanh chot)."""
     th = math.radians(deg)
@@ -40,7 +40,7 @@ def test_ham_mo_ra_hai_ben():
 
 def test_servo_chay_theo_toc_do():
     assert step_servo(0.0, OPEN_RAD, 0.1) == pytest.approx(-1.05)
-    assert step_servo(-2.0, OPEN_RAD, 0.1) == pytest.approx(OPEN_RAD)
+    assert step_servo(-3.0, OPEN_RAD, 0.1) == pytest.approx(OPEN_RAD)
 
 
 # Hop 12 cm: day hop 8,6 cm duoi day ngon (gap o ToF 0,27 m).
