@@ -1460,3 +1460,12 @@ def test_gap_khong_tin_lech_tuong_doi_tre():
     act = fsm.step(gap_snap(5.5, position=(bx + 0.10, by, 0.25), target_offset_m=0.01,
                             box_obs=(bx, by)))
     assert act.gripper_command == ''
+
+
+def test_gap_giu_ekf_tai_tam_hop_khong_bam_tag():
+    """Gio 10-25: bam pose tag tuong doi (tre) thi lac 12-44 cm - luc cho kep giu EKF tai tam hop."""
+    fsm = fsm_dang_gap()
+    bx, by = fsm._box_point(fsm.current_waypoint())
+    act = fsm.step(gap_snap(5.5, position=(bx + 0.10, by, 0.25), target_offset_m=0.01,
+                            box_obs=(bx, by)))
+    assert act.ekf_xy and act.expected_marker_id >= 0

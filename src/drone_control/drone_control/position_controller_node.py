@@ -36,7 +36,7 @@ from rclpy.experimental import EventsExecutor
 from rclpy.node import Node
 from rclpy.signals import SignalHandlerOptions
 from sensor_msgs.msg import Range
-from std_msgs.msg import Float32
+from std_msgs.msg import Bool, Float32
 
 from drone_control.drift_comp import body_to_world, closing_speed, DriftCompensator, world_to_body
 from drone_control.hold import HeadingHold, MIN_AIRBORNE_RANGE_M, PositionHold
@@ -137,6 +137,7 @@ class PositionControllerNode(Node):
         self.landing_stamp_s = None
         self.landing_offset = None
         self.landing_offset_stamp_s = None
+        self.ekf_xy_stamp_s = None
         self.active_source = (SOURCE_NONE, SOURCE_NONE)
         self.ramp = SetpointRamp(self.get_parameter('ramp_duration_s').value)
         self.mission_stamp_s = None
@@ -163,6 +164,7 @@ class PositionControllerNode(Node):
         # diem hop, tag to o truoc 0,30 m (mission_fsm._drop_descend). Im / qua han = bam tam tag.
         self.create_subscription(
             Vector3Stamped, '/mission/landing_offset', self.on_landing_offset, SENSOR_QOS)
+        self.create_subscription(Bool, '/mission/ekf_xy', self.on_ekf_xy, SENSOR_QOS)
 
         self.create_subscription(MissionState, '/mission/state', self.on_mission_state, EVENT_QOS)
         # Chi chot moc vi tri khi odom da NEO theo bang tag - truoc do vi tri se nhay khi neo.
@@ -246,6 +248,10 @@ class PositionControllerNode(Node):
         self.landing_offset = (msg.vector.x, msg.vector.y)
         self.landing_offset_stamp_s = self.get_clock().now().nanoseconds / 1e9
 
+    def on_ekf_xy(self, msg):
+        if msg.data:
+            self.ekf_xy_stamp_s = self.get_clock().now().nanoseconds / 1e9
+
     def on_mission_state(self, msg):
         del msg
         self.mission_stamp_s = self.get_clock().now().nanoseconds / 1e9
@@ -323,7 +329,11 @@ class PositionControllerNode(Node):
             errors[SOURCE_CRUISE] = (math.cos(yaw) * ex + math.sin(yaw) * ey,
                                      -math.sin(yaw) * ex + math.cos(yaw) * ey,
                                      target.z - p.position.z)
-        if self.landing_stamp_s is not None and now_s - self.landing_stamp_s <= LANDING_STALE_S:
+        # Mission doi bam EKF (gap hop: pose tag tuong doi tre -> lac trong gio) - bo nguon landing.
+        ekf_xy = (sp_fresh and self.ekf_xy_stamp_s is not None
+                  and now_s - self.ekf_xy_stamp_s <= VELOCITY_STALE_S)
+        if (not ekf_xy and self.landing_stamp_s is not None
+                and now_s - self.landing_stamp_s <= LANDING_STALE_S):
             # Tag trong base_level (FLU, bo roll/pitch - landing_target_bridge_node): tag phia truoc
             # (+x) -> bay toi (+vx); sai so = vi tri tag.
             xy = SOURCE_LANDING

@@ -166,6 +166,8 @@ class MissionManagerNode(Node):
         self.pub_yaw = self.create_publisher(Float32, '/mission/yaw', EVENT_QOS)
         self.pub_landing_offset = self.create_publisher(
             Vector3Stamped, '/mission/landing_offset', SENSOR_QOS)
+        # Truc ngang bam EKF du thay tag (Action.ekf_xy) - chi phat khi bat, controller xet do moi.
+        self.pub_ekf_xy = self.create_publisher(Bool, '/mission/ekf_xy', SENSOR_QOS)
         # Goc camera mong muon (do, + ve mui) cho camera_tilt_node - phat moi chu ky.
         self.pub_camera_tilt = self.create_publisher(Float32, '/mission/camera_tilt', EVENT_QOS)
         # Chieu cao nap hop khi dang o pha hop hang, 0 ngoai pha do (range_vertical_node bu laser).
@@ -423,6 +425,8 @@ class MissionManagerNode(Node):
             msg.header.frame_id = 'odom'
             msg.vector.x, msg.vector.y = (float(v) for v in action.landing_offset)
             self.pub_landing_offset.publish(msg)
+        if action.ekf_xy:
+            self.pub_ekf_xy.publish(Bool(data=True))
         if action.camera_tilt_deg is not None:
             self.pub_camera_tilt.publish(Float32(data=float(action.camera_tilt_deg)))
         self.pub_box_height.publish(Float32(data=float(
