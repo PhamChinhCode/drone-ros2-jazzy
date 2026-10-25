@@ -1151,16 +1151,67 @@ def test_tha_hang_khong_vao_duoc_diem_hop_la_mot_lan_that_bai():
 
 
 def fsm_tim_hop():
-    """Bai 1 (10, 0) quay Bac, lay hang: ALIGN_HEADING -> PRECISION_LAND -> FINAL_APPROACH luc 3,0."""
+    """Bai 1 (10, 0) quay Bac, lay hang: ALIGN_HEADING (o diem hop) -> FINAL_APPROACH luc 3,0."""
     fsm = fsm_tim_tag_co_huong(action=m.ACTION_PICKUP)
     bac = math.pi / 2
     fsm.step(snap(1.2, armed=True, range_m=2.0, target_offset_m=0.1, yaw=bac))
-    fsm.step(snap(1.4, armed=True, range_m=2.0, target_offset_m=0.1, yaw=bac))
-    fsm.step(snap(2.5, armed=True, range_m=2.0, target_offset_m=0.1, yaw=bac))
-    assert fsm.state == m.PRECISION_LAND
-    act = fsm.step(snap(3.0, armed=True, range_m=0.58, target_offset_m=0.02, yaw=bac))
+    assert fsm.state == m.ALIGN_HEADING
+    fsm.step(snap(2.0, armed=True, range_m=2.0, pad_seen=True, yaw=bac))
+    act = fsm.step(snap(3.0, armed=True, range_m=2.0, pad_seen=True, yaw=bac))
     assert fsm.state == m.FINAL_APPROACH and act.expected_marker_id == 11
     return fsm
+
+
+def test_gap_thay_tag_to_la_vao_thang_diem_hop_roi_ha_tim_tag_hop():
+    """User 10-25: khong ha tren tam tag roi lui - quay mui ngay tren diem hop, ha tu tu tai do toi
+    khi thay tag hop."""
+    fsm = fsm_tim_tag_co_huong(action=m.ACTION_PICKUP)
+    bac = math.pi / 2
+    fsm.step(snap(1.2, armed=True, range_m=2.0, target_offset_m=0.1, yaw=0.0))
+    assert fsm.state == m.ALIGN_HEADING
+    act = fsm.step(snap(1.4, armed=True, range_m=2.0, pad_seen=True, yaw=0.0))
+    assert act.position_target == pytest.approx((10.0, -0.30, 2.0))    # diem hop, do cao tim tag
+    assert act.expected_marker_id == -1 and act.yaw_target == pytest.approx(bac)
+    fsm.step(snap(2.0, armed=True, range_m=2.0, pad_seen=True, yaw=bac))
+    fsm.step(snap(3.0, armed=True, range_m=2.0, pad_seen=True, yaw=bac))
+    assert fsm.state == m.FINAL_APPROACH
+    # Lech diem hop: dung, keo ve. Vao diem: ha (z EKF, khong theo ToF), giu nguyen do cao dang co.
+    act = fsm.step(snap(3.2, armed=True, range_m=1.9, position=(10.1, -0.30, 2.0), yaw=bac))
+    assert act.velocity_up_mps == 0.0 and act.position_target == pytest.approx((10.0, -0.30, 2.0))
+    act = fsm.step(snap(3.4, armed=True, range_m=1.9, position=(10.0, -0.29, 2.0), yaw=bac))
+    assert act.velocity_up_mps == -m.LAND_DESCENT_FAR_MPS and 'tim tag hop' in act.detail
+    # Thay tag hop o 1,5 m: nghieng camera, GIU do cao do (khong tut ve 0,8 m luc camera quay).
+    act = fsm.step(snap(3.6, armed=True, range_m=1.4, position=(10.0, -0.30, 1.5), yaw=bac,
+                        target_offset_m=0.05))
+    assert act.camera_tilt_deg == m.CAM_BOX_DEG and act.position_target[2] == pytest.approx(1.5)
+    # Het gio tim hop chi tinh tu luc thoi ha.
+    fsm = fsm_tim_hop()
+    fsm.step(snap(3.2, armed=True, range_m=1.9, position=(10.0, -0.30, 1.9), yaw=bac))
+    fsm.step(snap(3.2 + m.BOX_SEARCH_TIMEOUT_S, armed=True, range_m=1.2,
+                  position=(10.0, -0.30, 1.2), yaw=bac))
+    assert fsm.state == m.FINAL_APPROACH
+
+
+def test_quay_mui_tren_diem_hop_mat_tag_to_qua_lau_thi_tim_lai():
+    fsm = fsm_tim_tag_co_huong(action=m.ACTION_DROPOFF)
+    fsm.step(snap(1.2, armed=True, range_m=2.0, target_offset_m=0.1, yaw=0.0))
+    fsm.step(snap(1.4, armed=True, range_m=2.0, pad_seen=True, yaw=0.0))
+    fsm.step(snap(1.5 + m.TAG_GAP_RECOVER_S, armed=True, range_m=2.0, yaw=0.0))
+    fsm.step(snap(1.6 + 2 * m.TAG_GAP_RECOVER_S, armed=True, range_m=2.0, yaw=0.0))
+    assert fsm.state == m.MARKER_SEARCH
+
+
+def test_tha_quay_mui_xong_ha_ngay_tai_diem_tha():
+    fsm = fsm_tim_tag_co_huong(action=m.ACTION_DROPOFF)
+    bac = math.pi / 2
+    fsm.step(snap(1.2, armed=True, range_m=2.0, target_offset_m=0.1, yaw=0.0))
+    fsm.step(snap(2.0, armed=True, range_m=2.0, pad_seen=True, yaw=bac))
+    act = fsm.step(snap(3.0, armed=True, range_m=2.0, pad_seen=True, yaw=bac))
+    assert fsm.state == m.ACTUATE_GRIPPER and act.camera_tilt_deg == m.CAM_DROP_DEG
+    act = fsm.step(snap(3.2, armed=True, range_m=2.0, position=(10.0, -0.30, 2.0), yaw=bac,
+                        camera_tilt_deg=m.CAM_DROP_DEG))
+    assert act.velocity_up_mps == -m.LAND_DESCENT_FAR_MPS
+    assert act.position_target[:2] == pytest.approx((10.0, -0.30))
 
 
 def test_lay_hang_tron_ven_roi_neo_lai_bang_tag_to():

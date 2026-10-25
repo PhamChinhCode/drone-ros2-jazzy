@@ -114,6 +114,7 @@ class MissionManagerNode(Node):
         # Tu the bai do tu tag cua DIEM HIEN TAI; dat lai khi doi (mission_id, diem).
         self.pad_filter = PadObsFilter()
         self.pad_filter_key = None
+        self.pad_stamp_s = None         # lan cuoi nhan pad_odom duoc bo loc nhan
         self.pose_reset_s = None
         self.tilt_deg = None
         self.tilt_stamp_s = None
@@ -292,7 +293,8 @@ class MissionManagerNode(Node):
             self.pad_filter.reset()
             self.pad_filter_key = self.pad_key()
         p, q = msg.pose.position, msg.pose.orientation
-        self.pad_filter.update(p.x, p.y, p.z, 2.0 * math.atan2(q.z, q.w), wp.pad[:2])
+        if self.pad_filter.update(p.x, p.y, p.z, 2.0 * math.atan2(q.z, q.w), wp.pad[:2]):
+            self.pad_stamp_s = self.now_s()
 
     def on_named_value(self, msg):
         self.fc_status.update(msg.name, msg.value_int, self.now_s())
@@ -367,6 +369,8 @@ class MissionManagerNode(Node):
         snap.yaw = self.yaw if odom_fresh else None
         snap.pad_obs = (self.pad_filter.value() if self.pad_filter_key == self.pad_key()
                         else None)
+        snap.pad_seen = (snap.pad_obs is not None and self.pad_stamp_s is not None
+                         and now - self.pad_stamp_s <= TARGET_STALE_S)
         box_fresh = self.box_stamp_s is not None and now - self.box_stamp_s <= TARGET_STALE_S
         snap.box_obs = self.box_obs if box_fresh else None
         tilt_fresh = self.tilt_stamp_s is not None and now - self.tilt_stamp_s <= TILT_STALE_S

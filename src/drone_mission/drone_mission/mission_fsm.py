@@ -42,7 +42,10 @@ TRANSITIONS = {
     # MARKER_SEARCH -> EMERGENCY_LAND: het luot tim. -> RTH: su co muc 3 khi dang treo tim tag,
     # ve nha tot hon la ha xuong cho la. -> ALIGN_HEADING: thay tag bai co huong (yaw_control).
     MARKER_SEARCH:   [PRECISION_LAND, ALIGN_HEADING, RETRY_LOITER, RTH, FAILSAFE, EMERGENCY_LAND],
-    ALIGN_HEADING:   [PRECISION_LAND, MARKER_SEARCH, RTH, FAILSAFE, EMERGENCY_LAND],
+    # ALIGN_HEADING -> FINAL_APPROACH / ACTUATE_GRIPPER: gap / tha tren bai co huong - da dung tren
+    # diem hop tu luc quay mui, khong ha tren tam tag (user 10-25).
+    ALIGN_HEADING:   [PRECISION_LAND, FINAL_APPROACH, ACTUATE_GRIPPER, MARKER_SEARCH, RTH, FAILSAFE,
+                      EMERGENCY_LAND],
     PRECISION_LAND:  [ACTUATE_GRIPPER, FINAL_APPROACH, MARKER_SEARCH, FAILSAFE, MISSION_COMPLETE,
                       EMERGENCY_LAND],
     FINAL_APPROACH:  [ACTUATE_GRIPPER, RETRY_LOITER, RTH, FAILSAFE, EMERGENCY_LAND],
@@ -172,7 +175,11 @@ BOX_OBS_N = 15
 # hinh hoc URDF Version2.0): dung tren hop, tag to phia mui con TRON khung (bien 6 do cho than nghieng
 # khi phanh), tag hop ~50 px. O 0,6 m tag to da bi cat mep -> mat neo EKF dung luc tim hop.
 BOX_SEARCH_ALT_M = 0.80
-BOX_SEARCH_TIMEOUT_S = 10.0
+BOX_SEARCH_TIMEOUT_S = 10.0     # tinh tu luc thoi ha (toi BOX_SEARCH_ALT_M / thay hop)
+# Bai co huong (user 10-25): thay tag to la vao THANG diem hop o do cao tim tag (ALIGN_HEADING), roi ha
+# tu tu NGAY TAI DO toi khi thay tag hop (toi da xuong BOX_SEARCH_ALT_M). Chi ha khi EKF lech diem hop
+# duoi muc nay - lech thi dung, keo ngang ve.
+BOX_SEARCH_XY_TOL_M = 0.05
 # Duoi ToF nay tag hop ra khoi khung o CAM_BOX_DEG: dung lai, nghieng camera CAM_GRIP_DEG roi bam tag
 # tiep toi GRIP_HOVER_M (user 10-22, thay ha mu). Khung Version2.0: tag cach ong kinh ~11 cm theo phuong
 # dung - bien ~5 do o -20, ~2 do o -36. Mac dinh cua Params.box_cam_switch_m.
@@ -317,6 +324,9 @@ class Snapshot:
     camera_tilt_deg: float = CAM_DOWN_DEG
     # Tam hop (x, y) trong odom DO tu tag hop (mission_manager_node); None = khong thay.
     box_obs: tuple = None
+    # Tag to cua bai dang toi vua duoc do (pad_odom con moi) - ALIGN_HEADING khi gap/tha khong bam
+    # tam tag (dung tren diem hop) nen khong co target_offset_m, dung co nay de biet con thay tag.
+    pad_seen: bool = False
 
 
 @dataclass
@@ -923,14 +933,20 @@ class MissionFsm:
         return act
 
     def _step_align_heading(self, snap):
-        """Treo tren tam bai (bam tag to), quay mui = huong bai roi moi ha thang dung."""
+        """Treo tren tam bai (bam tag to), quay mui = huong bai roi moi ha thang dung.
+
+        Gap / tha (user 10-25): vao THANG diem hop (tam bai DO + box_forward_m) va quay mui o do, giu
+        theo EKF da neo tag to (khong bam tam tag), xong thi ha ngay tai diem hop: gap -> FINAL_APPROACH,
+        tha -> ACTUATE_GRIPPER."""
         now = snap.now_s
         wp = self.current_waypoint()
         pad, pad_yaw = self._pad_pose(wp)
-        act = Action(expected_marker_id=wp.marker_id, velocity_up_mps=0.0, yaw_target=pad_yaw,
-                     position_target=(pad[0], pad[1], wp.target[2]),
+        hover = wp.action in (ACTION_PICKUP, ACTION_DROPOFF)
+        xy = self._box_point(wp) if hover else pad[:2]
+        act = Action(expected_marker_id=-1 if hover else wp.marker_id, velocity_up_mps=0.0,
+                     yaw_target=pad_yaw, position_target=(xy[0], xy[1], wp.target[2]),
                      max_vel_mps=LAND_EKF_MAX_VEL_MPS)
-        if snap.target_offset_m is None:
+        if not (snap.pad_seen if hover else snap.target_offset_m is not None):
             if self.tag_lost_since is None:
                 self.tag_lost_since = now
             if now - self.tag_lost_since > TAG_GAP_RECOVER_S:
@@ -939,8 +955,7 @@ class MissionFsm:
         else:
             self.tag_lost_since = None
         if self.time_in_state(now) >= ALIGN_HEADING_TIMEOUT_S:
-            return self._enter_search(now, PRECISION_LAND,
-                                      f'qua {ALIGN_HEADING_TIMEOUT_S:.0f} s chua quay xong - ha')
+            return self._after_align(snap, wp, f'qua {ALIGN_HEADING_TIMEOUT_S:.0f} s chua quay xong')
         if snap.yaw is None or pad_yaw is None:
             act.detail = 'quay mui theo bai: chua co yaw - giu'
             return act
@@ -952,10 +967,24 @@ class MissionFsm:
         if self.heading_ok_since is None:
             self.heading_ok_since = now
         if now - self.heading_ok_since >= ALIGN_HEADING_HOLD_S:
-            return self._enter_search(now, PRECISION_LAND,
-                                      f'mui da theo bai (lech {err:.1f} do) - ha thang dung')
+            return self._after_align(snap, wp, f'mui da theo bai (lech {err:.1f} do)')
         act.detail = f'quay mui theo bai: lech {err:.1f} do, giu {ALIGN_HEADING_HOLD_S:.0f} s'
         return act
+
+    def _after_align(self, snap, wp, ly_do):
+        """Xong ALIGN_HEADING: gap -> ha tim hop, tha -> ha toi diem tha (ca hai tai diem hop),
+        diem khong hanh dong -> ha chinh xac tren tam bai."""
+        now = snap.now_s
+        if wp.action == ACTION_PICKUP:
+            act = self.transition(FINAL_APPROACH, now, f'{ly_do} - ha tai diem hop, tim tag hop')
+            act.expected_marker_id = wp.marker_id + self.params.small_id_offset
+            return act
+        if wp.action == ACTION_DROPOFF:
+            act = self.transition(ACTUATE_GRIPPER, now, f'{ly_do} - ha tai diem tha')
+            self.cam_cmd = CAM_DROP_DEG
+            self.drop_hold_m = snap.range_m
+            return act
+        return self._enter_search(now, PRECISION_LAND, f'{ly_do} - ha thang dung')
 
     def _step_retry_loiter(self, snap):
         wp = self.current_waypoint()
@@ -1213,9 +1242,9 @@ class MissionFsm:
     def _step_final_approach(self, snap):
         """Lay hang (docs/ke_hoach_camera_servo_gap_hang.md muc 3), nam pha:
 
-        'search'  - giu BOX_SEARCH_ALT_M theo z EKF (neo bang tag to - KHONG theo ToF: vet sang quet
-                    qua nap hop), lui ve vi tri hop khai bao (camera thang xuong, tag to con trong
-                    khung), cho bridge thay tag hop (id_to + offset) -> 'tilt';
+        'search'  - tai vi tri hop (do tu tag to): cao hon BOX_SEARCH_ALT_M (vao tu ALIGN_HEADING) thi
+                    ha tu tu theo z EKF (neo bang tag to - KHONG theo ToF: vet sang quet qua nap hop),
+                    toi muc do thi giu; camera thang xuong, thay tag hop (id_to + offset) -> 'tilt';
         'tilt'    - nghieng camera CAM_BOX_DEG (ve duoi), giu nguyen cho toi khi on dinh -> 'descend';
         'descend' - bam tag hop (controller dat TAM DRONE = co cau gap len tag), ha cham; ToF <=
                     box_cam_switch_m -> 'grip_tilt';
@@ -1234,9 +1263,12 @@ class MissionFsm:
             ys = sorted(o[1] for o in self.box_obs_list)
             self.box_xy = (xs[len(xs) // 2], ys[len(ys) // 2])
         bx, by = self.box_xy or self._box_point(wp)
+        # Cao hon BOX_SEARCH_ALT_M (vao tu ALIGN_HEADING o do cao tim tag): giu do cao dang co, khong
+        # de vong z EKF keo tut xuong trong luc chua thay hop / dang nghieng camera.
+        h = None if snap.position is None else snap.position[2] - wp.pad[2]
+        z = wp.pad[2] + (BOX_SEARCH_ALT_M if h is None else max(BOX_SEARCH_ALT_M, h))
         act = Action(expected_marker_id=box_id, velocity_up_mps=0.0, yaw_target=self._hold_yaw(wp),
-                     position_target=(bx, by, wp.pad[2] + BOX_SEARCH_ALT_M),
-                     max_vel_mps=LAND_EKF_MAX_VEL_MPS)
+                     position_target=(bx, by, z), max_vel_mps=LAND_EKF_MAX_VEL_MPS)
         if snap.ob_auth is not True:
             act.detail = 'khong biet quyen - giu vz = 0'
             return act
@@ -1251,7 +1283,18 @@ class MissionFsm:
                 self.cam_cmd = CAM_BOX_DEG
                 act.detail = f'thay tag hop {box_id} - nghieng camera {CAM_BOX_DEG:+.0f} do'
                 return act
-            if self.time_in_state(now) >= BOX_SEARCH_TIMEOUT_S:
+            if h is not None and h > BOX_SEARCH_ALT_M + 0.02:
+                # Ha tu tu tai diem hop toi khi thay tag hop; lech thi dung, keo ve.
+                self.box_phase_s = now          # dong ho het gio tinh tu luc thoi ha
+                lech = math.hypot(snap.position[0] - bx, snap.position[1] - by)
+                if lech > BOX_SEARCH_XY_TOL_M:
+                    act.velocity_up_mps = 0.0
+                    act.detail = f'tim tag hop: ve diem hop, lech {lech * 100:.0f} cm'
+                else:
+                    act.velocity_up_mps = -descent_mps(h)
+                    act.detail = f'ha tai diem hop tim tag hop {box_id}'
+                return act
+            if now - self.box_phase_s >= BOX_SEARCH_TIMEOUT_S:
                 return self._search_failed(now, RETRY_LOITER,
                                            f'khong thay tag hop {box_id} sau '
                                            f'{BOX_SEARCH_TIMEOUT_S:.0f} s')
