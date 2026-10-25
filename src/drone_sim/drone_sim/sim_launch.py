@@ -48,7 +48,9 @@ DRONES = {
                # range_vertical_node THAT (bu nghieng + bu hop hang) thay laser da xu ly cua FC gia.
                range_node=True,
                # Khau I van toc ngang nhu FC that (Gazebo khong co): khu troi tinh do trong tam lech.
-               vel_ki=1.0,
+               # 1,0 -> 3,0 (10-25, gio giat 4 m/s): truoc khi neo Pi chua giu vi tri, ki 1 de gio day
+               # 4 m luc cat canh -> mat tag nha. FC that: vong van toc ki 3 (chinh 10-10).
+               vel_ki=3.0,
                # Khau I van toc dung (FC that giu do cao): drone mang hop 120 g khong chim (sim_fc_bridge).
                # 2,0 lam treo gap nhap nho +-3 cm chu ky ~2 s (cong voi vong ToF 5 Hz cua FSM) - 10-25.
                vel_ki_z=0.7,
@@ -97,6 +99,16 @@ def gz_bridge():
                              for j in GRIPPER_JOINTS],
                            *[f'/X3/gripper/detach_{n}@std_msgs/msg/Empty]gz.msgs.Empty'
                              for n in BOX_NAMES]],
+                output='screen')
+
+
+def sim_wind(mps, dir_deg, gust, seed):
+    """Gio giat (WindEffects, chi world drone_v2) - mac dinh lang."""
+    return Node(package='drone_sim', executable='sim_wind_node', name='sim_wind_node',
+                parameters=[{'wind_mps': ParameterValue(mps, value_type=float),
+                             'wind_dir_deg': ParameterValue(dir_deg, value_type=float),
+                             'wind_gust': ParameterValue(gust, value_type=float),
+                             'wind_seed': ParameterValue(seed, value_type=int)}, SIM_TIME],
                 output='screen')
 
 

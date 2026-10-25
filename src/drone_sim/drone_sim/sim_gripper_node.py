@@ -89,7 +89,9 @@ class SimGripperNode(Node):
         if target == OPEN_RAD:
             for n in self.held:
                 self.pub_detach[n].publish(Empty())
-                self.get_logger().info(f'tha hop {n}')
+                p = self.pose.position if self.pose is not None else None
+                o = f' tai drone ({p.x:.3f}, {p.y:.3f}, {p.z:.3f})' if p is not None else ''
+                self.get_logger().info(f'tha hop {n}{o}')
             self.held = []
         else:
             self.checked = False

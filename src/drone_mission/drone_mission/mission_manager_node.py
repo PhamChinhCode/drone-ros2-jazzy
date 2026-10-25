@@ -10,7 +10,7 @@ import signal
 import threading
 
 import rclpy
-from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, TwistStamped
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, TwistStamped, Vector3Stamped
 from mavros_msgs.msg import DebugValue, PositionTarget, State
 from nav_msgs.msg import Odometry
 from rclpy.experimental import EventsExecutor
@@ -162,6 +162,8 @@ class MissionManagerNode(Node):
         # Yaw mong muon (ENU, rad) cho vong yaw cua position_controller_node (WP5); chi phat khi
         # FSM muon quay mui - im thi controller giu yaw_rate = 0.
         self.pub_yaw = self.create_publisher(Float32, '/mission/yaw', EVENT_QOS)
+        self.pub_landing_offset = self.create_publisher(
+            Vector3Stamped, '/mission/landing_offset', SENSOR_QOS)
         # Goc camera mong muon (do, + ve mui) cho camera_tilt_node - phat moi chu ky.
         self.pub_camera_tilt = self.create_publisher(Float32, '/mission/camera_tilt', EVENT_QOS)
         # Chieu cao nap hop khi dang o pha hop hang, 0 ngoai pha do (range_vertical_node bu laser).
@@ -411,6 +413,12 @@ class MissionManagerNode(Node):
                 self.pub_max_vel.publish(Float32(data=float(action.max_vel_mps)))
         if action.yaw_target is not None:
             self.pub_yaw.publish(Float32(data=float(action.yaw_target)))
+        if action.landing_offset is not None:
+            msg = Vector3Stamped()
+            msg.header.stamp = self.get_clock().now().to_msg()
+            msg.header.frame_id = 'odom'
+            msg.vector.x, msg.vector.y = (float(v) for v in action.landing_offset)
+            self.pub_landing_offset.publish(msg)
         if action.camera_tilt_deg is not None:
             self.pub_camera_tilt.publish(Float32(data=float(action.camera_tilt_deg)))
         self.pub_box_height.publish(Float32(data=float(

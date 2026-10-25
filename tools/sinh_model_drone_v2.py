@@ -75,6 +75,11 @@ def main():
     sdf = sdf.replace('</collision>', '<surface><contact><collide_bitmask>1</collide_bitmask>'
                                       '</contact></surface></collision>')
     sdf = scale_base_mass(sdf)
+    # Gio (WindEffects trong worlds/drone_v2.sdf) chi tac dung len than: cac link nho khong dang ke.
+    sdf, n = re.subn(r"(<link name='base_link'>)",
+                     r'\1\n      <enable_wind>true</enable_wind>', sdf)
+    if n != 1:
+        sys.exit('khong thay link base_link')
     os.makedirs(os.path.join(RA, 'meshes'), exist_ok=True)
     dau, _, than = sdf.partition('\n')        # dong <?xml ...?> phai dung dau file
     with open(os.path.join(RA, 'model.sdf'), 'w', encoding='utf-8') as f:

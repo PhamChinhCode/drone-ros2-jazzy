@@ -28,7 +28,7 @@ import signal
 import threading
 
 import rclpy
-from geometry_msgs.msg import PoseStamped, TwistStamped
+from geometry_msgs.msg import PoseStamped, TwistStamped, Vector3Stamped
 from mavros_msgs.msg import PositionTarget
 from rcl_interfaces.msg import SetParametersResult
 from nav_msgs.msg import Odometry
@@ -135,6 +135,8 @@ class PositionControllerNode(Node):
         self.max_vel_stamp_s = None
         self.landing_target = None
         self.landing_stamp_s = None
+        self.landing_offset = None
+        self.landing_offset_stamp_s = None
         self.active_source = (SOURCE_NONE, SOURCE_NONE)
         self.ramp = SetpointRamp(self.get_parameter('ramp_duration_s').value)
         self.mission_stamp_s = None
@@ -157,6 +159,10 @@ class PositionControllerNode(Node):
         # Pose marker da xac thuc ID tu landing_target_bridge_node (P1).
         self.create_subscription(
             PoseStamped, '/landing_target/pose', self.on_landing_target, SENSOR_QOS)
+        # Diem bam = tag + do lech nay (khung ban do, m) - tha hang tren bai co huong: drone dung tren
+        # diem hop, tag to o truoc 0,30 m (mission_fsm._drop_descend). Im / qua han = bam tam tag.
+        self.create_subscription(
+            Vector3Stamped, '/mission/landing_offset', self.on_landing_offset, SENSOR_QOS)
 
         self.create_subscription(MissionState, '/mission/state', self.on_mission_state, EVENT_QOS)
         # Chi chot moc vi tri khi odom da NEO theo bang tag - truoc do vi tri se nhay khi neo.
@@ -235,6 +241,10 @@ class PositionControllerNode(Node):
     def on_landing_target(self, msg):
         self.landing_target = msg
         self.landing_stamp_s = self.get_clock().now().nanoseconds / 1e9
+
+    def on_landing_offset(self, msg):
+        self.landing_offset = (msg.vector.x, msg.vector.y)
+        self.landing_offset_stamp_s = self.get_clock().now().nanoseconds / 1e9
 
     def on_mission_state(self, msg):
         del msg
@@ -319,6 +329,13 @@ class PositionControllerNode(Node):
             xy = SOURCE_LANDING
             tag = self.landing_target.pose.position
             errors[SOURCE_LANDING] = (tag.x, tag.y)
+            if (self.odom is not None and self.landing_offset_stamp_s is not None
+                    and now_s - self.landing_offset_stamp_s <= VELOCITY_STALE_S):
+                # Can drone di toi tag + do lech: sai so = vi tri tag (than) + do lech quay ve than.
+                q = self.odom.pose.pose.orientation
+                yaw_o = math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+                off = world_to_body(self.landing_offset, yaw_o)
+                errors[SOURCE_LANDING] = (tag.x + off[0], tag.y + off[1])
 
         # Giu cho mac dinh (hold.py): truc ngang / yaw khong ai ra lenh thi chot va giu.
         odom_ok = self.odom_stamp_s is not None and now_s - self.odom_stamp_s <= ODOM_STALE_S

@@ -33,6 +33,7 @@ setup(
             'sim_tag_node = drone_sim.sim_tag_node:main',
             'sim_camera_view_node = drone_sim.sim_camera_view_node:main',
             'sim_gripper_node = drone_sim.sim_gripper_node:main',
+            'sim_wind_node = drone_sim.sim_wind_node:main',
             'step_test = drone_sim.step_test:main',
         ],
     },

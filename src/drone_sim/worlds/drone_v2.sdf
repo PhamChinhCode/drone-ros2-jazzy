@@ -25,6 +25,21 @@
       filename="gz-sim-user-commands-system"
       name="gz::sim::systems::UserCommands">
     </plugin>
+    <!-- Gio (sim_wind_node day vector gio giat qua /world/drone_tune/wind, mac dinh lang): luc tren
+         link co enable_wind (chi base_link, tools/sinh_model_drone_v2.py) = m x k x (v_gio - v_link).
+         k 0,08: than 1,47 kg o gio 5 m/s ~0,6 N = luc can 1/2 rho Cd A v^2 voi Cd A ~0,04 m^2 (khung
+         F450 + Pi + pin nhin ngang). time_for_rise ngan: hinh dang giat do node quyet dinh. -->
+    <plugin
+      filename="gz-sim-wind-effects-system"
+      name="gz::sim::systems::WindEffects">
+      <force_approximation_scaling_factor>0.08</force_approximation_scaling_factor>
+      <horizontal>
+        <magnitude><time_for_rise>0.2</time_for_rise></magnitude>
+        <direction><time_for_rise>0.2</time_for_rise></direction>
+      </horizontal>
+      <vertical><time_for_rise>0.2</time_for_rise></vertical>
+    </plugin>
+    <wind><linear_velocity>0 0 0</linear_velocity></wind>
     <plugin
       filename="gz-sim-sensors-system"
       name="gz::sim::systems::Sensors">

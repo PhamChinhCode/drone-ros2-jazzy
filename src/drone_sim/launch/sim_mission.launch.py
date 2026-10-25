@@ -31,7 +31,8 @@ from drone_sim.sim_launch import (DRONES, SHARE, TAGS_YAML, camera_pipeline, cam
                                   camera_view, controller_node, gazebo, gcs_link, gripper_node,
                                   gui_follow, range_vertical,
                                   gz_bridge, landing_bridge, marker_republisher,
-                                  sim_fc_bridge, sim_gripper, sim_tag, telemetry_aggregator)
+                                  sim_fc_bridge, sim_gripper, sim_tag, sim_wind,
+                                  telemetry_aggregator)
 
 CONFIG = os.path.join(get_package_share_directory('drone_bringup'), 'config')
 SIM_TIME = {'use_sim_time': True}
@@ -55,7 +56,10 @@ def theo_drone(context):
                       drone=drone),
         camera_tilt(drone),
         *([range_vertical()] if d['range_node'] else []),
-        *([sim_gripper(d['boxes'])] if d['gripper'] else []),
+        *([sim_gripper(d['boxes']),
+           sim_wind(*(LaunchConfiguration(k) for k in ('wind_mps', 'wind_dir_deg', 'wind_gust',
+                                                       'wind_seed')))]
+          if d['gripper'] else []),
         gui_follow(d['model'], IfCondition(LaunchConfiguration('gui'))),
         Node(package='drone_mission', executable='mission_manager_node',
              name='mission_manager_node',
@@ -83,6 +87,12 @@ def generate_launch_description():
         DeclareLaunchArgument('camera', default_value='true'),
         # Cua so xem anh camera (goc servo, trang thai, tag) - chi co anh khi camera:=true.
         DeclareLaunchArgument('camera_view', default_value='true'),
+        # Gio giat that bang luc (WindEffects, chi drone:=v2): toc do trung binh m/s, huong THOI TOI
+        # (ENU do, 0 dong 90 bac), do giat (ti le), seed. Vd wind_mps:=4 wind_dir_deg:=135.
+        DeclareLaunchArgument('wind_mps', default_value='0.0'),
+        DeclareLaunchArgument('wind_dir_deg', default_value='0.0'),
+        DeclareLaunchArgument('wind_gust', default_value='0.35'),
+        DeclareLaunchArgument('wind_seed', default_value='0'),
         # Sai so van toc FC gia lap (m/s, m/s, do/s) - thu giu vi tri / giu huong cua Pi.
         DeclareLaunchArgument('drift_vx', default_value='0.0'),
         DeclareLaunchArgument('drift_vy', default_value='0.0'),
