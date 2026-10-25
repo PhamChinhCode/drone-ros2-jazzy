@@ -1109,10 +1109,12 @@ class MissionFsm:
 
         if self.last_gripper_command_s is None and snap.position is not None:
             lech = math.hypot(snap.position[0] - xy[0], snap.position[1] - xy[1])
-            if dong and snap.target_offset_m is not None:
-                # Con thay tag hop: lech THAT tu tag. box_xy (trung vi cac lan do tu xa, than nghieng
-                # trong gio) sai toi 15 cm -> huy nham lan gap dang dung tam (mo phong 10-25).
-                lech = snap.target_offset_m
+            if dong and snap.box_obs is not None:
+                # Con thay tag hop: vi tri EKF HIEN TAI so voi tam hop vua do. box_xy (trung vi cac lan
+                # do tu xa) sai toi 15 cm; lech tuong doi tu tag thi tre theo xu ly anh - drone lac
+                # trong gio bao 3 cm trong khi that 10 cm, kep hut (mo phong 10-25).
+                lech = math.hypot(snap.position[0] - snap.box_obs[0],
+                                  snap.position[1] - snap.box_obs[1])
             tol, cho = ((GRIP_CENTER_TOL_M, GRIP_CENTER_WAIT_S) if dong
                         else (DROP_RELEASE_TOL_M, DROP_RELEASE_WAIT_S))
             # Gap: chi dong khi da xuong toi GRIP_CLOSE_M (con cao thi ngon kep sat mep nap).

@@ -1444,9 +1444,19 @@ def test_tha_van_bam_tag_luc_cho_mo_va_khong_tha_mu_khi_troi_xa():
     assert act.velocity_up_mps > 0.0                        # leo len san an toan de can lai
 
 
-def test_gap_dung_lech_tu_tag_hop_khi_con_thay():
-    """Gio 10-25: box_xy do tu xa sai 15 cm, EKF bao lech 17 cm trong khi tag hop ngay duoi (1 cm)."""
+def test_gap_dung_tam_hop_vua_do_khi_con_thay():
+    """Gio 10-25: box_xy do tu xa sai 15 cm - con thay tag hop thi so EKF voi tam hop VUA do."""
     fsm = fsm_dang_gap()
     bx, by = fsm._box_point(fsm.current_waypoint())
-    act = fsm.step(gap_snap(5.5, position=(bx + 0.17, by, 0.25), target_offset_m=0.01))
+    act = fsm.step(gap_snap(5.5, position=(bx + 0.17, by, 0.25), target_offset_m=0.01,
+                            box_obs=(bx + 0.16, by)))
     assert act.gripper_command == 'close'
+
+
+def test_gap_khong_tin_lech_tuong_doi_tre():
+    """Gio 10-25: drone lac, tag (tre) bao lech 1 cm nhung EKF cach tam hop vua do 10 cm - cho."""
+    fsm = fsm_dang_gap()
+    bx, by = fsm._box_point(fsm.current_waypoint())
+    act = fsm.step(gap_snap(5.5, position=(bx + 0.10, by, 0.25), target_offset_m=0.01,
+                            box_obs=(bx, by)))
+    assert act.gripper_command == ''

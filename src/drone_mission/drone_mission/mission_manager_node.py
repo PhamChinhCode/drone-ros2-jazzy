@@ -129,6 +129,8 @@ class MissionManagerNode(Node):
         # Pose tag da xac thuc ID (base_level: than bo nghieng) - FSM chi can do lech ngang.
         self.create_subscription(
             PoseStamped, '/landing_target/pose', self.on_landing_target_pose, SENSOR_QOS)
+        self.create_subscription(
+            PoseStamped, '/landing_target/world', self.on_landing_target_world, SENSOR_QOS)
         self.create_subscription(GripperStatus, '/gripper/status', self.on_gripper, EVENT_QOS)
         # Tu the bai (tam + huong) DO tu tag - landing_target_bridge_node, cho cong G / truc bai.
         self.create_subscription(
@@ -269,13 +271,15 @@ class MissionManagerNode(Node):
     def on_landing_target_pose(self, msg):
         self.target_offset_m = math.hypot(msg.pose.position.x, msg.pose.position.y)
         self.target_stamp_s = self.now_s()
-        # Dang bam tag HOP: quy ve odom (base_level cung huong mui voi base_link) - FSM giu dung tam
-        # hop do duoc khi tag ra khoi khung (ha mu, gap).
-        if self.fsm.state == mission_fsm.FINAL_APPROACH and self.position is not None:
-            x, y = msg.pose.position.x, msg.pose.position.y
-            c, s = math.cos(self.yaw), math.sin(self.yaw)
-            self.box_obs = (self.position[0] + c * x - s * y, self.position[1] + s * x + c * y)
-            self.box_stamp_s = self.target_stamp_s
+
+    def on_landing_target_world(self, msg):
+        """Dang bam tag HOP: tam hop trong odom do tai DUNG luc chup anh (bridge noi suy TF) - FSM
+        giu dung tam hop khi tag ra khoi khung va so voi vi tri EKF hien tai de quyet dinh kep.
+        Truoc 10-25 ghep pose tuong doi voi vi tri / yaw MOI NHAT: lech toi 10 cm khi drone lac
+        trong gio, kep hut."""
+        if self.fsm.state in (mission_fsm.FINAL_APPROACH, mission_fsm.ACTUATE_GRIPPER):
+            self.box_obs = (msg.pose.position.x, msg.pose.position.y)
+            self.box_stamp_s = self.now_s()
 
     def pad_key(self):
         return (self.fsm.mission_id, self.fsm.current_wp_index)

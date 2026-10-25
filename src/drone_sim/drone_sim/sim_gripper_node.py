@@ -122,7 +122,13 @@ class SimGripperNode(Node):
                 threading.Thread(target=self.swap_box, args=(n, tag, x, y, yaw),
                                  daemon=True).start()
                 return
-        self.get_logger().warn('dong kep nhung khong co hop giua hai ham')
+        ly_do = ''
+        for n, (bx, by, byaw, _) in self.boxes.items():
+            d = (bx - p.x, by - p.y, -p.z)
+            body = tuple(sum(r[k][i] * d[k] for k in range(3)) for i in range(3))
+            ly_do += (f' | hop {n}: than ({body[0] * 100:.1f}, {body[1] * 100:.1f}, '
+                      f'{body[2] * 100:.1f}) cm, lech goc {math.degrees(byaw - yaw):.0f} do')
+        self.get_logger().warn(f'dong kep nhung khong co hop giua hai ham{ly_do}')
 
     def gz(self, service, reqtype, req):
         world = self.get_parameter('world').value

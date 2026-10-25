@@ -21,6 +21,8 @@ Hai loai tag (docs/ke_hoach_camera_servo_gap_hang.md, 2026-10-22):
     tag do de controller dat co cau gap (tam drone) ngay tren hop. Khong suy nguoc ve tam bai nua:
     hop khong con cung mat phang/cach co dinh voi tag to.
 /landing_target/pad_odom: tu the bai do tu TAG TO (tam + huong) cho mission (quay mui, vi tri hop).
+/landing_target/world: vi tri tag expected_marker_id trong world_frame tai DUNG luc chup anh (vi tri
+  hop cho mission - ghep pose tuong doi voi vi tri drone MOI NHAT lech toi 10 cm trong gio, 10-25).
 Servo camera dang quay (/camera/tilt NaN): khong phat gi - TF lap dat chua dung goc that.
 """
 
@@ -41,7 +43,7 @@ from rclpy.time import Time
 from std_msgs.msg import Bool, Float32, Int32
 from tf2_ros import Buffer, TransformException, TransformListener
 
-from drone_control.level_frame import rotate, to_level
+from drone_control.level_frame import to_level
 from drone_control.qos import EVENT_QOS, SENSOR_QOS
 from drone_control.target_tracker import TargetTracker
 from drone_estimation.pad_map import build_pad_map, SMALL_FRAME_SUFFIX, tag_up
@@ -105,6 +107,7 @@ class LandingTargetBridgeNode(Node):
         # trong orientation). mission_manager dung thay huong khai bao cho cong G / truc bai /
         # huong mui khi ha - bai dat quay bat ky huong nao van dung.
         self.pub_pad = self.create_publisher(PoseStamped, '/landing_target/pad_odom', SENSOR_QOS)
+        self.pub_world = self.create_publisher(PoseStamped, '/landing_target/world', SENSOR_QOS)
 
         self.create_timer(1.0 / self.get_parameter('publish_rate_hz').value, self.check_timeout)
 
@@ -133,14 +136,15 @@ class LandingTargetBridgeNode(Node):
         """Ten khung TF cua tag to hoac tag nho; None = khong co trong ban do."""
         return self.tag_frames.get(tag_id) or self.small_frames.get(tag_id)
 
-    def measure(self, tag_id, seen):
-        """(TF target <- tag, vi tri (x, y, z), quaternion) cua tag_id neu dang thay, khong thi None."""
+    def measure(self, tag_id, seen, frame_to=None):
+        """(TF frame_to <- tag, vi tri (x, y, z), quaternion) cua tag_id neu dang thay, khong thi
+        None. frame_to mac dinh target_frame."""
         frame = self.frame_of(tag_id)
         if tag_id not in seen or frame is None:
             return None
         try:
-            t = self.tf_buffer.lookup_transform(self.get_parameter('target_frame').value, frame,
-                                                Time())
+            t = self.tf_buffer.lookup_transform(
+                frame_to or self.get_parameter('target_frame').value, frame, Time())
         except TransformException:
             return None
         tr, rq = t.transform.translation, t.transform.rotation
@@ -160,23 +164,25 @@ class LandingTargetBridgeNode(Node):
             return
         q_wb = (att.rotation.x, att.rotation.y, att.rotation.z, att.rotation.w)
         m = self.measure(self.expected_id, seen)
-        if m is not None:
-            self.publish_landing(m, q_wb)
+        if m is not None and self.publish_landing(m, q_wb):
+            w = self.measure(self.expected_id, seen, self.get_parameter('world_frame').value)
+            if w is not None:
+                self.publish_world(w)
         pad_id = self.approach_id
         if pad_id not in self.tag_frames:
             pad_id = (self.expected_id - self.small_offset if self.expected_id in self.small_frames
                       else self.expected_id)
         if pad_id in self.tag_frames:
-            m = self.measure(pad_id, seen)
+            m = self.measure(pad_id, seen, self.get_parameter('world_frame').value)
             if m is not None:
-                self.publish_pad(m, q_wb, att.translation)
+                self.publish_pad(m)
 
     def publish_landing(self, m, q_wb):
         t, p, q = m
         stamp = Time.from_msg(t.header.stamp)
         age_s = self.now_s() - stamp.nanoseconds / 1e9
         if stamp == self.last_tf_stamp or age_s > self.tracker.timeout_s:
-            return      # TF cu hoac da dung - khong phat lai gia tri cu (nguyen tac o dau file)
+            return False    # TF cu hoac da dung - khong phat lai gia tri cu (nguyen tac o dau file)
         self.last_tf_stamp = stamp
         pos, quat = to_level(q_wb, p, q)
         out = PoseStamped()
@@ -187,23 +193,35 @@ class LandingTargetBridgeNode(Node):
          out.pose.orientation.w) = quat
         self.pub_target.publish(out)
         self.publish_event(self.tracker.seen(self.now_s()))
+        return True
 
-    def publish_pad(self, m, q_wb, base_in_world):
-        """Tam bai + huong "tren" DO DUOC trong khung the gioi (yaw la ban gia dinh dung)."""
+    def publish_world(self, m):
+        """Vi tri tag dang bam trong world_frame (TF noi suy ca chuoi tai luc chup, nhu publish_pad)."""
+        t, p, _ = m
+        out = PoseStamped()
+        out.header.stamp = t.header.stamp
+        out.header.frame_id = self.get_parameter('world_frame').value
+        out.pose.position.x, out.pose.position.y, out.pose.position.z = p
+        out.pose.orientation.w = 1.0
+        self.pub_world.publish(out)
+
+    def publish_pad(self, m):
+        """Tam bai + huong "tren" DO DUOC trong khung the gioi (yaw la ban gia dinh dung).
+
+        m tra thang world <- tag: TF noi suy CA chuoi odom -> base_link -> camera tai DUNG luc
+        chup anh. Truoc 10-25 ghep tag (luc chup) voi vi tri / tu the drone MOI NHAT: drone di
+        chuyen trong do tre xu ly anh -> tam bai dao dong +-3 cm theo van toc (mo phong)."""
         t, p, q = m
         stamp = Time.from_msg(t.header.stamp)
         if stamp == self.last_pad_stamp or self.now_s() - stamp.nanoseconds / 1e9 > 0.5:
             return
         self.last_pad_stamp = stamp
-        c = rotate(q_wb, p)
-        up = rotate(q_wb, tag_up(q))
+        up = tag_up(q)
         yaw = math.atan2(up[1], up[0])
         out = PoseStamped()
         out.header.stamp = t.header.stamp
         out.header.frame_id = self.get_parameter('world_frame').value
-        out.pose.position.x = base_in_world.x + c[0]
-        out.pose.position.y = base_in_world.y + c[1]
-        out.pose.position.z = base_in_world.z + c[2]
+        out.pose.position.x, out.pose.position.y, out.pose.position.z = p
         out.pose.orientation.z, out.pose.orientation.w = math.sin(yaw / 2), math.cos(yaw / 2)
         self.pub_pad.publish(out)
 
