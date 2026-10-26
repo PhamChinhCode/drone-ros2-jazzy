@@ -1314,3 +1314,41 @@ không restart node. Phát hiện khi viết test cho ABORT. Ngoài phạm vi 5 
 sửa nó phải chạm cả máy trạng thái và cần một đợt test riêng.
 
 **Pytest 171/171.** Mốc các phiên: Phiên 9 **126** · Phiên 10 **133** · Phiên 11 **141** (thêm 8 test gripper) · Phiên 12 **171** (thêm 1 test `ACTION_NONE`, 2 test neo `home`, 6 test `tagmap_crc`, 2 test tương thích dialect A13/A14, 3 test ASCII không dấu, 8 test lệnh RTH/ABORT từ GCS).
+
+## Phiên 13 — 25–26/10/2026: cơ cấu kẹp MG90, gắp – thả trong gió, kiểm đường lệnh thật
+
+### 13.1 Mô phỏng gắp – thả (nhánh `kep-servo-moi`)
+
+Xuất lại URDF Version2.0 với cơ cấu kẹp mới (MG90 + 2 CauNoi + 2 hàm, cơ cấu 4 khâu cắt vòng) và đưa
+vào Gazebo trên ubt: hàm kẹp điều khiển lực PD, hộp 120 g gắn bằng DetachableJoint, gió giật
+(WindEffects, giật ±35 % tốc độ và ±25° hướng). Nhiệm vụ chốt với user: home → gắp ở A → thả ở B
+**không hạ cánh** (hạ tới đáy hộp cách đất ~5 cm, vị trí thả trùng vị trí gắp trên bãi) → home;
+kẹp mở hết cỡ khi không kẹp.
+
+| Vấn đề phát hiện | Sửa |
+|---|---|
+| Hộp che tag to khi hạ thả | căn ở 2 m, vào thẳng điểm hộp, camera +20° neo tag to khi hạ |
+| Pose tag ghép với vị trí drone MỚI NHẤT (trễ xử lý ảnh) → lệch 5–10 cm trong gió | bridge tra TF world ← tag tại đúng lúc chụp (`/landing_target/pad_odom`, `/landing_target/world`) |
+| Bám pose tag tương đối (trễ) lúc gắp → lắc 12–44 cm | giữ EKF tại tâm hộp đo được (`/mission/ekf_xy`), PID `grip` riêng kp 1,5 |
+| Ra lệnh kẹp lúc lệch 3 cm nhưng hàm khép xong lệch 5–6 cm | lệch tính tại vị trí dự đoán lúc hàm khép (vị trí + vận tốc × 0,4 s) |
+| `position_controller` chết (`KeyError 'grip'`) → FC giả KHOÁ, drone trôi khỏi khu bay | sửa tạo PID; FC giả giờ giữ vị trí như POSHOLD của FC thật khi KHOÁ |
+
+Kết quả 25/10: lặng gió, gió 4 m/s hướng 120° và 200° đều gắp – thả – về home (gió 200° cần 3 lần
+thử). Luật an toàn giữ nguyên: **không kẹp mù, không thả mù** — lệch quá ngưỡng thì bay lên làm lại.
+Lưu ý: FC giả không có trễ vận tốc nên gain `grip` 1,5 **chưa chắc dùng được trên FC thật**.
+
+### 13.2 Phần cứng thật (26/10)
+
+- User lắp xong cơ cấu kẹp, đo: **500 µs mở hết cỡ, 2500 µs kẹp vào**. FC đã có `servo_grip_open_us=500`,
+  `servo_grip_close_us=2500` (camera 500..2500), **save seq 7**. Không đổi mặc định trong `fc_config.h`:
+  `param_table_crc32` băm cả giá trị mặc định → nạp firmware sẽ bỏ toàn bộ cấu hình đã lưu.
+- Pi 5 → FC: `MAV_CMD_DO_GRIPPER` qua `/mavros/cmd/command` → **ACCEPTED**, kẹp mở rồi đóng đúng
+  (user xác nhận). Trước đó DENIED vì `OB_EXIT 1 KHOI_DONG` — phải gạt ch8 xuống – lên sau mỗi lần FC bật nguồn.
+- "ACK trễ" hoá ra không trễ: đếm `/uas1/mavlink_sink|source` thấy 1 COMMAND_LONG, 1 ACK, khứ hồi 5 ms.
+  Cảnh báo "Unexpected command" là MAVROS 2.15 tự xử lý một ACK hai lần (vô hại). Mất phản hồi chỉ gặp
+  với `ros2 service call` lúc Pi vừa khởi động, tải nặng (DDS chưa khớp client mới).
+
+### 13.3 Còn lại
+
+Pi vẫn chạy `main` (chưa có phần gắp), `gripper_controller_node` còn `simulate: true`, chưa bay thử với
+cơ cấu kẹp. Danh sách đầy đủ và các bậc bay thử: [viec_can_lam_truoc_bay_thu.md](viec_can_lam_truoc_bay_thu.md).
