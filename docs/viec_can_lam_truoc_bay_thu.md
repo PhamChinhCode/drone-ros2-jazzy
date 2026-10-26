@@ -96,7 +96,9 @@ Mỗi lần bay: ghi rosbag + log QSPI của FC, rút gọn kết quả vào `nh
 
 - [ ] Hiệu chuẩn la bàn IST8310 (FC vẫn dùng QMC).
 - [ ] GPS: fix ngoài trời + `gps_survey` gốc — cần trước khi bay ngoài trời.
-- [ ] Gió 120° (mô phỏng): một lần hạ khẩn cấp vì không thấy lại tag to sau khi gắp — chưa tái hiện được.
+- [x] Mô phỏng hạ khẩn cấp sau khi gắp (không thấy lại tag to / tag 2): LỖI MÔ PHỎNG, sửa 27/10 (`56b1197`) —
+      hộp động gắn lệch 7 cm che ống kính. Gió 200° sau sửa: lượt nào gắp được đều thả và về home;
+      2/4 lượt từ chối kẹp cả 3 lần (lệch 7–8 cm) rồi hạ cánh — giới hạn giữ vị trí trong gió giật 4 m/s.
 - [ ] Gỡ `/etc/sudoers.d/90-pc-nopasswd` trên Pi.
 - [ ] Đo đặc tính vòng vận tốc FC thật (trễ + hằng số thời gian) → đưa vào FC giả Gazebo; sau đó cân nhắc
       bộ quan sát nhiễu gió (ESO) và Smith predictor cho vòng vị trí.
