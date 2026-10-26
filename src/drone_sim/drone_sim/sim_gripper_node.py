@@ -13,11 +13,14 @@ Hop dang kep khong kep lai duoc (hop dong khong con trong danh sach hop tinh).
 
 import math
 import os
-import subprocess
 import tempfile
 import threading
 
 from ament_index_python.packages import get_package_share_directory
+from gz.msgs10.boolean_pb2 import Boolean
+from gz.msgs10.entity_factory_pb2 import EntityFactory
+from gz.msgs10.entity_pb2 import Entity
+from gz.transport13 import Node as GzNode
 from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.node import Node
@@ -69,6 +72,7 @@ class SimGripperNode(Node):
         self.target = OPEN_RAD
         self.checked = True             # da xet kep cho lan dong nay chua
         self.pose = None
+        self.gz_node = GzNode()
         self.pub_joint = {j: self.create_publisher(Float64, f'/X3/gripper/{j}/cmd', RELIABLE_QOS)
                           for j in joint_targets(0.0)}
         self.pub_detach = {n: self.create_publisher(Empty, f'/X3/gripper/detach_{n}', RELIABLE_QOS)
@@ -112,14 +116,11 @@ class SimGripperNode(Node):
             d = (bx - p.x, by - p.y, -p.z)
             body = tuple(sum(r[k][i] * d[k] for k in range(3)) for i in range(3))
             if box_in_jaws(body, byaw - yaw, BOX_HALF, BOX_HEIGHT):
-                # Ham ep hop vao giua: y khung than = 0, mat hop song song ham.
-                c, s = math.cos(yaw), math.sin(yaw)
-                x, y = p.x + c * body[0], p.y + s * body[0]
                 del self.boxes[n]
                 self.held.append(n)
                 self.get_logger().info(f'kep hop {n}: lech ngang {body[1] * 100:.1f} cm, '
                                        f'doc {body[0] * 100:.1f} cm')
-                threading.Thread(target=self.swap_box, args=(n, tag, x, y, yaw),
+                threading.Thread(target=self.swap_box, args=(n, tag, body[0], body[2]),
                                  daemon=True).start()
                 return
         ly_do = ''
@@ -130,23 +131,34 @@ class SimGripperNode(Node):
                       f'{body[2] * 100:.1f}) cm, lech goc {math.degrees(byaw - yaw):.0f} do')
         self.get_logger().warn(f'dong kep nhung khong co hop giua hai ham{ly_do}')
 
-    def gz(self, service, reqtype, req):
+    def gz(self, service, req):
+        """Goi dich vu world qua gz-transport (khong qua CLI `gz service`: khoi dong ~0,5-1 s)."""
         world = self.get_parameter('world').value
-        subprocess.run(['gz', 'service', '-s', f'/world/{world}/{service}',
-                        '--reqtype', reqtype, '--reptype', 'gz.msgs.Boolean', '--timeout', '3000',
-                        '--req', req], check=False, capture_output=True)
+        ok, rep = self.gz_node.request(f'/world/{world}/{service}', req, type(req), Boolean, 3000)
+        if not (ok and rep.data):
+            self.get_logger().error(f'gz {service} that bai')
 
-    def swap_box(self, n, tag, x, y, yaw):
+    def swap_box(self, n, tag, dx, dz):
+        """Hop dong sinh TAI vi tri drone LUC SINH (lech doc dx, day hop duoi drone dz - khung than,
+        do luc kep): DetachableJoint gan theo vi tri tuong doi luc model xuat hien. Truoc 10-27 sinh
+        tai vi tri tinh luc kep - remove + create mat ~1 s, gio 200 do drone troi 10-20 cm -> hop gan
+        lech ngay duoi ong kinh, che camera, drone khong thay lai tag to sau khi gap. Goi gz-transport
+        truc tiep (khong qua CLI) va dat hop theo DUNG tu the drone (ca nghieng) de do lech nho nhat."""
         tex = os.path.join(get_package_share_directory('drone_sim'), 'worlds', 'textures',
                            f'tag36h11_{tag:02d}.png')
         i = BOX_MASS * (2 * (2 * BOX_HALF) ** 2) / 12
         with tempfile.NamedTemporaryFile('w', suffix='.sdf', delete=False) as f:
             f.write(HOP_SDF.format(name=f'hang_{n}', m=BOX_MASS, i=f'{i:.3e}', tex=tex))
-        self.gz('remove', 'gz.msgs.Entity', f'name: "hop_{n}" type: MODEL')
-        self.gz('create', 'gz.msgs.EntityFactory',
-                f'sdf_filename: "{f.name}" name: "hang_{n}"'
-                f' pose: {{position: {{x: {x} y: {y} z: 0}}'
-                f' orientation: {{z: {math.sin(yaw / 2)} w: {math.cos(yaw / 2)}}}}}')
+        self.gz('remove', Entity(name=f'hop_{n}', type=Entity.MODEL))
+        p, q = self.pose.position, self.pose.orientation
+        r = quat_to_mat(q.x, q.y, q.z, q.w)
+        x, y, z = (c + r[k][0] * dx + r[k][2] * dz for k, c in enumerate((p.x, p.y, p.z)))
+        req = EntityFactory(sdf_filename=f.name, name=f'hang_{n}')
+        req.pose.position.x, req.pose.position.y, req.pose.position.z = x, y, z
+        req.pose.orientation.x, req.pose.orientation.y = q.x, q.y
+        req.pose.orientation.z, req.pose.orientation.w = q.z, q.w
+        self.gz('create', req)
+        self.get_logger().info(f'sinh hang_{n} tai ({x:.3f}, {y:.3f}, {z:.3f})')
 
 
 def main(args=None):
