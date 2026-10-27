@@ -118,8 +118,35 @@ Sau bay: rút log QSPI qua USB CDC, chép bag mới nhất trong `~/drone_logs/`
 
 ## 5. Nợ không chặn bay trong nhà
 
-- [ ] Hiệu chuẩn la bàn IST8310 (FC vẫn dùng QMC).
-- [ ] GPS: fix ngoài trời + `gps_survey` gốc — cần trước khi bay ngoài trời.
+- [ ] Hiệu chuẩn la bàn IST8310 — 27/10 đã nạp FC `4044b72` (`MAG_I2C_USE_GPS_MAG 1`, cấu hình giữ nguyên seq 7,
+      sao lưu `param_backup/2026-10-27_truoc_nap_ist8310_toan_bo.txt`); IST8310 chạy (~30 Hz qua MAVROS) nhưng
+      bộ số `mag_*` đang là của QMC → |B| ~0,88 G, **yaw FC sai — KHÔNG bay tới khi hiệu chuẩn xong**.
+- [ ] GPS: fix ngoài trời + đo gốc bãi mới (Pi 5 chưa có gốc: `geo_origin_valid: false`).
+
+### 5a. Quy trình ngoài trời: la bàn IST8310 rồi gốc GPS
+
+Mang: laptop + cáp USB vào FC (COM23) **và bộ chuyển USB-UART1 (COM4, 921600)** — luồng `mode 26` của
+`mag_cal9.py` chỉ ra UART1, không ra USB. Pin lắp, cánh tháo. Bãi trống, cách xe / cột thép / lưới thép ≥ 5 m.
+Pi cần mạng (hotspot) để chạy `gps_survey.py` và nhận bản đồ từ GCS.
+
+La bàn (làm trước — yaw FC là hướng khung bản đồ):
+1. `python tools/mag_cal9.py --port COM4 --seconds 90` (thư mục FCH743_V1.0), xoay chậm cả drone mọi hướng,
+   cả lật ngửa / dựng đứng, tới khi phủ 26/26; dừng yên 2–3 s ở vài tư thế.
+2. Đạt khi: |B| sau hiệu chuẩn ± ≤ 3 %, trục ra `MAP 0,1,2 / SIGN -1,-1,+1` (như 22/09), chúc từ dương ~25–33°.
+3. Gửi các dòng `set mag_...` + `save` qua console, rút pin + USB cho FC khởi động lại.
+4. Kiểm hướng: đặt mũi drone theo la bàn điện thoại Bắc / Đông / Nam / Tây, đọc yaw FC (GCS hoặc
+   `/mavros/imu/data`) — đạt khi lệch ≤ 5° cả 4 hướng.
+
+Gốc GPS (bãi mới):
+5. Chờ fix: `fix_type ≥ 3`, ≥ 10 vệ tinh, `h_acc ≤ 1,5 m` (lần 22/09: 13–20 sv, ~1 m sau vài phút).
+6. Đặt drone sao cho **module GPS nằm ngay trên tâm tag home**, đứng yên, trên Pi:
+   `source ~/ros2_ws/install/setup.bash && python3 ~/gps_survey.py --seconds 180`
+   (script trong repo `scripts/gps_survey.py`) → in lat / lon / alt trung bình + độ lệch chuẩn (mong < 1 m).
+7. GCS, trang thiết kế khu vực: nhập gốc = số vừa đo, `yaw_offset_deg` (north_yaw) = **−1,8°** — khung bản đồ
+   lấy hướng từ yaw FC (Bắc từ, `est_mag_declination_deg 0`) nên north_yaw = độ lệch từ tại chỗ (WMM, như 22/09).
+   Bố trí tag ngoài bãi phải theo đúng hướng Bắc từ như trong thiết kế.
+8. Gửi bản đồ xuống Pi; kiểm `gps_odom_node` log gốc mới, `/gps/pose_odom` gần (0, 0) khi drone trên tag home,
+   cầm drone đi tới tag khác: vị trí GPS lệch vị trí tag ≤ ~1,5 m.
 - [x] Mô phỏng hạ khẩn cấp sau khi gắp (không thấy lại tag to / tag 2): LỖI MÔ PHỎNG, sửa 27/10 (`56b1197`) —
       hộp động gắn lệch 7 cm che ống kính. Gió 200° sau sửa: lượt nào gắp được đều thả và về home;
       2/4 lượt từ chối kẹp cả 3 lần (lệch 7–8 cm) rồi hạ cánh — giới hạn giữ vị trí trong gió giật 4 m/s.
