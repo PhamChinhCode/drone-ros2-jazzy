@@ -121,6 +121,10 @@ Sau bay: rút log QSPI qua USB CDC, chép bag mới nhất trong `~/drone_logs/`
 - [ ] Hiệu chuẩn la bàn IST8310 — 27/10 đã nạp FC `4044b72` (`MAG_I2C_USE_GPS_MAG 1`, cấu hình giữ nguyên seq 7,
       sao lưu `param_backup/2026-10-27_truoc_nap_ist8310_toan_bo.txt`); IST8310 chạy (~30 Hz qua MAVROS) nhưng
       bộ số `mag_*` đang là của QMC → |B| ~0,88 G, **yaw FC sai — KHÔNG bay tới khi hiệu chuẩn xong**.
+      27/10 09:43 hiệu chuẩn ngoài trời bằng rosbag trên Pi (không cắm dây): |B| 0,496 G ± 0,73 %, chúc +32,4°,
+      trục MỚI `MAP 1,0,2 / SIGN -1,+1,+1` (module GPS quay 90° so với 22/09); đã `save` seq 8 + reboot, |B| 0,50 G.
+      Kiểm hướng ngoài trời (từ bag): B +2..+5°, Đ +3,5°, N +9,5°, T +11,7°; trong nhà 10:08 lệch +22° so với điện thoại
+      (yaw FC bám đúng la bàn) → **còn phải kiểm hướng ngoài trời bằng hướng đi GPS** trước khi bay theo GPS.
 - [ ] GPS: fix ngoài trời + đo gốc bãi mới (Pi 5 chưa có gốc: `geo_origin_valid: false`).
 
 ### 5a. Quy trình ngoài trời: la bàn IST8310 rồi gốc GPS
