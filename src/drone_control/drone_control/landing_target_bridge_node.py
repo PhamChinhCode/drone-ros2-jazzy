@@ -20,9 +20,13 @@ Hai loai tag (docs/ke_hoach_camera_servo_gap_hang.md, 2026-10-22):
   - expected_marker_id = ID TAG NHO (id_to + offset): tag dan tren NOC HOP HANG - phat vi tri CHINH
     tag do de controller dat co cau gap (tam drone) ngay tren hop. Khong suy nguoc ve tam bai nua:
     hop khong con cung mat phang/cach co dinh voi tag to.
+    User 10-27: gap BAT KY hop nao o bai lay hang - mong doi tag nho nao thi cung nhan moi tag nho
+    (10-19), khoa vao hop thay DAU TIEN toi khi expected_marker_id doi (moi lan tiep can mot hop, tam
+    hop khong nhay giua hai hop).
 /landing_target/pad_odom: tu the bai do tu TAG TO (tam + huong) cho mission (quay mui, vi tri hop).
 /landing_target/world: vi tri tag expected_marker_id trong world_frame tai DUNG luc chup anh (vi tri
-  hop cho mission - ghep pose tuong doi voi vi tri drone MOI NHAT lech toi 10 cm trong gio, 10-25).
+  hop cho mission - ghep pose tuong doi voi vi tri drone MOI NHAT lech toi 10 cm trong gio, 10-25);
+  orientation = yaw huong "tren" cua tag (mission quay mui theo hop).
 Servo camera dang quay (/camera/tilt NaN): khong phat gi - TF lap dat chua dung goc that.
 """
 
@@ -80,6 +84,7 @@ class LandingTargetBridgeNode(Node):
         self.tilt_moving = False
 
         self.expected_id = -1
+        self.box_id = None      # tag hop dang khoa khi expected_id la tag nho; None = chua thay hop
         # Bai dang TIEP CAN (cong G, truc bai - chua bam tag de ha): chi phat tu the bai, khong
         # phat /landing_target/pose (pose do lam position_controller bo luat dan, bam tag).
         self.approach_id = -1
@@ -120,6 +125,7 @@ class LandingTargetBridgeNode(Node):
             return
         self.publish_event(self.tracker.reset())     # bao mat bam theo ID CU truoc khi doi
         self.expected_id = msg.data
+        self.box_id = None
         self.last_tf_stamp = None
         if msg.data >= 0 and self.frame_of(msg.data) is None:
             self.get_logger().warning(f'tag {msg.data} khong co trong config/tags.yaml')
@@ -163,9 +169,10 @@ class LandingTargetBridgeNode(Node):
         except TransformException:
             return
         q_wb = (att.rotation.x, att.rotation.y, att.rotation.z, att.rotation.w)
-        m = self.measure(self.expected_id, seen)
+        track_id = self.track_id(seen)
+        m = self.measure(track_id, seen)
         if m is not None and self.publish_landing(m, q_wb):
-            w = self.measure(self.expected_id, seen, self.get_parameter('world_frame').value)
+            w = self.measure(track_id, seen, self.get_parameter('world_frame').value)
             if w is not None:
                 self.publish_world(w)
         pad_id = self.approach_id
@@ -176,6 +183,19 @@ class LandingTargetBridgeNode(Node):
             m = self.measure(pad_id, seen, self.get_parameter('world_frame').value)
             if m is not None:
                 self.publish_pad(m)
+
+    def track_id(self, seen):
+        """Tag phat pose: tag to = chinh expected_id; tag nho = hop dang khoa, chua khoa thi khoa
+        hop thay duoc (uu tien expected_id, roi id nho nhat)."""
+        if self.expected_id not in self.small_frames:
+            return self.expected_id
+        if self.box_id is None:
+            hop = sorted(i for i in seen if i in self.small_frames)
+            if not hop:
+                return self.expected_id
+            self.box_id = self.expected_id if self.expected_id in hop else hop[0]
+            self.get_logger().info(f'khoa hop tag {self.box_id} (mong doi tag hop {self.expected_id})')
+        return self.box_id
 
     def publish_landing(self, m, q_wb):
         t, p, q = m
@@ -196,13 +216,16 @@ class LandingTargetBridgeNode(Node):
         return True
 
     def publish_world(self, m):
-        """Vi tri tag dang bam trong world_frame (TF noi suy ca chuoi tai luc chup, nhu publish_pad)."""
-        t, p, _ = m
+        """Vi tri tag dang bam trong world_frame (TF noi suy ca chuoi tai luc chup, nhu publish_pad),
+        orientation = yaw huong "tren" cua tag."""
+        t, p, q = m
+        up = tag_up(q)
+        yaw = math.atan2(up[1], up[0])
         out = PoseStamped()
         out.header.stamp = t.header.stamp
         out.header.frame_id = self.get_parameter('world_frame').value
         out.pose.position.x, out.pose.position.y, out.pose.position.z = p
-        out.pose.orientation.w = 1.0
+        out.pose.orientation.z, out.pose.orientation.w = math.sin(yaw / 2), math.cos(yaw / 2)
         self.pub_world.publish(out)
 
     def publish_pad(self, m):

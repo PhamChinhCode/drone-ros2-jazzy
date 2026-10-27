@@ -43,8 +43,9 @@ DRONES = {
     'v2': dict(world='drone_v2.sdf', model='drone_v2', pivot=[0.09525, -0.018, -0.05218], lens=[0.0, 0.017, -0.0418],
                ground_range_m=0.146, camera_joint_topic='/X3/camera_tilt/cmd',
                # Laser theo tia (sim_tof): MTF-01 0,10 m sau tam, 0,009 m duoi FC (URDF); hop hang 12 cm
-               # [x, y, yaw] - PHAI khop hop_a trong worlds/drone_v2.sdf (bai B trong de tha).
-               tof_xyz=[-0.10, 0.0, -0.009], boxes=[10.0, -0.30, 1.5708],
+               # [x, y, yaw] - PHAI khop hop_a trong worlds/drone_v2.sdf (bai B trong de tha). Hop phia
+               # "tren" bai A, xoay 120 do so voi bai (10-27): drone phai quay mui 30 do moi kep duoc.
+               tof_xyz=[-0.10, 0.0, -0.009], boxes=[10.0, 0.30, 3.6652],
                # range_vertical_node THAT (bu nghieng + bu hop hang) thay laser da xu ly cua FC gia.
                range_node=True,
                # Khau I van toc ngang nhu FC that (Gazebo khong co): khu troi tinh do trong tam lech.

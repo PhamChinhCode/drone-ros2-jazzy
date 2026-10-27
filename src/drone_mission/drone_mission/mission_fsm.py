@@ -183,6 +183,12 @@ GRIP_CENTER_WAIT_S = 2.0
 # Lech tinh tai luc ham DONG XONG, khong phai luc ra lenh: chu ky FSM 0,2 s + servo ~0,3 s. Gio giat lac
 # drone ~0,2 m/s -> ra lenh luc lech 3 cm, ham khep luc lech 5-6 cm, kep hut (mo phong 10-25).
 GRIP_CLOSE_LEAD_S = 0.4
+# Huong kep (user 10-27): hop vuong nen cu 90 do lai co mot cach kep - drone quay mui ve cach GAN huong
+# bai nhat (|quay| <= 45 do), khong quay theo dung huong tag hop (hop xoay 90 / 180 do thi khong quay).
+# Chi ha / kep khi mui lech huong kep duoi GRIP_YAW_TOL_DEG; het cho ma lech hon GRIP_YAW_MAX_DEG thi
+# bo lan gap (mo phong: ham om duoc hop lech toi 20 do - gripper_sim.box_in_jaws).
+GRIP_YAW_TOL_DEG = 5.0
+GRIP_YAW_MAX_DEG = 12.0
 # Tam hop chi lay tu cac lan do khi tag hop con TRON khung (ToF tren nguong doi camera + bien nay, hoac
 # da o goc CAM_GRIP_DEG); lay trung vi BOX_OBS_N lan gan nhat. Lan do sat mep khung lech toi 5 cm (mo
 # phong 10-22).
@@ -191,7 +197,8 @@ BOX_OBS_N = 15
 # FINAL_APPROACH (lay hang): ha theo tag to toi muc nay, lui ve vi tri hop khai bao, tim tag tren hop;
 # khong thay trong BOX_SEARCH_TIMEOUT_S la mot lan that bai (user 10-22). 0,6 -> 0,80 (user 10-22,
 # hinh hoc URDF Version2.0): dung tren hop, tag to phia mui con TRON khung (bien 6 do cho than nghieng
-# khi phanh), tag hop ~50 px. O 0,6 m tag to da bi cat mep -> mat neo EKF dung luc tim hop.
+# khi phanh), tag hop ~50 px. O 0,6 m tag to da bi cat mep -> mat neo EKF dung luc tim hop. Tu 10-27 hop
+# o phia "tren" tag to: tag to o phia DUOI, cach camera ~0,39 m (26 do o 0,8 m) - van trong khung.
 BOX_SEARCH_ALT_M = 0.80
 BOX_SEARCH_TIMEOUT_S = 10.0     # tinh tu luc thoi ha (toi BOX_SEARCH_ALT_M / thay hop)
 # Bai co huong (user 10-25): thay tag to la vao THANG diem hop o do cao tim tag (ALIGN_HEADING), roi ha
@@ -205,7 +212,7 @@ BOX_CAM_SWITCH_M = 0.32
 # Tha hang (user 10-25): KHONG ha canh, va KHONG ha tren tam tag to: hop treo duoi tam drone se che
 # tag ngay duoi camera, cang xuong cang che (mat neo EKF dung luc can chinh xac nhat). Can tam + quay
 # mui theo bai o do cao tim tag (2 m, hop che rat it), dich ngang ngay o do cao do ve diem hop (tam bai
-# DO tu tag + box_forward_m theo huong bai = dung cho lay hop o bai khac) roi ha thang dung toi day hop
+# DO tu tag + drop_forward_m theo huong bai) roi ha thang dung toi day hop
 # cach dat ~5 cm moi mo kep. Camera nghieng ve mui: tag to o truoc tam 0,30 m, hop o SAU ong kinh -> o
 # DROP_HOVER_M tag nam 16..50 do truoc, trong khung -14..54 do cua camera +20 do, khong bi hop che.
 DROP_HOVER_M = GRIP_HOVER_M + 0.05
@@ -245,6 +252,14 @@ CAM_FOR_STATE = {IDLE: CAM_DOWN_DEG, TAKEOFF: CAM_DOWN_DEG, ENROUTE: CAM_ENROUTE
 def wrap(a):
     """Goc ve (-pi, pi]."""
     return math.atan2(math.sin(a), math.cos(a))
+
+
+def grip_yaw(box_yaws, ref):
+    """Yaw mui de kep hop vuong: trung binh tron cac yaw tag hop theo chu ky 90 do, chon cach kep gan
+    ref nhat - ket qua lech ref <= 45 do."""
+    s = sum(math.sin(4.0 * (a - ref)) for a in box_yaws)
+    c = sum(math.cos(4.0 * (a - ref)) for a in box_yaws)
+    return wrap(ref + math.atan2(s, c) / 4.0)
 
 
 def descent_mps(range_m):
@@ -354,7 +369,8 @@ class Snapshot:
     velocity_xy: tuple = None
     # Goc camera da on dinh (do, + ve mui) tu camera_tilt_node; None = servo dang quay / khong biet.
     camera_tilt_deg: float = CAM_DOWN_DEG
-    # Tam hop (x, y) trong odom DO tu tag hop (mission_manager_node); None = khong thay.
+    # Tam hop (x, y[, yaw huong "tren" tag hop]) trong odom DO tu tag hop (mission_manager_node);
+    # None = khong thay.
     box_obs: tuple = None
     # Tag to cua bai dang toi vua duoc do (pad_odom con moi) - ALIGN_HEADING khi gap/tha khong bam
     # tam tag (dung tren diem hop) nen khong co target_offset_m, dung co nay de biet con thay tag.
@@ -373,10 +389,15 @@ class Params:
     # Pi dieu khien huong mui (WP5): phat yaw mong muon, bat ALIGN_HEADING cho bai co huong. Tat thi
     # mui giu nguyen va bai nao cung ha thang dung, khong quay theo bai.
     yaw_control: bool = False
-    # Tag nho tren hop hang (tags.yaml pad_small_tag_*): id = id_to + offset, tam hop cach tam tag to
-    # box_forward_m theo huong bai (am = ve phia "duoi").
+    # Tag nho tren hop hang (tags.yaml pad_small_tag_*): id = id_to + offset. Lay hang (user 10-27):
+    # hop dat BAT KY dau phia "TREN" tag to (khong de len tag) - box_forward_m chi la diem BAT DAU tim
+    # hop theo huong bai (duong = phia "tren": drone chi tien toi, vet ToF / flow sau tam khong quet
+    # qua hop); thay hop roi thi bam vi tri DO.
     small_id_offset: int = 10
-    box_forward_m: float = -0.30
+    box_forward_m: float = 0.30
+    # Tha hang: diem tha cach tam tag to drop_forward_m theo huong bai (am = phia "duoi"). Giu phia
+    # "duoi": camera nghieng ve mui (CAM_DROP_DEG) moi thay tag to ma hop dang treo khong che.
+    drop_forward_m: float = -0.30
     box_cam_switch_m: float = BOX_CAM_SWITCH_M
 
 
@@ -449,6 +470,7 @@ class MissionFsm:
     reanchor_id: int = None
     box_xy: tuple = None            # tam hop DO duoc (trung vi) - FINAL_APPROACH -> ACTUATE_GRIPPER
     box_obs_list: list = field(default_factory=list)
+    box_yaws: list = field(default_factory=list)   # yaw tag hop BOX_OBS_N lan do gan nhat
     box_takeoff: bool = False       # TAKEOFF ngay sau khi gap: vet ToF con quet qua nap hop
     # Quay mui tai cho dau chang ENROUTE: diem x, y giu trong luc quay; da quay xong chua.
     enroute_hold: tuple = None
@@ -563,6 +585,7 @@ class MissionFsm:
             self.box_phase, self.box_phase_s = 'search', now_s
             self.box_xy = None
             self.box_obs_list = []
+            self.box_yaws = []
         if new_state in (ENROUTE, IDLE):
             self.box_takeoff = False
             self.tag_lost_since = None
@@ -857,13 +880,18 @@ class MissionFsm:
             self.anchor_climb_target_m = min(snap.range_m + self.params.anchor_margin_m,
                                              self.params.takeoff_alt_m)
 
-        # Camera da dung yen o goc dang ra lenh (sau gap la CAM_DROP_DEG - xem _xong_hanh_dong).
+        # Camera da dung yen o goc dang ra lenh (sau gap la CAM_DOWN_DEG - xem _xong_hanh_dong).
         if (self.reanchor_id is not None and snap.target_offset_m is not None
                 and self._cam_at(snap, self.cam_cmd)):
             self.reanchor_id = None             # thay lai tag to sau khi gap: EKF da neo lai
 
         if self.anchor_climb_target_m is not None:
-            if snap.range_m >= self.anchor_climb_target_m and self.reanchor_id is not None:
+            if self.reanchor_id is not None and snap.range_m < self.params.takeoff_alt_m:
+                # User 10-27: gap xong LEO THANG tim lai tag to (o SAU hop, hop dang kep che tia nhin
+                # xien) - cang cao tag cang gan thang duoi camera, toi takeoff_alt_m thi cho.
+                return Action(velocity_up_mps=TAKEOFF_CLIMB_MPS,
+                              detail=f'leo tim lai tag to {self.reanchor_id} de neo lai EKF')
+            if self.reanchor_id is not None:
                 # User 10-22: gap bang tag nho xong phai neo lai EKF bang tag to roi moi bay tiep.
                 if self.ceiling_wait_since_s is None:
                     self.ceiling_wait_since_s = snap.now_s
@@ -974,7 +1002,7 @@ class MissionFsm:
     def _step_align_heading(self, snap):
         """Treo tren tam bai (bam tag to), quay mui = huong bai roi moi ha thang dung.
 
-        Gap / tha (user 10-25): vao THANG diem hop (tam bai DO + box_forward_m) va quay mui o do, giu
+        Gap / tha (user 10-25): vao THANG diem hop (_box_point) va quay mui o do, giu
         theo EKF da neo tag to (khong bam tam tag), xong thi ha ngay tai diem hop: gap -> FINAL_APPROACH,
         tha -> ACTUATE_GRIPPER."""
         now = snap.now_s
@@ -1094,7 +1122,8 @@ class MissionFsm:
         if dong:
             # Giu EKF tai tam hop, van DO tag hop (camera -36 do con thay o do cao gap) de cap nhat
             # tam hop lien tuc: bam pose tag tuong doi (tre) thi gio giat lac drone 12-44 cm (10-25).
-            giu.update(expected_marker_id=wp.marker_id + self.params.small_id_offset, ekf_xy=True)
+            giu.update(expected_marker_id=wp.marker_id + self.params.small_id_offset, ekf_xy=True,
+                       yaw_target=self._grip_yaw(wp))
         else:
             # Tha: bam tag to voi do lech toi diem hop suot ca luc ha LAN luc cho mo kep (chi giu EKF
             # luc cho thi gio day troi 28 cm, mo phong 10-25).
@@ -1133,13 +1162,18 @@ class MissionFsm:
             cao = (dong and snap.range_m is not None
                    and snap.range_m > GRIP_CLOSE_M + GRIP_STOP_LEAD_M)
             het_cho = self.time_in_state(now) >= self.params.pre_dropoff_settle_s + cho
-            if (lech > tol or cao) and not het_cho:
-                return Action(velocity_up_mps=vz, detail=f'cho vao tam hop: lech {lech * 100:.1f} cm',
-                              **giu)
+            xoay = self._grip_yaw_err_deg(snap, wp) if dong else 0.0
+            if (lech > tol or cao or xoay > GRIP_YAW_TOL_DEG) and not het_cho:
+                return Action(velocity_up_mps=vz, detail=f'cho vao tam hop: lech {lech * 100:.1f} cm, '
+                                                         f'mui lech {xoay:.0f} do', **giu)
             if dong and lech > GRIP_CAPTURE_MAX_M:
                 # Khong bao gio dong mu: ham khong om duoc hop lech qua muc nay - bay len lam lai.
                 return self._search_failed(now, RETRY_LOITER,
                                            f'lech tam hop {lech * 100:.0f} cm sau {cho:.0f} s cho - '
+                                           f'khong kep')
+            if xoay > GRIP_YAW_MAX_DEG:
+                return self._search_failed(now, RETRY_LOITER,
+                                           f'mui lech huong kep {xoay:.0f} do sau {cho:.0f} s cho - '
                                            f'khong kep')
             if not dong and lech > DROP_RELEASE_MAX_M:
                 # Khong tha mu (gio 10-25: troi 28 cm o do cao tha, het cho tha lech 24 cm - ra ngoai
@@ -1163,6 +1197,23 @@ class MissionFsm:
         xs = sorted(o[0] for o in self.box_obs_list)
         ys = sorted(o[1] for o in self.box_obs_list)
         self.box_xy = (xs[len(xs) // 2], ys[len(ys) // 2])
+        if len(snap.box_obs) > 2:
+            self.box_yaws = (self.box_yaws + [snap.box_obs[2]])[-BOX_OBS_N:]
+
+    def _grip_yaw(self, wp):
+        """Yaw mui khi lay hang: cach kep hop (moi 90 do) gan huong bai nhat; chua do duoc huong hop
+        thi giu huong bai (_hold_yaw). None = Pi khong dieu khien mui."""
+        ref = self._hold_yaw(wp)
+        if ref is None or not self.box_yaws:
+            return ref
+        return grip_yaw(self.box_yaws, ref)
+
+    def _grip_yaw_err_deg(self, snap, wp):
+        """|mui - huong kep| (do); 0 khi khong co huong kep hoac chua co yaw (khong chan)."""
+        target = self._grip_yaw(wp)
+        if target is None or snap.yaw is None:
+            return 0.0
+        return math.degrees(abs(wrap(target - snap.yaw)))
 
     def _drop_descend(self, snap, wp, xy, giu):
         """Tha: GIU do cao luc vao trang thai (theo ToF - chim thi leo lai, user 10-25: hop khong duoc
@@ -1224,13 +1275,11 @@ class MissionFsm:
             # Dang nam dat: _step_land thay landed se DISARM ngay, khong xuong them.
             return self.transition(EMERGENCY_LAND, now,
                                    f'xong {viec} tai tag {wp.marker_id} - het ke hoach, disarm')
-        act = self.transition(TAKEOFF, now, f'xong {viec} tai tag {wp.marker_id} - '
-                                            f'cat canh toi diem {self.current_wp_index}')
-        if wp.action == ACTION_PICKUP:
-            # Tag to o truoc diem hop 0,30 m, hop treo duoi than che tam nhin thang xuong: nghieng camera
-            # ve mui de thay lai tag to neo EKF (gio 10-25: camera thang xuong khong thay sau 10 s).
-            self.cam_cmd = CAM_DROP_DEG
-        return act
+        # Gap xong: hop phia "tren" tag to (10-27) nen tag to o SAU duoi; camera nghieng ve duoi chi thay
+        # hop dang kep (mo phong 10-27). TAKEOFF de camera thang xuong (CAM_FOR_STATE) va leo thang tim
+        # lai tag to (_step_takeoff_core).
+        return self.transition(TAKEOFF, now, f'xong {viec} tai tag {wp.marker_id} - '
+                                             f'cat canh toi diem {self.current_wp_index}')
 
     def _step_land(self, snap):
         now = snap.now_s
@@ -1322,13 +1371,14 @@ class MissionFsm:
         return act
 
     def _box_point(self, wp):
-        """(x, y) tam hop hang khai bao: tam bai + box_forward_m theo huong bai (do neu da thay)."""
+        """(x, y) diem hop cua bai (do huong neu da thay): lay hang = diem bat dau tim hop (tam bai +
+        box_forward_m theo huong bai), tha = diem tha (drop_forward_m)."""
         pad, yaw = self._pad_pose(wp)
         if yaw is None:
             # Bai khong khai huong, chua do duoc: mui drone dang theo huong ha (gan dung).
             snap = self.last_snap
             yaw = snap.yaw if snap is not None and snap.yaw is not None else 0.0
-        f = self.params.box_forward_m
+        f = self.params.box_forward_m if wp.action == ACTION_PICKUP else self.params.drop_forward_m
         return pad[0] + f * math.cos(yaw), pad[1] + f * math.sin(yaw)
 
     def _step_final_approach(self, snap):
@@ -1358,7 +1408,7 @@ class MissionFsm:
         # de vong z EKF keo tut xuong trong luc chua thay hop / dang nghieng camera.
         h = None if snap.position is None else snap.position[2] - wp.pad[2]
         z = wp.pad[2] + (BOX_SEARCH_ALT_M if h is None else max(BOX_SEARCH_ALT_M, h))
-        act = Action(expected_marker_id=box_id, velocity_up_mps=0.0, yaw_target=self._hold_yaw(wp),
+        act = Action(expected_marker_id=box_id, velocity_up_mps=0.0, yaw_target=self._grip_yaw(wp),
                      position_target=(bx, by, z), max_vel_mps=LAND_EKF_MAX_VEL_MPS,
                      gripper_command='open' if mo_kep else '', ekf_xy=sat_hop)
         if mo_kep:
@@ -1445,6 +1495,10 @@ class MissionFsm:
             lech = math.hypot(snap.position[0] - bx, snap.position[1] - by)
         if lech > allowed:
             act.detail = f'can tam hop: lech {lech:.2f} m > {allowed:.2f} m'
+            return act
+        xoay = self._grip_yaw_err_deg(snap, wp)
+        if xoay > GRIP_YAW_TOL_DEG:
+            act.detail = f'quay mui theo hop: con lech {xoay:.0f} do'
             return act
         act.velocity_up_mps = -self._grip_descent(snap.range_m)
         act.detail = f'xuong theo tag hop, lech {lech:.2f} m'

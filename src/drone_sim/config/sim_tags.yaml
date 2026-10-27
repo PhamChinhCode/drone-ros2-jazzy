@@ -14,7 +14,7 @@
     known_tags_heading: [0.0, 90.0, 1.0, 0.0, 2.0, 180.0]
     pad_small_tag_id_offset: 10
     pad_small_tag_size_m: 0.10
-    pad_small_tag_forward_m: -0.30    # tag tren noc hop hang, 0,30 m ve phia "duoi" (tags.yaml)
+    pad_small_tag_forward_m: 0.30     # diem bat dau tim hop, 0,30 m ve phia "tren" (tags.yaml)
     pad_small_tag_height_m: 0.12
     geo_origin_valid: false
     geo_origin_lat: 0.0

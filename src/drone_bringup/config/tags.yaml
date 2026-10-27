@@ -17,12 +17,14 @@
     # ban 0.8). Chi khai tag DA BIET huong; tag co huong moi co tag nho. Vi du: [0.0, 90.0, 1.0, 0.0]
     known_tags_heading: []
     # Mau tag nho chung cho moi bai: id = id_to + 10, canh 10 cm. Tu 2026-10-22 tag nho DAN TREN NOC
-    # HOP HANG 12x12x12 cm (docs/ke_hoach_camera_servo_gap_hang.md muc 7): tam hop cach tam tag to
-    # 0,30 m ve phia "duoi" (forward am), nap hop cao 0,12 m. Tag nho chi de can co cau gap, KHONG neo
-    # EKF. (Truoc do: tam 0,21 m ve phia "tren", cung mat phang tag to.)
+    # HOP HANG 12x12x12 cm (docs/ke_hoach_camera_servo_gap_hang.md muc 7), nap hop cao 0,12 m. Tag nho
+    # chi de can co cau gap, KHONG neo EKF. Tu 10-27 (user): hop dat bat ky dau phia "TREN" tag to (khong
+    # de len tag), xoay bat ky - drone tim hop tu diem cach tam tag to forward_m (duong = phia "tren"),
+    # gap BAT KY tag nho 10-19 thay duoc, quay mui <= 45 do ve mat hop gan nhat. (10-22..10-26: tam hop
+    # co dinh 0,30 m ve phia "duoi"; truoc nua: 0,21 m phia "tren", cung mat phang tag to.)
     pad_small_tag_id_offset: 10
     pad_small_tag_size_m: 0.10
-    pad_small_tag_forward_m: -0.30
+    pad_small_tag_forward_m: 0.30
     pad_small_tag_height_m: 0.12
     # Goc WGS84 cua ban do (diem x = y = z = 0) va phuong vi truc N ban do do tu Bac THAT (chieu
     # kim dong ho). GCS gui kem ban do tag (giao uoc GCS 8.7); do tai cho bang `gps_survey`.

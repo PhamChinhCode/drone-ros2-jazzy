@@ -418,13 +418,14 @@
         </sensor>
       </experimental:params>
     </include>
-    <!-- Hop hang 12 x 12 x 12 cm tai bai A (tag 1): tag nho id 11 (10 cm + vien trang 1 o) dan tren nap,
-         CUNG huong tag to cua bai; tam hop cach tam tag to 0,30 m ve phia "duoi" (config/sim_tags.yaml).
+    <!-- Hop hang 12 x 12 x 12 cm tai bai A (tag 1): tag nho id 11 (10 cm + vien trang 1 o) dan tren nap;
+         tam hop cach tam tag to 0,30 m ve phia "tren", XOAY 120 do so voi huong bai (10-27: drone chi can
+         quay mui 30 do ve mat hop gan nhat). yaw 1.5708 = cung huong bai A (Bac).
          Hop TINH chi de nhin (khong va cham); kep trung thi sim_gripper_node xoa no va sinh hop dong
          hang_<n> (120 g, va cham chi voi mat dat - collide_bitmask 0x02, drone 0x01) cung cho. -->
     <model name="hop_a">
       <static>true</static>
-      <pose>10 -0.3 0 0 0 1.5708</pose>
+      <pose>10 0.3 0 0 0 3.6652</pose>
       <link name="link">
         <visual name="hop">
           <pose>0 0 0.06 0 0 0</pose>

@@ -98,7 +98,7 @@ class SimTagNode(Node):
         # Bai co huong thi co tag nho (tren hop hang) id + offset, lech forward_m, cao height_m.
         self.declare_parameter('known_tags_heading', Parameter.Type.DOUBLE_ARRAY)
         self.declare_parameter('pad_small_tag_id_offset', 10)
-        self.declare_parameter('pad_small_tag_forward_m', -0.30)
+        self.declare_parameter('pad_small_tag_forward_m', 0.30)
         self.declare_parameter('pad_small_tag_height_m', 0.12)
         self.declare_parameter('pad_small_tag_size_m', 0.10)
 

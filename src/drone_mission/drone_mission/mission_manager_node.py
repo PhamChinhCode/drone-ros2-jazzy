@@ -63,9 +63,11 @@ class MissionManagerNode(Node):
         # Huong "tren" cua bai (tags.yaml, giao uoc GCS 0.8) - bai co huong moi tiep can thang hang.
         self.declare_parameter('known_tags_heading', Parameter.Type.DOUBLE_ARRAY)
         self.declare_parameter('yaw_control', False)
-        # Tag nho tren hop hang (tags.yaml) - FSM suy vi tri hop tu tam + huong bai.
+        # Tag nho tren hop hang (tags.yaml) - FSM suy diem tim hop tu tam + huong bai.
         self.declare_parameter('pad_small_tag_id_offset', 10)
-        self.declare_parameter('pad_small_tag_forward_m', -0.30)
+        self.declare_parameter('pad_small_tag_forward_m', 0.30)
+        # Diem tha hop so voi tam tag to (theo huong bai) - xem mission_fsm.Params.drop_forward_m.
+        self.declare_parameter('drop_forward_m', -0.30)
         self.declare_parameter('pad_small_tag_height_m', 0.12)   # cao nap hop (bu laser)
         # Duoi ToF nay dung lai, nghieng camera goc gap - xem mission_fsm.BOX_CAM_SWITCH_M.
         self.declare_parameter('box_cam_switch_m', mission_fsm.BOX_CAM_SWITCH_M)
@@ -81,6 +83,7 @@ class MissionManagerNode(Node):
             yaw_control=self.get_parameter('yaw_control').value,
             small_id_offset=self.get_parameter('pad_small_tag_id_offset').value,
             box_forward_m=self.get_parameter('pad_small_tag_forward_m').value,
+            drop_forward_m=self.get_parameter('drop_forward_m').value,
             box_cam_switch_m=self.get_parameter('box_cam_switch_m').value))
 
         self.snapshot = mission_fsm.Snapshot()
@@ -106,7 +109,7 @@ class MissionManagerNode(Node):
         self.failsafe_active = {}         # FailsafeEvent.type -> escalate_to dang bat
         self.target_offset_m = None
         self.target_stamp_s = None
-        self.box_obs = None              # tam hop (x, y) odom do tu tag hop
+        self.box_obs = None              # tam hop (x, y, yaw tag hop) odom do tu tag hop
         self.box_stamp_s = None
         self.position = None
         self.position_stamp_s = None
@@ -281,7 +284,9 @@ class MissionManagerNode(Node):
         Truoc 10-25 ghep pose tuong doi voi vi tri / yaw MOI NHAT: lech toi 10 cm khi drone lac
         trong gio, kep hut."""
         if self.fsm.state in (mission_fsm.FINAL_APPROACH, mission_fsm.ACTUATE_GRIPPER):
-            self.box_obs = (msg.pose.position.x, msg.pose.position.y)
+            q = msg.pose.orientation
+            self.box_obs = (msg.pose.position.x, msg.pose.position.y,
+                            2.0 * math.atan2(q.z, q.w))     # bridge chi phat yaw quanh z
             self.box_stamp_s = self.now_s()
 
     def pad_key(self):
