@@ -18,7 +18,7 @@ mission_manager_node:
 
 gripper_controller_node:
   ros__parameters:
-    simulate: true               # false = gui lenh kep xuong FC (servo cam PD14 tren FC)
+    simulate: false              # false = gui lenh kep xuong FC (servo cam PD14 tren FC). 10-28: bay that
     # Xung dong/mo nam o tham so FC (servo_grip_open_us / servo_grip_close_us), khong o day.
     travel_s: 0.5                # cho servo kep han sau khi FC nhan lenh
     status_rate_hz: 10.0
