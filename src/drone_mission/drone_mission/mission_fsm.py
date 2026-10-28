@@ -113,6 +113,12 @@ PRECISION_ALIGN_PER_M = 0.10
 # Duoi do cao nay camera (thang xuong, truoc tam 9 cm) khong con thay tag to 25 cm tron ven (mep sau
 # ra khoi khung tu ~0,29 m) - xuong tiep khong can tag. Tren muc nay mat tag la dung, KHONG ha mu.
 PRECISION_BLIND_BELOW_M = 0.32
+# Bai co tag nho (khai huong, mui theo bai - user 10-28): duoi PRECISION_CAM_TILT_BELOW_M nghieng camera
+# CAM_LAND_LOW_DEG ve mui. Camera thang xuong mat ca tag nho (tam +0,21 m) tu ~0,28 m; +20 do con thay
+# tron ven toi camera ~0,14 m -> chi ha mu duoi PRECISION_BLIND_TILT_BELOW_M (cham dat ToF ~0,18 m).
+PRECISION_CAM_TILT_BELOW_M = 0.35
+CAM_LAND_LOW_DEG = 20.0
+PRECISION_BLIND_TILT_BELOW_M = 0.20
 # Mat tag giua chung khi ha (10-10, yeu cau user): bong drone che tag, khung hinh hong... ma theo EKF
 # drone van trong vung can tam (cung nguong PRECISION_ALIGN_*) thi HA TIEP toi da chung nay, truc
 # ngang bam tam bai da biet (pad_obs) theo EKF. Troi ra ngoai (mat vi troi, khong phai vi nghieng
@@ -241,8 +247,9 @@ MAX_WAYPOINT_VEL_MPS = 1.9  # 95 % tran ngang FC (giao uoc 9.6, P9)
 
 
 # Goc camera khi VAO trang thai (trang thai khac giu goc dang co). FINAL_APPROACH tu doi sang
-# CAM_BOX_DEG khi thay tag hop.
-CAM_FOR_STATE = {IDLE: CAM_DOWN_DEG, TAKEOFF: CAM_DOWN_DEG, ENROUTE: CAM_ENROUTE_DEG,
+# CAM_BOX_DEG khi thay tag hop. IDLE / TAKEOFF (user 10-28): nam tren bai camera chi cao ~0,15 m, thang
+# xuong khong thay tron tag to lan tag nho; CAM_LAND_LOW_DEG ve mui thay tron tag nho -> neo EKF ngay tren dat.
+CAM_FOR_STATE = {IDLE: CAM_LAND_LOW_DEG, TAKEOFF: CAM_LAND_LOW_DEG, ENROUTE: CAM_ENROUTE_DEG,
                  MARKER_SEARCH: CAM_DOWN_DEG, ALIGN_HEADING: CAM_DOWN_DEG,
                  PRECISION_LAND: CAM_DOWN_DEG, FINAL_APPROACH: CAM_DOWN_DEG,
                  RETRY_LOITER: CAM_DOWN_DEG, EMERGENCY_LAND: CAM_DOWN_DEG}
@@ -461,7 +468,7 @@ class MissionFsm:
     last_gripper_command_s: float = None
     search_timeout_s: float = None
     last_snap: Snapshot = None
-    cam_cmd: float = CAM_DOWN_DEG   # goc camera dang ra lenh (Action.camera_tilt_deg moi chu ky)
+    cam_cmd: float = CAM_FOR_STATE[IDLE]    # goc camera dang ra lenh (Action.camera_tilt_deg moi chu ky)
     heading_ok_since: float = None  # ALIGN_HEADING: luc mui bat dau nam trong ALIGN_HEADING_DONE_DEG
     box_phase: str = None           # FINAL_APPROACH: 'search' | 'tilt' | 'descend'
     box_phase_s: float = None
@@ -475,6 +482,7 @@ class MissionFsm:
     enroute_hold: tuple = None
     enroute_turned: bool = False
     tag_lost_since: float = None    # PRECISION_LAND: thoi diem bat dau mat tag (None = dang thay)
+    land_tilt_s: float = None       # PRECISION_LAND: luc ra lenh nghieng camera doan cuoi (None = chua)
     drop_ready_s: float = None      # ACTUATE_GRIPPER tha: luc xuong toi DROP_HOVER_M (None = chua)
 
     def load_plan(self, mission_id, raw_waypoints, max_retries, search_timeout_s, known_tags,
@@ -578,6 +586,7 @@ class MissionFsm:
             self.ceiling_wait_since_s = None
         if new_state in (PRECISION_LAND, ALIGN_HEADING):
             self.tag_lost_since = now_s     # tinh tu luc vao cho toi khi thay tag
+            self.land_tilt_s = None
         if new_state == ALIGN_HEADING:
             self.heading_ok_since = None
         if new_state == FINAL_APPROACH:
@@ -1330,7 +1339,24 @@ class MissionFsm:
         if snap.ob_auth is not True:
             act.detail = 'khong biet quyen - giu vz = 0'
             return act
-        low = snap.range_m is not None and snap.range_m <= PRECISION_BLIND_BELOW_M
+        blind = PRECISION_BLIND_BELOW_M
+        if (not hover and wp.pad_yaw is not None and self.params.yaw_control and snap.range_m is not None
+                and (self.land_tilt_s is not None or snap.range_m <= PRECISION_CAM_TILT_BELOW_M)):
+            # Doan cuoi bam tag nho: nghieng camera ve mui, dung ha cho toi khi camera toi goc. Servo
+            # khong toi goc sau CAM_SETTLE_TIMEOUT_S thi ha nhu cu (camera thang xuong, mu tu 0,32 m).
+            if self.land_tilt_s is None:
+                self.land_tilt_s = now
+                self.cam_cmd = CAM_LAND_LOW_DEG
+            if self.cam_cmd == CAM_LAND_LOW_DEG:
+                if self._cam_at(snap, CAM_LAND_LOW_DEG):
+                    blind = PRECISION_BLIND_TILT_BELOW_M
+                elif now - self.land_tilt_s > CAM_SETTLE_TIMEOUT_S:
+                    self.cam_cmd = CAM_DOWN_DEG
+                elif not snap.landed:
+                    self.tag_lost_since = None      # dung yen cho camera: khong tinh la mat tag
+                    act.detail = f'doan cuoi: cho camera nghieng {CAM_LAND_LOW_DEG:+.0f} do (tag nho)'
+                    return act
+        low = snap.range_m is not None and snap.range_m <= blind
         if snap.landed or low:
             # Tha hang khi treo: doan mu xuong cham, khong lao nhanh nhu luc cham dat.
             act.velocity_up_mps = -(self._grip_descent(snap.range_m) if hover

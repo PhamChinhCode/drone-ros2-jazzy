@@ -1078,6 +1078,68 @@ def test_quay_mui_theo_bai_giu_1s_roi_ha_thang_dung():
     assert act.velocity_up_mps == -m.LAND_DESCENT_FAR_MPS          # toc do ha nhu cu
 
 
+def fsm_ha_chinh_xac_co_huong():
+    """Bai co huong (co tag nho), mui da theo bai -> PRECISION_LAND luc 3,0."""
+    fsm = fsm_tim_tag_co_huong()
+    ok = math.pi / 2
+    for t in (1.2, 1.4, 2.0, 3.0):
+        fsm.step(snap(t, armed=True, range_m=2.0, target_offset_m=0.02, yaw=ok))
+    assert fsm.state == m.PRECISION_LAND
+    return fsm
+
+
+def test_doan_cuoi_nghieng_camera_ve_mui_bam_tag_nho_toi_sat_dat():
+    # User 10-28: camera thang xuong mat tag nho tu ~0,28 m; nghieng +20 do bam tag nho toi ~0,20 m.
+    fsm = fsm_ha_chinh_xac_co_huong()
+    yaw = math.pi / 2
+    act = fsm.step(snap(3.2, armed=True, range_m=0.40, target_offset_m=0.02, yaw=yaw))
+    assert act.camera_tilt_deg == m.CAM_DOWN_DEG and act.velocity_up_mps < 0.0
+    act = fsm.step(snap(3.4, armed=True, range_m=0.34, target_offset_m=0.02, yaw=yaw))
+    assert act.camera_tilt_deg == m.CAM_LAND_LOW_DEG and act.velocity_up_mps == 0.0
+    assert 'cho camera' in act.detail
+    act = fsm.step(snap(3.6, armed=True, range_m=0.34, target_offset_m=0.02, yaw=yaw,
+                        camera_tilt_deg=m.CAM_LAND_LOW_DEG))
+    assert act.velocity_up_mps < 0.0 and 'theo tag' in act.detail
+    # 0,25 m: camera thang xuong da ha mu, nay van phai thay tag (mat tag -> luat mat tag, khong mu).
+    act = fsm.step(snap(3.8, armed=True, range_m=0.25, target_offset_m=0.10, yaw=yaw,
+                        camera_tilt_deg=m.CAM_LAND_LOW_DEG))
+    assert act.velocity_up_mps == 0.0 and 'can tam' in act.detail
+    # Leo lai tren 0,35 m (can tam) van giu camera nghieng, khong lac qua lac lai.
+    act = fsm.step(snap(4.0, armed=True, range_m=0.37, target_offset_m=0.02, yaw=yaw,
+                        camera_tilt_deg=m.CAM_LAND_LOW_DEG))
+    assert act.camera_tilt_deg == m.CAM_LAND_LOW_DEG and act.velocity_up_mps < 0.0
+    act = fsm.step(snap(4.2, armed=True, range_m=0.19, yaw=yaw, camera_tilt_deg=m.CAM_LAND_LOW_DEG))
+    assert act.velocity_up_mps < 0.0 and 'sat dat' in act.detail
+
+
+def test_doan_cuoi_camera_khong_nghieng_duoc_thi_ha_nhu_cu():
+    fsm = fsm_ha_chinh_xac_co_huong()
+    yaw = math.pi / 2
+    act = fsm.step(snap(3.2, armed=True, range_m=0.34, target_offset_m=0.02, yaw=yaw))
+    assert act.velocity_up_mps == 0.0 and act.camera_tilt_deg == m.CAM_LAND_LOW_DEG
+    act = fsm.step(snap(8.3, armed=True, range_m=0.34, target_offset_m=0.02, yaw=yaw))   # > 5 s
+    assert act.camera_tilt_deg == m.CAM_DOWN_DEG and act.velocity_up_mps < 0.0
+    act = fsm.step(snap(8.5, armed=True, range_m=0.30, yaw=yaw))
+    assert act.velocity_up_mps < 0.0 and 'sat dat' in act.detail       # mu tu 0,32 m nhu cu
+
+
+def test_nam_tren_bai_va_cat_canh_camera_nghieng_ve_mui_thay_tag_nho():
+    # User 10-28: tren dat camera ~0,15 m, thang xuong khong thay tron tag nao.
+    fsm = m.MissionFsm(params=m.Params(takeoff_alt_m=1.0))
+    assert fsm.step(snap(0.0)).camera_tilt_deg == m.CAM_LAND_LOW_DEG
+    fsm.load_plan(1, [wp(0)], 0, 0.0, TAGS)
+    fsm.request_start(0.0)
+    fsm.step(snap(0.1, arm_ready=True))
+    act = fsm.step(snap(0.5, armed=True))
+    assert fsm.state == m.TAKEOFF and act.camera_tilt_deg == m.CAM_LAND_LOW_DEG
+
+
+def test_bai_khong_huong_khong_nghieng_camera_khi_ha():
+    fsm = fsm_dang_ha_chinh_xac()
+    act = fsm.step(snap(1.2, armed=True, range_m=0.34, target_offset_m=0.02))
+    assert act.camera_tilt_deg == m.CAM_DOWN_DEG and act.velocity_up_mps < 0.0
+
+
 def test_quay_mui_mat_tag_qua_lau_thi_tim_lai():
     fsm = fsm_tim_tag_co_huong()
     fsm.step(snap(1.2, armed=True, range_m=2.0, target_offset_m=0.1, yaw=0.0))

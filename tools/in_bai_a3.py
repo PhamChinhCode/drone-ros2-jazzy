@@ -44,9 +44,9 @@ def pad(big_id, name):
     return prims
 
 
-def page_stream(prims):
+def page_stream(prims, page_h=PAGE_H):
     X = lambda v: f'{v * K:.3f}'
-    Y = lambda v: f'{(PAGE_H - v) * K:.3f}'
+    Y = lambda v: f'{(page_h - v) * K:.3f}'
     out = ['0 g 0 G']
     for p in prims:
         k = p[0]
@@ -67,14 +67,14 @@ def page_stream(prims):
     return '\n'.join(out)
 
 
-def write_pdf(path, pages):
+def write_pdf(path, pages, page_w=PAGE_W, page_h=PAGE_H):
     objs = ['<< /Type /Catalog /Pages 2 0 R >>', '',
             '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>']
     kids = []
     for prims in pages:
-        c, n = page_stream(prims), len(objs) + 1
+        c, n = page_stream(prims, page_h), len(objs) + 1
         kids.append(f'{n} 0 R')
-        objs += [f'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {PAGE_W * K:.3f} {PAGE_H * K:.3f}] '
+        objs += [f'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {page_w * K:.3f} {page_h * K:.3f}] '
                  f'/Resources << /Font << /F1 3 0 R >> >> /Contents {n + 1} 0 R >>',
                  f'<< /Length {len(c)} >>\nstream\n{c}\nendstream']
     objs[1] = f'<< /Type /Pages /Kids [{" ".join(kids)}] /Count {len(kids)} >>'
