@@ -72,7 +72,7 @@ class LandingTargetBridgeNode(Node):
         self.declare_parameter('known_tags', Parameter.Type.DOUBLE_ARRAY)
         self.declare_parameter('tag_frames', Parameter.Type.STRING_ARRAY)
         self.declare_parameter('pad_small_tag_id_offset', 10)
-        self.declare_parameter('pad_small_tag_forward_m', 0.25)
+        self.declare_parameter('pad_small_tag_forward_m', 0.21)
         self.declare_parameter('box_tag_id_min', 20)
         self.declare_parameter('box_tag_count', 10)
         self.forward_m = self.get_parameter('pad_small_tag_forward_m').value

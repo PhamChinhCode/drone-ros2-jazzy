@@ -87,7 +87,7 @@ class SimTagNode(Node):
         self.declare_parameter('image_height', 400)
         # Ca tag (canh tag_size_m; tag nho: pad_small_tag_size_m) phai nam trong anh va canh
         # >= min_tag_px moi tinh la thay.
-        self.declare_parameter('tag_size_m', 0.30)
+        self.declare_parameter('tag_size_m', 0.25)
         self.declare_parameter('min_tag_px', 20.0)
         self.declare_parameter('max_range_m', 8.0)
         self.declare_parameter('min_range_m', 0.15)
@@ -98,7 +98,7 @@ class SimTagNode(Node):
         # Bai co huong thi co tag nho id + offset, lech forward_m (cung mat phang tag to).
         self.declare_parameter('known_tags_heading', Parameter.Type.DOUBLE_ARRAY)
         self.declare_parameter('pad_small_tag_id_offset', 10)
-        self.declare_parameter('pad_small_tag_forward_m', 0.25)
+        self.declare_parameter('pad_small_tag_forward_m', 0.21)
         self.declare_parameter('pad_small_tag_size_m', 0.10)
 
         g = self.get_parameter

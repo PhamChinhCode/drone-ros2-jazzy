@@ -10,7 +10,8 @@
     # DO 09-14: canh o vuong den ngoai cung cua tag ID 0 da in = 12,2 cm (khong phai 13).
     # 10-08: doi sang tag to 25 cm (ban in 12,2 cm cu KHONG dung duoc voi cau hinh nay).
     # 10-27: tag to 30 cm (canh o den ngoai cung) - kich thuoc tung tag theo tag.sizes ben duoi.
-    size: 0.30
+    # 10-28: tag to 25 cm (user nham 30) - vua 1 to A3 cung tag nho (tools/in_bai_a3.py).
+    size: 0.25
     max_hamming: 0
     qos_profile: sensor_data
     detector:
@@ -26,7 +27,7 @@
     pose_estimation_method: "pnp"
     tag:
       # Dai ID (user 10-27): < 20 = tag NEO vi tri (bai), >= 20 = tag HOP HANG.
-      #   0-9   tag to cua bai, canh 30 cm.
+      #   0-9   tag to cua bai, canh 25 cm.
       #   10-19 tag nho cua bai (id to + 10, khung <ten>_s), canh 10 cm, in cung to ve phia "tren"
       #         tag to (tags.yaml pad_small_tag_*): xuong thap tag to ra khoi khung thi bam tag nho.
       #   20-29 tag dan tren nap hop hang, canh 10 cm, khung hop_<id>: hop nao cung gap duoc.
@@ -34,6 +35,6 @@
       ids: [0, 1,2,3,4,5,6,7,8,9, 10,11,12,13,14,15,16,17,18,19, 20,21,22,23,24,25,26,27,28,29]
       frames: [home, a, b,c,d,e,f,g,h,i, home_s,a_s,b_s,c_s,d_s,e_s,f_s,g_s,h_s,i_s,
                hop_20,hop_21,hop_22,hop_23,hop_24,hop_25,hop_26,hop_27,hop_28,hop_29]
-      sizes: [0.30,0.30,0.30,0.30,0.30,0.30,0.30,0.30,0.30,0.30,
+      sizes: [0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,
               0.10,0.10,0.10,0.10,0.10,0.10,0.10,0.10,0.10,0.10,
               0.10,0.10,0.10,0.10,0.10,0.10,0.10,0.10,0.10,0.10]

@@ -19,11 +19,12 @@
     # Dai ID (user 10-27, apriltag.yaml): < 20 = tag NEO vi tri, >= 20 = tag hop hang.
     # Tag nho cua bai: id = id_to + 10, canh 10 cm, IN CUNG TO voi tag to (cung mat phang), tam cach
     # tam tag to forward_m ve phia "tren". Xuong thap tag to ra khoi khung thi bridge bam tag nho, suy
-    # tam bai theo truc TREN do duoc cua chinh tag nho (khong can huong khai bao). 0,25 m = to in GCS
-    # (padSheet.ts, 10-27): tag to 30 cm + vien 1 o (37,5 mm) thi tam-tam toi thieu 0,2375 m. DO LAI.
+    # tam bai theo truc TREN do duoc cua chinh tag nho (khong can huong khai bao). 0,21 m = to in A3
+    # (10-28, tools/in_bai_a3.py + GCS padSheet.ts): tag to 25 cm + vien 1 o (31,25 mm) thi tam-tam toi
+    # thieu 0,206 m. DO LAI sau khi in.
     pad_small_tag_id_offset: 10
     pad_small_tag_size_m: 0.10
-    pad_small_tag_forward_m: 0.25
+    pad_small_tag_forward_m: 0.21
     # Tag hop hang (user 10-27): id box_tag_id_min .. +box_tag_count-1, canh 10 cm, dan tren nap hop
     # 12x12x12 cm. Hop nao cung gap duoc, dat tu do phia "duoi" tag to, xoay bat ky (drone quay mui
     # <= 45 do ve mat hop gan nhat). box_forward_m: diem BAT DAU tim hop so voi tam tag to theo huong

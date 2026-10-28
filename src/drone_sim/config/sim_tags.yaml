@@ -14,7 +14,7 @@
     known_tags_heading: [0.0, 90.0, 1.0, 0.0, 2.0, 180.0]
     pad_small_tag_id_offset: 10
     pad_small_tag_size_m: 0.10
-    pad_small_tag_forward_m: 0.25     # tag nho in cung to, phia "tren" tag to (tags.yaml)
+    pad_small_tag_forward_m: 0.21     # tag nho in cung to, phia "tren" tag to (tags.yaml)
     box_tag_id_min: 20
     box_tag_count: 10
     box_forward_m: -0.30

@@ -113,23 +113,23 @@
       </link>
     </model>
 
-    <!-- Bai dap pad_home: tag 0, khop config/sim_tags.yaml (anh AprilTag that: tag to 30 cm + tag nho 10 cm phia "tren" (10-27), yaw model = huong bai ENU) -->
+    <!-- Bai dap pad_home: tag 0, khop config/sim_tags.yaml (anh AprilTag that: tag to 25 cm + tag nho 10 cm phia "tren" (10-28), yaw model = huong bai ENU) -->
     <model name="pad_home">
       <static>true</static>
       <pose>0 0 0.005 0 0 0</pose>
       <link name="link">
         <visual name="visual">
-          <!-- To trang chua tag to + tag nho (user 10-27: tag to 30 cm, tag nho 10 cm phia "tren"),
-               doc theo huong bai: tu mep sau tag to (-0,19) toi mep truoc tag nho (+0,31). -->
-          <pose>0.06 0 0 0 0 0</pose>
-          <geometry><box><size>0.56 0.42 0.01</size></box></geometry>
+          <!-- To A3 chua tag to + tag nho (user 10-28: tag to 25 cm, tag nho 10 cm phia "tren"),
+               doc theo huong bai: tu mep sau (-0,1425) toi mep truoc (+0,2775), tools/in_bai_a3.py. -->
+          <pose>0.0675 0 0 0 0 0</pose>
+          <geometry><box><size>0.42 0.297 0.01</size></box></geometry>
           <material><ambient>0.95 0.95 0.95 1</ambient><diffuse>0.95 0.95 0.95 1</diffuse></material>
         </visual>
         <visual name="tag_to">
-          <!-- canh khoi den 0.30 m (apriltag.yaml) + vien trang 1 o = 0.375 m. Yaw -90 do: mep
+          <!-- canh khoi den 0.25 m (apriltag.yaml) + vien trang 1 o = 0.3125 m. Yaw -90 do: mep
                TREN anh (truc +y cua mat phang) quay ve +x model = phia "tren" bai. -->
           <pose>0 0 0.0055 0 0 -1.5708</pose>
-          <geometry><plane><normal>0 0 1</normal><size>0.375 0.375</size></plane></geometry>
+          <geometry><plane><normal>0 0 1</normal><size>0.3125 0.3125</size></plane></geometry>
           <material>
             <ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse><specular>0 0 0 1</specular>
             <pbr><metal><albedo_map>textures/tag36h11_00.png</albedo_map>
@@ -137,8 +137,8 @@
           </material>
         </visual>
         <visual name="tag_nho">
-          <!-- tag nho id 10: canh 0.10 m + vien = 0.125 m, tam 0.25 m ve phia "tren" (+x model). -->
-          <pose>0.25 0 0.0055 0 0 -1.5708</pose>
+          <!-- tag nho id 10: canh 0.10 m + vien = 0.125 m, tam 0.21 m ve phia "tren" (+x model). -->
+          <pose>0.21 0 0.0055 0 0 -1.5708</pose>
           <geometry><plane><normal>0 0 1</normal><size>0.125 0.125</size></plane></geometry>
           <material>
             <ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse><specular>0 0 0 1</specular>
@@ -149,23 +149,23 @@
       </link>
     </model>
 
-    <!-- Bai dap pad_a: tag 1, khop config/sim_tags.yaml (anh AprilTag that: tag to 30 cm + tag nho 10 cm phia "tren" (10-27), yaw model = huong bai ENU) -->
+    <!-- Bai dap pad_a: tag 1, khop config/sim_tags.yaml (anh AprilTag that: tag to 25 cm + tag nho 10 cm phia "tren" (10-28), yaw model = huong bai ENU) -->
     <model name="pad_a">
       <static>true</static>
       <pose>10 0 0.005 0 0 1.5708</pose>
       <link name="link">
         <visual name="visual">
-          <!-- To trang chua tag to + tag nho (user 10-27: tag to 30 cm, tag nho 10 cm phia "tren"),
-               doc theo huong bai: tu mep sau tag to (-0,19) toi mep truoc tag nho (+0,31). -->
-          <pose>0.06 0 0 0 0 0</pose>
-          <geometry><box><size>0.56 0.42 0.01</size></box></geometry>
+          <!-- To A3 chua tag to + tag nho (user 10-28: tag to 25 cm, tag nho 10 cm phia "tren"),
+               doc theo huong bai: tu mep sau (-0,1425) toi mep truoc (+0,2775), tools/in_bai_a3.py. -->
+          <pose>0.0675 0 0 0 0 0</pose>
+          <geometry><box><size>0.42 0.297 0.01</size></box></geometry>
           <material><ambient>0.95 0.95 0.95 1</ambient><diffuse>0.95 0.95 0.95 1</diffuse></material>
         </visual>
         <visual name="tag_to">
-          <!-- canh khoi den 0.30 m (apriltag.yaml) + vien trang 1 o = 0.375 m. Yaw -90 do: mep
+          <!-- canh khoi den 0.25 m (apriltag.yaml) + vien trang 1 o = 0.3125 m. Yaw -90 do: mep
                TREN anh (truc +y cua mat phang) quay ve +x model = phia "tren" bai. -->
           <pose>0 0 0.0055 0 0 -1.5708</pose>
-          <geometry><plane><normal>0 0 1</normal><size>0.375 0.375</size></plane></geometry>
+          <geometry><plane><normal>0 0 1</normal><size>0.3125 0.3125</size></plane></geometry>
           <material>
             <ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse><specular>0 0 0 1</specular>
             <pbr><metal><albedo_map>textures/tag36h11_01.png</albedo_map>
@@ -173,8 +173,8 @@
           </material>
         </visual>
         <visual name="tag_nho">
-          <!-- tag nho id 11: canh 0.10 m + vien = 0.125 m, tam 0.25 m ve phia "tren" (+x model). -->
-          <pose>0.25 0 0.0055 0 0 -1.5708</pose>
+          <!-- tag nho id 11: canh 0.10 m + vien = 0.125 m, tam 0.21 m ve phia "tren" (+x model). -->
+          <pose>0.21 0 0.0055 0 0 -1.5708</pose>
           <geometry><plane><normal>0 0 1</normal><size>0.125 0.125</size></plane></geometry>
           <material>
             <ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse><specular>0 0 0 1</specular>
@@ -185,23 +185,23 @@
       </link>
     </model>
 
-    <!-- Bai dap pad_b: tag 2, khop config/sim_tags.yaml (anh AprilTag that: tag to 30 cm + tag nho 10 cm phia "tren" (10-27), yaw model = huong bai ENU) -->
+    <!-- Bai dap pad_b: tag 2, khop config/sim_tags.yaml (anh AprilTag that: tag to 25 cm + tag nho 10 cm phia "tren" (10-28), yaw model = huong bai ENU) -->
     <model name="pad_b">
       <static>true</static>
       <pose>5 -6 0.005 0 0 -1.5708</pose>
       <link name="link">
         <visual name="visual">
-          <!-- To trang chua tag to + tag nho (user 10-27: tag to 30 cm, tag nho 10 cm phia "tren"),
-               doc theo huong bai: tu mep sau tag to (-0,19) toi mep truoc tag nho (+0,31). -->
-          <pose>0.06 0 0 0 0 0</pose>
-          <geometry><box><size>0.56 0.42 0.01</size></box></geometry>
+          <!-- To A3 chua tag to + tag nho (user 10-28: tag to 25 cm, tag nho 10 cm phia "tren"),
+               doc theo huong bai: tu mep sau (-0,1425) toi mep truoc (+0,2775), tools/in_bai_a3.py. -->
+          <pose>0.0675 0 0 0 0 0</pose>
+          <geometry><box><size>0.42 0.297 0.01</size></box></geometry>
           <material><ambient>0.95 0.95 0.95 1</ambient><diffuse>0.95 0.95 0.95 1</diffuse></material>
         </visual>
         <visual name="tag_to">
-          <!-- canh khoi den 0.30 m (apriltag.yaml) + vien trang 1 o = 0.375 m. Yaw -90 do: mep
+          <!-- canh khoi den 0.25 m (apriltag.yaml) + vien trang 1 o = 0.3125 m. Yaw -90 do: mep
                TREN anh (truc +y cua mat phang) quay ve +x model = phia "tren" bai. -->
           <pose>0 0 0.0055 0 0 -1.5708</pose>
-          <geometry><plane><normal>0 0 1</normal><size>0.375 0.375</size></plane></geometry>
+          <geometry><plane><normal>0 0 1</normal><size>0.3125 0.3125</size></plane></geometry>
           <material>
             <ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse><specular>0 0 0 1</specular>
             <pbr><metal><albedo_map>textures/tag36h11_02.png</albedo_map>
@@ -209,8 +209,8 @@
           </material>
         </visual>
         <visual name="tag_nho">
-          <!-- tag nho id 12: canh 0.10 m + vien = 0.125 m, tam 0.25 m ve phia "tren" (+x model). -->
-          <pose>0.25 0 0.0055 0 0 -1.5708</pose>
+          <!-- tag nho id 12: canh 0.10 m + vien = 0.125 m, tam 0.21 m ve phia "tren" (+x model). -->
+          <pose>0.21 0 0.0055 0 0 -1.5708</pose>
           <geometry><plane><normal>0 0 1</normal><size>0.125 0.125</size></plane></geometry>
           <material>
             <ambient>1 1 1 1</ambient><diffuse>1 1 1 1</diffuse><specular>0 0 0 1</specular>
