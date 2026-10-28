@@ -14,8 +14,11 @@ Tra TF tag MOI NHAT chu khong tra dung stamp detection: do 09-14 luc CPU day tai
 SAU ban tin detections hon 100 ms -> tra dung stamp luon ExtrapolationException (pose 0,2 Hz du
 detections 15 Hz). Pose phat ra mang stamp cua chinh TF tag nen EKF van nhan dung thoi diem chup.
 
-Chi TAG TO neo EKF (2026-10-22): tag nho nay dan tren hop hang dat tay, lech vai cm. Servo camera dang
-quay (/camera/tilt NaN) thi bo moi detection - TF lap dat camera chua dung goc that.
+Tag to VA tag nho cua bai neo EKF (user 2026-10-28): tag nho in CUNG TO voi tag to (id + offset, tam
+cach forward_m ve phia "tren") nen vi tri chinh xac; nam tren bai camera chi thay tron tag nho. Tam bai
+suy tu tag nho theo truc TREN do duoc cua chinh no (small_to_center, nhu landing_target_bridge_node).
+Tag hop hang (>= 20) KHONG neo. Servo camera dang quay (/camera/tilt NaN) thi bo moi detection - TF
+lap dat camera chua dung goc that.
 """
 
 from concurrent.futures import ThreadPoolExecutor
@@ -34,7 +37,7 @@ from std_msgs.msg import Float32
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from drone_estimation.estimation_math import drone_position_from_tag
-from drone_estimation.pad_map import build_pad_map
+from drone_estimation.pad_map import SMALL_FRAME_SUFFIX, build_pad_map, small_to_center
 from drone_estimation.qos import EVENT_QOS, SENSOR_QOS
 
 # TF tag cu hon muc nay (so voi dong ho node) thi bo - pose da troi, EKF khong nen nhan.
@@ -55,12 +58,19 @@ class MarkerPoseRepublisherNode(Node):
         # Ten khung TF tung tag, CUNG THU TU voi known_tags - khop tag.frames trong apriltag.yaml.
         self.declare_parameter('tag_frames', [''])
         self.declare_parameter('base_frame', 'base_link')
+        self.declare_parameter('pad_small_tag_id_offset', 10)
+        self.declare_parameter('pad_small_tag_forward_m', 0.21)
+        self.forward_m = self.get_parameter('pad_small_tag_forward_m').value
 
-        # Khong truyen huong bai -> pad_map khong suy tag nho: chi tag to neo EKF.
+        # Khong truyen huong bai: tag nho suy tam theo truc do duoc, khong can huong khai bao.
         pads = build_pad_map(self.get_parameter('known_tags').value,
                              self.get_parameter('tag_frames').value, {}, 0, 0.0)
         self.known_tags = {i: t.pos for i, t in pads.items()}
         self.tag_frames = {i: t.frame for i, t in pads.items()}
+        # id tag nho -> id tag to cua bai (khung <ten>_s).
+        offset = self.get_parameter('pad_small_tag_id_offset').value
+        self.small_of = {i + offset: i for i in pads}
+        self.tag_frames.update({s: pads[b].frame + SMALL_FRAME_SUFFIX for s, b in self.small_of.items()})
         self.get_logger().info(f'ban do: {len(self.known_tags)} bai, khung '
                                f'{sorted(self.tag_frames.values())}')
         self.tilt_moving = False
@@ -105,8 +115,12 @@ class MarkerPoseRepublisherNode(Node):
                 continue
             self.last_tag_stamp[det.id] = tag_stamp
             tr, q = t_tag.transform.translation, t_att.transform.rotation
-            pos = drone_position_from_tag(self.known_tags[det.id], (tr.x, tr.y, tr.z),
-                                          (q.x, q.y, q.z, q.w))
+            p_tag, pad_id = (tr.x, tr.y, tr.z), det.id
+            if det.id in self.small_of:
+                qt = t_tag.transform.rotation
+                p_tag = small_to_center(p_tag, (qt.x, qt.y, qt.z, qt.w), self.forward_m)
+                pad_id = self.small_of[det.id]
+            pos = drone_position_from_tag(self.known_tags[pad_id], p_tag, (q.x, q.y, q.z, q.w))
             if not all(math.isfinite(v) for v in pos):
                 continue
 
