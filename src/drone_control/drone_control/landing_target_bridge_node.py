@@ -15,15 +15,17 @@ base_link nhung bo roll/pitch. Camera gan cung than: than nghieng 5-10 do (tang 
 ngay duoi bi bao lech ngang 9-17 cm o 1 m trong base_link -> dieu khien ha canh sua theo lech gia.
 Roll/pitch lay tu TF world_frame -> base_link (EKF, nguon IMU); vi tri EKF khong anh huong.
 
-Hai loai tag (docs/ke_hoach_camera_servo_gap_hang.md, 2026-10-22):
-  - expected_marker_id = ID TAG TO: phat vi tri tag to = TAM BAI (ha canh / tha hang);
-  - expected_marker_id = ID TAG NHO (id_to + offset): tag dan tren NOC HOP HANG - phat vi tri CHINH
-    tag do de controller dat co cau gap (tam drone) ngay tren hop. Khong suy nguoc ve tam bai nua:
-    hop khong con cung mat phang/cach co dinh voi tag to.
-    User 10-27: gap BAT KY hop nao o bai lay hang - mong doi tag nho nao thi cung nhan moi tag nho
-    (10-19), khoa vao hop thay DAU TIEN toi khi expected_marker_id doi (moi lan tiep can mot hop, tam
-    hop khong nhay giua hai hop).
-/landing_target/pad_odom: tu the bai do tu TAG TO (tam + huong) cho mission (quay mui, vi tri hop).
+Hai loai tag theo dai ID (user 10-27, apriltag.yaml):
+  - TAG NEO (< box_tag_id_min): expected_marker_id = ID TAG TO cua bai -> phat TAM BAI. Bai hai tag
+    (mau 10-09, giao uoc GCS 0.8): thay tag to thi dung tag to; xuong thap tag to ra khoi khung thi
+    suy tam bai tu tag nho (id + offset, in cung to, forward_m ve phia "tren") theo truc TREN DO
+    DUOC cua chinh tag nho - bai quay bat ky huong nao van dung. Mission/controller khong can biet
+    dang bam tag nao.
+  - TAG HOP (>= box_tag_id_min): expected_marker_id la mot id hop bat ky -> nhan MOI tag hop, khoa
+    vao hop thay DAU TIEN toi khi expected_marker_id doi (moi lan tiep can mot hop, tam hop khong
+    nhay giua hai hop); phat vi tri CHINH tag hop de controller dat co cau gap ngay tren hop.
+/landing_target/pad_odom: tu the bai DO (tam + huong, tu tag to hoac tag nho) cho mission (quay mui,
+  vi tri hop) - bai dang tiep can, khong co thi bai mong doi gan nhat.
 /landing_target/world: vi tri tag expected_marker_id trong world_frame tai DUNG luc chup anh (vi tri
   hop cho mission - ghep pose tuong doi voi vi tri drone MOI NHAT lech toi 10 cm trong gio, 10-25);
   orientation = yaw huong "tren" cua tag (mission quay mui theo hop).
@@ -50,7 +52,8 @@ from tf2_ros import Buffer, TransformException, TransformListener
 from drone_control.level_frame import to_level
 from drone_control.qos import EVENT_QOS, SENSOR_QOS
 from drone_control.target_tracker import TargetTracker
-from drone_estimation.pad_map import build_pad_map, SMALL_FRAME_SUFFIX, tag_up
+from drone_estimation.pad_map import (box_frames, build_pad_map, small_to_center,
+                                      SMALL_FRAME_SUFFIX, tag_up)
 
 
 class LandingTargetBridgeNode(Node):
@@ -69,6 +72,10 @@ class LandingTargetBridgeNode(Node):
         self.declare_parameter('known_tags', Parameter.Type.DOUBLE_ARRAY)
         self.declare_parameter('tag_frames', Parameter.Type.STRING_ARRAY)
         self.declare_parameter('pad_small_tag_id_offset', 10)
+        self.declare_parameter('pad_small_tag_forward_m', 0.25)
+        self.declare_parameter('box_tag_id_min', 20)
+        self.declare_parameter('box_tag_count', 10)
+        self.forward_m = self.get_parameter('pad_small_tag_forward_m').value
 
         try:
             pads = build_pad_map(self.get_parameter('known_tags').value,
@@ -77,14 +84,17 @@ class LandingTargetBridgeNode(Node):
             pads = {}
             self.get_logger().error('chua nap config/tags.yaml - khong bam duoc tag nao')
         self.tag_frames = {i: t.frame for i, t in pads.items()}
-        # Tag nho (tren hop) cua MOI bai: id + offset, khung <ten>_s (apriltag.yaml).
+        # Tag nho cua MOI bai (ke ca bai chua khai huong): id + offset, khung <ten>_s.
         self.small_offset = self.get_parameter('pad_small_tag_id_offset').value
-        self.small_frames = {i + self.small_offset: f + SMALL_FRAME_SUFFIX
-                             for i, f in self.tag_frames.items()}
+        self.small_frame = {i: f + SMALL_FRAME_SUFFIX for i, f in self.tag_frames.items()}
+        self.box_frames = box_frames(self.get_parameter('box_tag_id_min').value,
+                                     self.get_parameter('box_tag_count').value)
         self.tilt_moving = False
 
         self.expected_id = -1
-        self.box_id = None      # tag hop dang khoa khi expected_id la tag nho; None = chua thay hop
+        self.pad_id = -1        # bai mong doi gan nhat (pad_odom khi dang bam tag hop)
+        self.box_id = None      # tag hop dang khoa khi expected_id la tag hop; None = chua thay hop
+        self.source = None      # dang bam tag nao cua bai: 'to' | 'nho' (chi de ghi log khi doi)
         # Bai dang TIEP CAN (cong G, truc bai - chua bam tag de ha): chi phat tu the bai, khong
         # phat /landing_target/pose (pose do lam position_controller bo luat dan, bam tag).
         self.approach_id = -1
@@ -126,9 +136,13 @@ class LandingTargetBridgeNode(Node):
         self.publish_event(self.tracker.reset())     # bao mat bam theo ID CU truoc khi doi
         self.expected_id = msg.data
         self.box_id = None
+        self.source = None
         self.last_tf_stamp = None
-        if msg.data >= 0 and self.frame_of(msg.data) is None:
-            self.get_logger().warning(f'tag {msg.data} khong co trong config/tags.yaml')
+        if msg.data in self.tag_frames:
+            self.pad_id = msg.data
+        elif msg.data >= 0 and msg.data not in self.box_frames:
+            self.get_logger().warning(f'tag {msg.data} khong phai tag to cua bai nao '
+                                      f'(config/tags.yaml) cung khong phai tag hop')
 
     def on_approach_id(self, msg):
         if msg.data != self.approach_id:
@@ -138,27 +152,33 @@ class LandingTargetBridgeNode(Node):
     def on_tilt(self, msg):
         self.tilt_moving = math.isnan(msg.data)
 
-    def frame_of(self, tag_id):
-        """Ten khung TF cua tag to hoac tag nho; None = khong co trong ban do."""
-        return self.tag_frames.get(tag_id) or self.small_frames.get(tag_id)
-
-    def measure(self, tag_id, seen, frame_to=None):
-        """(TF frame_to <- tag, vi tri (x, y, z), quaternion) cua tag_id neu dang thay, khong thi
-        None. frame_to mac dinh target_frame."""
-        frame = self.frame_of(tag_id)
-        if tag_id not in seen or frame is None:
-            return None
+    def lookup(self, frame, frame_to):
+        """(TF frame_to <- frame, vi tri (x, y, z), quaternion) hoac None."""
         try:
-            t = self.tf_buffer.lookup_transform(
-                frame_to or self.get_parameter('target_frame').value, frame, Time())
+            t = self.tf_buffer.lookup_transform(frame_to, frame, Time())
         except TransformException:
             return None
         tr, rq = t.transform.translation, t.transform.rotation
         return t, (tr.x, tr.y, tr.z), (rq.x, rq.y, rq.z, rq.w)
 
+    def measure_pad(self, pad_id, seen, frame_to):
+        """Tam bai pad_id trong frame_to tu tag to (uu tien) hoac tag nho: (TF, tam, quaternion
+        frame_to <- tag da dung, la tag nho?) hoac None."""
+        if pad_id in seen:
+            m, small = self.lookup(self.tag_frames[pad_id], frame_to), False
+        elif pad_id + self.small_offset in seen:
+            m, small = self.lookup(self.small_frame[pad_id], frame_to), True
+        else:
+            return None
+        if m is None:
+            return None
+        t, p, q = m
+        return t, (small_to_center(p, q, self.forward_m) if small else p), q, small
+
     def on_detections(self, msg):
-        """Tag expected_id -> /landing_target/pose (base_level); tag TO cua bai dang tiep can
-        (approach_id, khong co thi bai cua expected_id) -> /landing_target/pad_odom."""
+        """Bai expected_id (tag to / tag nho) hoac hop dang khoa -> /landing_target/pose (base_level);
+        hop con -> vi tri trong world_frame (/landing_target/world); bai dang tiep can (approach_id,
+        khong co thi bai mong doi gan nhat) -> /landing_target/pad_odom."""
         if self.tilt_moving:
             return
         seen = {d.id for d in msg.detections}
@@ -169,33 +189,40 @@ class LandingTargetBridgeNode(Node):
         except TransformException:
             return
         q_wb = (att.rotation.x, att.rotation.y, att.rotation.z, att.rotation.w)
-        track_id = self.track_id(seen)
-        m = self.measure(track_id, seen)
-        if m is not None and self.publish_landing(m, q_wb):
-            w = self.measure(track_id, seen, self.get_parameter('world_frame').value)
-            if w is not None:
-                self.publish_world(w)
-        pad_id = self.approach_id
-        if pad_id not in self.tag_frames:
-            pad_id = (self.expected_id - self.small_offset if self.expected_id in self.small_frames
-                      else self.expected_id)
-        if pad_id in self.tag_frames:
-            m = self.measure(pad_id, seen, self.get_parameter('world_frame').value)
+        target = self.get_parameter('target_frame').value
+        world = self.get_parameter('world_frame').value
+        if self.expected_id in self.tag_frames:
+            m = self.measure_pad(self.expected_id, seen, target)
             if m is not None:
-                self.publish_pad(m)
+                source = 'nho' if m[3] else 'to'
+                if source != self.source:
+                    self.get_logger().info(f'bai {self.expected_id}: bam theo tag {source}')
+                    self.source = source
+                self.publish_landing(m[:3], q_wb)
+        elif self.expected_id in self.box_frames:
+            box_id = self.track_box(seen)
+            if box_id is not None:
+                m = self.lookup(self.box_frames[box_id], target)
+                if m is not None and self.publish_landing(m, q_wb):
+                    w = self.lookup(self.box_frames[box_id], world)
+                    if w is not None:
+                        self.publish_world(w)
+        pad_id = self.approach_id if self.approach_id in self.tag_frames else self.pad_id
+        if pad_id in self.tag_frames:
+            m = self.measure_pad(pad_id, seen, world)
+            if m is not None:
+                self.publish_pad(m[:3])
 
-    def track_id(self, seen):
-        """Tag phat pose: tag to = chinh expected_id; tag nho = hop dang khoa, chua khoa thi khoa
-        hop thay duoc (uu tien expected_id, roi id nho nhat)."""
-        if self.expected_id not in self.small_frames:
-            return self.expected_id
+    def track_box(self, seen):
+        """Hop dang khoa neu dang thay; chua khoa thi khoa hop thay duoc (uu tien expected_id, roi
+        id nho nhat). None = khong thay hop can bam."""
         if self.box_id is None:
-            hop = sorted(i for i in seen if i in self.small_frames)
+            hop = sorted(i for i in seen if i in self.box_frames)
             if not hop:
-                return self.expected_id
+                return None
             self.box_id = self.expected_id if self.expected_id in hop else hop[0]
-            self.get_logger().info(f'khoa hop tag {self.box_id} (mong doi tag hop {self.expected_id})')
-        return self.box_id
+            self.get_logger().info(f'khoa hop tag {self.box_id}')
+        return self.box_id if self.box_id in seen else None
 
     def publish_landing(self, m, q_wb):
         t, p, q = m

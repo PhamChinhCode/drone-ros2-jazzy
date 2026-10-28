@@ -111,7 +111,31 @@ def test_up_yaw_doc_dung_huong_bai(pad_yaw):
                         abs_tol=1e-9)
 
 
-def test_tag_nho_tren_hop_lech_ve_phia_duoi_va_cao_hon():
-    """Hop cao 0,12 m, tam cach tam tag to 0,30 m ve phia "duoi" (bai A huong Bac -> -y)."""
-    m = build_pad_map(KNOWN, FRAMES, {1: 0.0}, 10, -0.30, 0.12)
-    assert m[11].pos == pytest.approx((10.0, -0.30, 0.12), abs=1e-9)
+def test_tag_nho_in_cung_to_phia_tren_tag_to():
+    """Tag nho in cung mat phang, tam cach tam tag to 0,21 m ve phia "tren" (bai A huong Bac -> +y)."""
+    m = build_pad_map(KNOWN, FRAMES, {1: 0.0}, 10, 0.21)
+    assert m[11].pos == pytest.approx((10.0, 0.21, 0.0), abs=1e-9)
+    assert m[11].frame == 'a_s' and m[11].small
+
+
+@pytest.mark.skipif(not os.path.isdir(CONFIG), reason='khong co cay nguon drone_bringup')
+def test_dai_tag_hop_tach_khoi_tag_neo_va_co_trong_apriltag_yaml():
+    """User 10-27: id < box_tag_id_min la tag neo (bai), >= la tag hop - hai dai khong chong nhau."""
+    from drone_estimation.pad_map import box_frames
+    t = _params('tags.yaml')
+    a = _params('apriltag.yaml')['tag']
+    khung, co = dict(zip(a['ids'], a['frames'])), dict(zip(a['ids'], a['sizes']))
+    hop = box_frames(t['box_tag_id_min'], t['box_tag_count'])
+    neo = build_pad_map(t['known_tags'], t['tag_frames'], {}, t['pad_small_tag_id_offset'], 0.0)
+    assert max(i + t['pad_small_tag_id_offset'] for i in neo) < t['box_tag_id_min']
+    for i, f in hop.items():
+        assert khung.get(i) == f, f'tag hop {i} chua khai trong apriltag.yaml (khung {f})'
+        assert math.isclose(co[i], 0.10)
+
+
+@pytest.mark.parametrize('pad_yaw', [0.0, math.pi / 2, 2.0, -math.pi])
+def test_tam_bai_tu_tag_nho_theo_truc_tren_do_duoc(pad_yaw):
+    """Tag nho o tam bai + 0,25 m theo huong bai -> lui dung 0,25 m ve tam, bai quay huong nao cung vay."""
+    from drone_estimation.pad_map import small_to_center
+    p = (10.0 + 0.25 * math.cos(pad_yaw), 0.25 * math.sin(pad_yaw), 0.0)
+    assert small_to_center(p, q_tag_world(pad_yaw), 0.25) == pytest.approx((10.0, 0.0, 0.0), abs=1e-9)

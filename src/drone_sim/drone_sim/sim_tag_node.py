@@ -10,7 +10,7 @@ landing_target_bridge_node can:
 Dung dung chuoi TF cua drone that (base_link -> camera_link -> camera_optical_frame) nen phep
 lookupTransform cua bridge di qua y het duong that. base_link -> camera_link do camera_tilt_node
 phat THEO goc servo (nhu drone that); node nay tra TF do moi chu ky nen camera nghieng toi dau thi
-tam nhin mo phong theo toi do. Tag nho nam tren nap hop hang (pad_small_tag_height_m).
+tam nhin mo phong theo toi do. Tag nho in cung mat phang tag to (pad_small_tag_forward_m).
 
 Tam nhin mo phong bang hinh chop: tag chi "thay duoc" khi nam trong FOV, trong khoang cach cho
 phep, va khong bi che. KHONG mo phong: mo anh khi bay nhanh, thieu sang, tag bi loa, sai so PnP
@@ -87,7 +87,7 @@ class SimTagNode(Node):
         self.declare_parameter('image_height', 400)
         # Ca tag (canh tag_size_m; tag nho: pad_small_tag_size_m) phai nam trong anh va canh
         # >= min_tag_px moi tinh la thay.
-        self.declare_parameter('tag_size_m', 0.25)
+        self.declare_parameter('tag_size_m', 0.30)
         self.declare_parameter('min_tag_px', 20.0)
         self.declare_parameter('max_range_m', 8.0)
         self.declare_parameter('min_range_m', 0.15)
@@ -95,11 +95,10 @@ class SimTagNode(Node):
         self.declare_parameter('dropout_prob', 0.0)          # ti le khung bi mat detection
         self.declare_parameter('known_tags', Parameter.Type.DOUBLE_ARRAY)
         self.declare_parameter('tag_frames', Parameter.Type.STRING_ARRAY)
-        # Bai co huong thi co tag nho (tren hop hang) id + offset, lech forward_m, cao height_m.
+        # Bai co huong thi co tag nho id + offset, lech forward_m (cung mat phang tag to).
         self.declare_parameter('known_tags_heading', Parameter.Type.DOUBLE_ARRAY)
         self.declare_parameter('pad_small_tag_id_offset', 10)
-        self.declare_parameter('pad_small_tag_forward_m', 0.30)
-        self.declare_parameter('pad_small_tag_height_m', 0.12)
+        self.declare_parameter('pad_small_tag_forward_m', 0.25)
         self.declare_parameter('pad_small_tag_size_m', 0.10)
 
         g = self.get_parameter
@@ -108,8 +107,7 @@ class SimTagNode(Node):
         except ParameterUninitializedException:
             headings = {}
         pads = build_pad_map(g('known_tags').value, g('tag_frames').value, headings,
-                             g('pad_small_tag_id_offset').value, g('pad_small_tag_forward_m').value,
-                             g('pad_small_tag_height_m').value)
+                             g('pad_small_tag_id_offset').value, g('pad_small_tag_forward_m').value)
         # id -> (vi tri, ten khung, canh, ma tran xoay tag -> the gioi theo huong bai)
         self.tags = {i: (np.array(t.pos), t.frame,
                          g('pad_small_tag_size_m').value if t.small else g('tag_size_m').value,

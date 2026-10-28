@@ -1,11 +1,13 @@
 """Ban do bai dap: tag to (tags.yaml) + tag nho Pi tu suy - thuan Python, pytest duoc.
 
-Moi bai co the co mot tag nho cung huong (giao uoc GCS 0.8 muc 8.7). Tu 2026-10-22 tag nho DAN TREN
-NOC HOP HANG (docs/ke_hoach_camera_servo_gap_hang.md): drone bam tag nho de dat co cau gap ngay
-tren hop. Moi bai dung CHUNG mot mau: id_nho = id_to + id_offset, tam cach tam tag to forward_m
-theo huong bai (am = ve phia "duoi"), cao hon mat bai height_m (chieu cao hop). Tag nho KHONG dung
-neo EKF (hop dat tay, lech vai cm). Tag to khong khai huong thi khong suy duoc vi tri tag nho -> bai
-do khong co tag nho.
+Moi bai co the co mot tag nho cung huong (giao uoc GCS 0.8 muc 8.7), IN CUNG TO voi tag to (user
+10-27, quay lai mau 10-09): id_nho = id_to + id_offset, tam cach tam tag to forward_m ve phia "tren".
+Xuong thap tag to ra khoi khung thi bam tag nho (small_to_center). Tag to khong khai huong thi khong
+suy duoc vi tri tag nho trong ban do -> bai do khong co tag nho o day (bridge van suy tam bai tu tag
+nho theo truc TREN do duoc).
+
+Dai ID (apriltag.yaml): < box_id_min = tag NEO vi tri (bai), >= box_id_min = tag dan tren hop hang
+(box_frames) - KHONG thuoc ban do bai, khong neo EKF.
 
 Huong khai trong tags.yaml theo quy uoc tren day (giao uoc 8.6): do tu truc N cua ban do, CHIEU KIM
 DONG HO. Ban do la ENU (x = E, y = N) nen yaw ENU (tu truc x, nguoc kim) = 90 - huong.
@@ -18,6 +20,13 @@ from drone_estimation.estimation_math import rotate
 
 # Ten khung TF cua tag nho = ten khung tag to + hau to nay (apriltag.yaml tag.frames phai khop).
 SMALL_FRAME_SUFFIX = '_s'
+# Ten khung TF cua tag hop = tien to nay + id (apriltag.yaml tag.frames phai khop).
+BOX_FRAME_PREFIX = 'hop_'
+
+
+def box_frames(id_min, count):
+    """{id: ten khung TF} cua cac tag hop hang id_min .. id_min + count - 1."""
+    return {i: f'{BOX_FRAME_PREFIX}{i}' for i in range(id_min, id_min + count)}
 
 
 @dataclass(frozen=True)
@@ -84,6 +93,17 @@ TAG_UP_AXIS = (0.0, 1.0, 0.0)
 def tag_up(q_frame_tag):
     """Huong "tren" cua tag (vecto don vi) bieu dien trong khung cha cua q (x, y, z, w)."""
     return rotate(q_frame_tag, TAG_UP_AXIS)
+
+
+def small_to_center(p_small, q_small, forward_m):
+    """Tam bai tu tag NHO: lui forward_m nguoc truc TREN DO DUOC cua chinh tag nho.
+
+    Khong dung huong bai khai bao (GCS) cung khong dung yaw la ban - bai dat lech hay quay bat ky
+    huong nao van ra dung tam, mien to in dung mau (tag nho cung chieu, phia TREN tag to).
+    p_small, q_small: vi tri + huong tag nho trong cung mot khung (vd base_link).
+    """
+    u = tag_up(q_small)
+    return tuple(p_small[i] - forward_m * u[i] for i in range(3))
 
 
 def up_yaw(q_frame_tag):

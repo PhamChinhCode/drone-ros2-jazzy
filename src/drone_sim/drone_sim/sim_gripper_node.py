@@ -59,9 +59,9 @@ class SimGripperNode(Node):
         self.declare_parameter('world', 'drone_tune')
         self.declare_parameter('rate_hz', 50.0)
         # [x, y, yaw] tam day hop (world) - PHAI khop hop_<ten> trong worlds/drone_v2.sdf.
-        self.declare_parameter('boxes', [10.0, 0.30, 3.6652])
+        self.declare_parameter('boxes', [10.0, -0.30, 3.6652])
         self.declare_parameter('box_names', ['a'])
-        self.declare_parameter('box_tag_ids', [11])
+        self.declare_parameter('box_tag_ids', [20])
         b = self.get_parameter('boxes').value
         names = self.get_parameter('box_names').value
         tags = self.get_parameter('box_tag_ids').value

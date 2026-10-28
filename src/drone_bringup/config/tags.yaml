@@ -16,16 +16,22 @@
     # Huong "tren" cua tag [id, do, ...]: do tu truc N ban do, CHIEU KIM DONG HO (giao uoc GCS 8.6,
     # ban 0.8). Chi khai tag DA BIET huong; tag co huong moi co tag nho. Vi du: [0.0, 90.0, 1.0, 0.0]
     known_tags_heading: []
-    # Mau tag nho chung cho moi bai: id = id_to + 10, canh 10 cm. Tu 2026-10-22 tag nho DAN TREN NOC
-    # HOP HANG 12x12x12 cm (docs/ke_hoach_camera_servo_gap_hang.md muc 7), nap hop cao 0,12 m. Tag nho
-    # chi de can co cau gap, KHONG neo EKF. Tu 10-27 (user): hop dat bat ky dau phia "TREN" tag to (khong
-    # de len tag), xoay bat ky - drone tim hop tu diem cach tam tag to forward_m (duong = phia "tren"),
-    # gap BAT KY tag nho 10-19 thay duoc, quay mui <= 45 do ve mat hop gan nhat. (10-22..10-26: tam hop
-    # co dinh 0,30 m ve phia "duoi"; truoc nua: 0,21 m phia "tren", cung mat phang tag to.)
+    # Dai ID (user 10-27, apriltag.yaml): < 20 = tag NEO vi tri, >= 20 = tag hop hang.
+    # Tag nho cua bai: id = id_to + 10, canh 10 cm, IN CUNG TO voi tag to (cung mat phang), tam cach
+    # tam tag to forward_m ve phia "tren". Xuong thap tag to ra khoi khung thi bridge bam tag nho, suy
+    # tam bai theo truc TREN do duoc cua chinh tag nho (khong can huong khai bao). 0,25 m = to in GCS
+    # (padSheet.ts, 10-27): tag to 30 cm + vien 1 o (37,5 mm) thi tam-tam toi thieu 0,2375 m. DO LAI.
     pad_small_tag_id_offset: 10
     pad_small_tag_size_m: 0.10
-    pad_small_tag_forward_m: 0.30
-    pad_small_tag_height_m: 0.12
+    pad_small_tag_forward_m: 0.25
+    # Tag hop hang (user 10-27): id box_tag_id_min .. +box_tag_count-1, canh 10 cm, dan tren nap hop
+    # 12x12x12 cm. Hop nao cung gap duoc, dat tu do phia "duoi" tag to, xoay bat ky (drone quay mui
+    # <= 45 do ve mat hop gan nhat). box_forward_m: diem BAT DAU tim hop so voi tam tag to theo huong
+    # bai (am = phia "duoi"); thay hop roi thi bam vi tri do. Tag hop KHONG neo EKF.
+    box_tag_id_min: 20
+    box_tag_count: 10
+    box_forward_m: -0.30
+    box_height_m: 0.12
     # Goc WGS84 cua ban do (diem x = y = z = 0) va phuong vi truc N ban do do tu Bac THAT (chieu
     # kim dong ho). GCS gui kem ban do tag (giao uoc GCS 8.7); do tai cho bang `gps_survey`.
     # false = CHUA CO GOC: GPS khong vao EKF, GCS khong nhan lat/lon (GLOBAL_POS_VALID = 0).

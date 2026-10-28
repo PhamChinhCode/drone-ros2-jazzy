@@ -14,8 +14,11 @@
     known_tags_heading: [0.0, 90.0, 1.0, 0.0, 2.0, 180.0]
     pad_small_tag_id_offset: 10
     pad_small_tag_size_m: 0.10
-    pad_small_tag_forward_m: 0.30     # diem bat dau tim hop, 0,30 m ve phia "tren" (tags.yaml)
-    pad_small_tag_height_m: 0.12
+    pad_small_tag_forward_m: 0.25     # tag nho in cung to, phia "tren" tag to (tags.yaml)
+    box_tag_id_min: 20
+    box_tag_count: 10
+    box_forward_m: -0.30
+    box_height_m: 0.12
     geo_origin_valid: false
     geo_origin_lat: 0.0
     geo_origin_lon: 0.0

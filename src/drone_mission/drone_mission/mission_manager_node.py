@@ -63,12 +63,12 @@ class MissionManagerNode(Node):
         # Huong "tren" cua bai (tags.yaml, giao uoc GCS 0.8) - bai co huong moi tiep can thang hang.
         self.declare_parameter('known_tags_heading', Parameter.Type.DOUBLE_ARRAY)
         self.declare_parameter('yaw_control', False)
-        # Tag nho tren hop hang (tags.yaml) - FSM suy diem tim hop tu tam + huong bai.
-        self.declare_parameter('pad_small_tag_id_offset', 10)
-        self.declare_parameter('pad_small_tag_forward_m', 0.30)
+        # Tag hop hang (tags.yaml box_*): id dau dai tag hop + diem bat dau tim hop so voi tam bai.
+        self.declare_parameter('box_tag_id_min', 20)
+        self.declare_parameter('box_forward_m', -0.30)
         # Diem tha hop so voi tam tag to (theo huong bai) - xem mission_fsm.Params.drop_forward_m.
         self.declare_parameter('drop_forward_m', -0.30)
-        self.declare_parameter('pad_small_tag_height_m', 0.12)   # cao nap hop (bu laser)
+        self.declare_parameter('box_height_m', 0.12)   # cao nap hop (bu laser)
         # Duoi ToF nay dung lai, nghieng camera goc gap - xem mission_fsm.BOX_CAM_SWITCH_M.
         self.declare_parameter('box_cam_switch_m', mission_fsm.BOX_CAM_SWITCH_M)
 
@@ -81,8 +81,8 @@ class MissionManagerNode(Node):
             anchor_margin_m=self.get_parameter('anchor_margin_m').value,
             anchor_wait_s=self.get_parameter('anchor_wait_s').value,
             yaw_control=self.get_parameter('yaw_control').value,
-            small_id_offset=self.get_parameter('pad_small_tag_id_offset').value,
-            box_forward_m=self.get_parameter('pad_small_tag_forward_m').value,
+            box_tag_id=self.get_parameter('box_tag_id_min').value,
+            box_forward_m=self.get_parameter('box_forward_m').value,
             drop_forward_m=self.get_parameter('drop_forward_m').value,
             box_cam_switch_m=self.get_parameter('box_cam_switch_m').value))
 
@@ -440,7 +440,7 @@ class MissionManagerNode(Node):
         if action.camera_tilt_deg is not None:
             self.pub_camera_tilt.publish(Float32(data=float(action.camera_tilt_deg)))
         self.pub_box_height.publish(Float32(data=float(
-            self.get_parameter('pad_small_tag_height_m').value if action.box_mode else 0.0)))
+            self.get_parameter('box_height_m').value if action.box_mode else 0.0)))
         self.publish_mission_state(action.detail, action.expected_marker_id)
 
     def send_gripper(self, lenh):
