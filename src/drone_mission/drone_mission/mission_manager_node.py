@@ -18,6 +18,7 @@ from rclpy.exceptions import ParameterUninitializedException
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.signals import SignalHandlerOptions
+from rclpy.time import Time
 from sensor_msgs.msg import BatteryState, Range
 from std_msgs.msg import Bool, Float32, Int32
 from std_srvs.srv import Trigger
@@ -119,6 +120,10 @@ class MissionManagerNode(Node):
         self.pad_filter = PadObsFilter()
         self.pad_filter_key = None
         self.pad_stamp_s = None         # lan cuoi nhan pad_odom duoc bo loc nhan
+        # Luc doi diem (pad_key): pad_odom chup TRUOC moc nay la cua bai cu (bridge con bam bai truoc
+        # toi khi nhan approach_pad_id moi). Bay that 10-29: tha o C xong mau bai C (cach home 2 m, lot
+        # loc 3 m) bi ghi thanh tam home -> "toi home" ngay tren C, tim tag 0 mai khong thay.
+        self.pad_key_since_s = None
         self.pose_reset_s = None
         self.tilt_deg = None
         self.tilt_stamp_s = None
@@ -304,8 +309,9 @@ class MissionManagerNode(Node):
         if self.pose_reset_s is not None and self.now_s() - self.pose_reset_s < POSE_RESET_IGNORE_S:
             return
         if self.pad_key() != self.pad_filter_key:
-            self.pad_filter.reset()
-            self.pad_filter_key = self.pad_key()
+            return      # tick() chua ghi nhan diem moi
+        if Time.from_msg(msg.header.stamp).nanoseconds / 1e9 < self.pad_key_since_s:
+            return
         p, q = msg.pose.position, msg.pose.orientation
         if self.pad_filter.update(p.x, p.y, p.z, 2.0 * math.atan2(q.z, q.w), wp.pad[:2]):
             self.pad_stamp_s = self.now_s()
@@ -396,6 +402,10 @@ class MissionManagerNode(Node):
 
         prev_state = self.fsm.state
         action = self.fsm.step(snap)
+        if self.pad_key() != self.pad_filter_key:
+            self.pad_filter.reset()
+            self.pad_filter_key = self.pad_key()
+            self.pad_key_since_s = self.now_s()
         if self.fsm.state != prev_state:
             self.get_logger().info(f'{prev_state} -> {self.fsm.state}: {action.detail}')
         elif action.detail != self.last_detail and action.detail:
@@ -408,7 +418,10 @@ class MissionManagerNode(Node):
             self.send_gripper(action.gripper_command)
         self.pub_expected_id.publish(Int32(data=action.expected_marker_id))
         wp = self.fsm.current_waypoint()
-        dang_toi = self.fsm.state in (mission_fsm.ENROUTE, mission_fsm.MARKER_SEARCH,
+        # TAKEOFF cung la dang toi diem hien tai: de bridge con bam bai VUA ROI thi pad_odom cua no gan
+        # nham cho diem moi (bay that 10-29).
+        dang_toi = self.fsm.state in (mission_fsm.TAKEOFF, mission_fsm.ENROUTE,
+                                      mission_fsm.MARKER_SEARCH,
                                       mission_fsm.ALIGN_HEADING, mission_fsm.RETRY_LOITER,
                                       mission_fsm.PRECISION_LAND, mission_fsm.FINAL_APPROACH)
         self.pub_approach_id.publish(Int32(data=wp.marker_id if wp and dang_toi else -1))
