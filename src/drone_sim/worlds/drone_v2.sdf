@@ -221,15 +221,15 @@
       </link>
     </model>
 
-    <!-- Drone khung Version2.0 (models/drone_v2, sinh tu drone_v2.urdf). Dat cho chan (0,155 m duoi
-         mat FC = goc base_link) cham dat. Topic giu ten X3 (robotNamespace, odometry) de moi node Pi va
+    <!-- Drone khung Version2.0 (models/drone_v2, sinh tu drone_v2.urdf). Dat cho chan (0,205 m duoi
+         mat FC = goc base_link, cang moi 10-29) cham dat. Topic giu ten X3 (robotNamespace, odometry) de moi node Pi va
          sim_fc_bridge dung y nhu world X3. Hang so dong co/gain lay cua X3: gain cua
          MulticopterVelocityControl da chuan hoa theo quan tinh nen dung lai duoc; luc day toi da
          4 x 8,55e-6 x 800^2 = 21,9 N so voi trong luong 7,5 N (khoi luong CAD 0,768 kg - CHUA CAN). -->
     <include>
       <uri>model://drone_v2</uri>
       <name>drone_v2</name>
-      <pose>0 0 0.156 0 0 0</pose>
+      <pose>0 0 0.206 0 0 0</pose>
       <!-- Luc day: X2212 1400KV + canh 8x4.5 o 3S toi da ~830 g/motor (ClaudeRS/ngan_sach_trong_luong)
            -> motorConstant = forceConstant = 8,14 N / 800^2 = 1,272e-5 (X3: 8,55e-6). Voi drone 1,5 kg
            (model, xem tools/sinh_model_drone_v2.py) ga treo ~45 %, khop ga hover do 0,43..0,49. -->

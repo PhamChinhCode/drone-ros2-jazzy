@@ -296,8 +296,8 @@ def test_toc_do_ha_xa_025_gan_010():
     act = fsm.step(snap(1.3, armed=True, range_m=1.2, target_offset_m=0.1))
     assert act.velocity_up_mps == -0.10
     assert m.descent_mps(None) == 0.10                  # khong laser -> cham
-    assert m.descent_mps(0.30) == 0.10
-    assert m.descent_mps(0.25) == 0.3                   # sat dat (cang ~5-8 cm): xuong nhanh
+    assert m.descent_mps(0.35) == 0.10
+    assert m.descent_mps(0.30) == 0.3                   # sat dat (cang ~5-8 cm): xuong nhanh
     assert m.descent_mps(0.17) == 0.3
 
 
@@ -348,7 +348,7 @@ def test_sat_dat_xuong_tiep_khong_can_tag_roi_disarm_va_hoan_thanh():
     fsm = fsm_dang_ha_chinh_xac()
     low = m.PRECISION_BLIND_BELOW_M - 0.05
     act = fsm.step(snap(3.0, armed=True, range_m=low, target_offset_m=None))
-    assert fsm.state == m.PRECISION_LAND and act.velocity_up_mps == -m.LAND_DESCENT_NEAR_MPS
+    assert fsm.state == m.PRECISION_LAND and act.velocity_up_mps == -m.descent_mps(low)
     act = fsm.step(snap(4.0, armed=True, range_m=0.18, landed=True, disarm_ready=True))
     assert act.fc_command == 'disarm'
     fsm.step(snap(4.5, armed=False, range_m=0.18))
@@ -1089,7 +1089,7 @@ def fsm_ha_chinh_xac_co_huong():
 
 
 def test_doan_cuoi_nghieng_camera_ve_mui_bam_tag_nho_toi_sat_dat():
-    # User 10-28: camera thang xuong mat tag nho tu ~0,28 m; nghieng +20 do bam tag nho toi ~0,20 m.
+    # User 10-28: camera thang xuong mat tag nho tu ~0,28 m; nghieng ve mui bam tag nho toi ~0,24 m.
     fsm = fsm_ha_chinh_xac_co_huong()
     yaw = math.pi / 2
     act = fsm.step(snap(3.2, armed=True, range_m=0.40, target_offset_m=0.02, yaw=yaw))

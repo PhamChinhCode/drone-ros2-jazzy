@@ -8,20 +8,21 @@ Dieu kien 3 loai truong hop bay ngang qua hop cao. KHONG dung ga (cham dat ga va
 KHONG dung landed_state. Gui DISARM hay khong (OB_DIS_RDY) la viec cua noi goi.
 
 Moc mat dat = trung vi laser trong ref_window_s luc dang disarm va nam yen; ngoai khoang
-[ref_min_m, ref_max_m] hoac khong co mau (vd arm luc cam tay) thi dung 0,17 m nhu FC.
+[ref_min_m, ref_max_m] hoac khong co mau (vd arm luc cam tay) thi dung 0,22 m nhu FC (cang moi
+10-29, chan 0,205 m duoi FC; cang cu 0,17 m).
 Nguong la SO TAM - chua do khi canh quay (12.B).
 """
 
 from collections import deque
 from statistics import median
 
-GROUND_REF_DEFAULT_M = 0.17
+GROUND_REF_DEFAULT_M = 0.22
 
 
 class LandingDetector:
 
     def __init__(self, margin_m=0.05, vz_still_mps=0.05, cmd_descend_mps=0.05, hold_s=1.0,
-                 ref_window_s=2.0, ref_min_m=0.15, ref_max_m=0.25):
+                 ref_window_s=2.0, ref_min_m=0.18, ref_max_m=0.30):
         self.margin_m = margin_m
         self.vz_still_mps = vz_still_mps
         self.cmd_descend_mps = cmd_descend_mps

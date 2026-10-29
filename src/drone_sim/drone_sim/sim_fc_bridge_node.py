@@ -64,8 +64,8 @@ class SimFcBridgeNode(Node):
         # tune trong sim (drift_comp ki 0,15) dao dong +-0,25 m/s khi bay that 10-09. 0 = tat.
         self.declare_parameter('vel_delay_s', 0.0)
         self.declare_parameter('vel_tau_s', 0.0)
-        # Laser doc khi nam dat (m): X3 0,17 nhu drone cu; drone_v2 0,146 (URDF: chan 0,155 duoi FC,
-        # mat MTF-01 0,009 duoi FC).
+        # Laser doc khi nam dat (m): X3 0,17 nhu drone cu; drone_v2 0,196 (URDF 10-29: chan 0,205 duoi
+        # FC, mat MTF-01 0,009 duoi FC).
         self.declare_parameter('ground_range_m', sim_fc.GROUND_RANGE_M)
         # Servo camera (lenh 183 servo 2): xung -> goc theo CUNG bang voi camera_tilt_node, phat goc
         # (rad) cho JointPositionController cua camera_tilt_joint. Topic rong = model khong co servo.

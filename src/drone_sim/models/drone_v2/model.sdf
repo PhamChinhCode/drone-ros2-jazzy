@@ -4,22 +4,22 @@
     <link name='base_link'>
       <enable_wind>true</enable_wind>
       <inertial>
-        <pose>0.0046800000000000001 -0.00017000000000000001 -0.025649999999999999 0 0 0</pose>
-        <mass>1.43281</mass>
+        <pose>0.0046499999999999996 -0.00014999999999999999 -0.02827 0 0 0</pose>
+        <mass>1.43781</mass>
         <inertia>
-          <ixx>0.0125673</ixx>
-          <ixy>-1.274e-05</ixy>
-          <ixz>0.000116942</ixz>
-          <iyy>0.0137163</iyy>
-          <iyz>-1.25148e-06</iyz>
-          <izz>0.0242644</izz>
+          <ixx>0.0130917</ixx>
+          <ixy>-1.03968e-05</ixy>
+          <ixz>9.79379e-05</ixz>
+          <iyy>0.0142065</iyy>
+          <iyz>-1.52918e-06</iyz>
+          <izz>0.0240303</izz>
         </inertia>
       </inertial>
       <collision name='base_link_collision'>
-        <pose>0 0 -0.0385 0 0 0</pose>
+        <pose>0 0 -0.063500000000000001 0 0 0</pose>
         <geometry>
           <box>
-            <size>0.44940000000000002 0.44940000000000002 0.23300000000000001</size>
+            <size>0.44940000000000002 0.44940000000000002 0.28299999999999997</size>
           </box>
         </geometry>
       <surface><contact><collide_bitmask>1</collide_bitmask></contact></surface></collision>
@@ -112,15 +112,15 @@
     <link name='gripper_jaw_left'>
       <pose relative_to='gripper_jaw_left_joint'>0 0 0 0 0 0</pose>
       <inertial>
-        <pose>-0.0030000000000000001 0.024109999999999999 -0.044019999999999997 0 0 0</pose>
-        <mass>0.01576</mass>
+        <pose>-0.0030000000000000001 0.024289999999999999 -0.044260000000000001 0 0 0</pose>
+        <mass>0.013259999999999999</mass>
         <inertia>
-          <ixx>2.4303000000000001e-05</ixx>
+          <ixx>2.0285e-05</ixx>
           <ixy>0</ixy>
           <ixz>0</ixz>
-          <iyy>2.4654000000000001e-05</iyy>
-          <iyz>6.5570000000000001e-06</iyz>
-          <izz>6.3362000000000004e-06</izz>
+          <iyy>2.0792999999999999e-05</iyy>
+          <iyz>5.5759999999999996e-06</iyz>
+          <izz>5.7714000000000003e-06</izz>
         </inertia>
       </inertial>
       <visual name='gripper_jaw_left_visual'>
@@ -158,15 +158,15 @@
     <link name='gripper_jaw_right'>
       <pose relative_to='gripper_jaw_right_joint'>0 0 0 0 0 0</pose>
       <inertial>
-        <pose>-0.0030000000000000001 -0.0241 -0.04403 0 0 0</pose>
-        <mass>0.01576</mass>
+        <pose>-0.0030000000000000001 -0.024279999999999999 -0.044269999999999997 0 0 0</pose>
+        <mass>0.013259999999999999</mass>
         <inertia>
-          <ixx>2.4303000000000001e-05</ixx>
+          <ixx>2.0285e-05</ixx>
           <ixy>0</ixy>
           <ixz>0</ixz>
-          <iyy>2.4660000000000001e-05</iyy>
-          <iyz>-6.55e-06</iyz>
-          <izz>6.3307999999999996e-06</izz>
+          <iyy>2.0798e-05</iyy>
+          <iyz>-5.5679999999999999e-06</iyz>
+          <izz>5.7659000000000001e-06</izz>
         </inertia>
       </inertial>
       <visual name='gripper_jaw_right_visual'>
@@ -211,7 +211,7 @@
           <ixy>0</ixy>
           <ixz>0</ixz>
           <iyy>4.1396999999999997e-09</iyy>
-          <iyz>-2.2570000000000001e-10</iyz>
+          <iyz>2.266e-10</iyz>
           <izz>3.2305999999999998e-08</izz>
         </inertia>
       </inertial>
@@ -250,15 +250,15 @@
     <link name='gripper_rod_left'>
       <pose relative_to='gripper_rod_left_joint'>0 0 0 0 0 0</pose>
       <inertial>
-        <pose>0.0015 0.022270000000000002 0.0022399999999999998 0 0 0</pose>
+        <pose>0.0015 0.022280000000000001 0.00231 0 0 0</pose>
         <mass>0.00077999999999999999</mass>
         <inertia>
           <ixx>1.6920000000000001e-07</ixx>
           <ixy>0</ixy>
           <ixz>0</ixz>
-          <iyy>6.7631000000000004e-09</iyy>
-          <iyz>8.7769999999999998e-09</iyz>
-          <izz>1.6360000000000001e-07</izz>
+          <iyy>6.8243999999999997e-09</iyy>
+          <iyz>9.3089999999999992e-09</iyz>
+          <izz>1.6353999999999999e-07</izz>
         </inertia>
       </inertial>
       <visual name='gripper_rod_left_visual'>
@@ -296,15 +296,15 @@
     <link name='gripper_rod_right'>
       <pose relative_to='gripper_rod_right_joint'>0 0 0 0 0 0</pose>
       <inertial>
-        <pose>0.0015 -0.0223 -0.0019599999999999999 0 0 0</pose>
+        <pose>0.0015 -0.0223 -0.0020300000000000001 0 0 0</pose>
         <mass>0.00077999999999999999</mass>
         <inertia>
           <ixx>1.6920000000000001e-07</ixx>
           <ixy>0</ixy>
           <ixz>0</ixz>
-          <iyy>7.0116999999999997e-09</iyy>
-          <iyz>1.077e-08</iyz>
-          <izz>1.6334999999999999e-07</izz>
+          <iyy>7.0865999999999999e-09</iyy>
+          <iyz>1.13e-08</iyz>
+          <izz>1.6327000000000001e-07</izz>
         </inertia>
       </inertial>
       <visual name='gripper_rod_right_visual'>

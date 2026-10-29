@@ -64,7 +64,7 @@ def test_hoc_moc_luc_disarm_nam_yen():
 
 
 def test_moc_ngoai_khoang_hop_ly_dung_mac_dinh():
-    """Arm luc cam tay / tren ban cao: laser 0,6 m -> khong tin, dung 0,17."""
+    """Arm luc cam tay / tren ban cao: laser 0,6 m -> khong tin, dung moc mac dinh."""
     det = LandingDetector()
     for i in range(50):
         det.update_ground_ref(False, 0.60, 0.0, i * DT)

@@ -37,8 +37,9 @@ camera_tilt_node:
     overshoot_us: 100            # chong ro ~1,9 do: luon tien toi tu phia us thap
     overshoot_wait_s: 0.3
     settle_s: 0.8                # servo chay + khung hinh het nhoe truoc khi bao goc moi
-    initial_tilt_deg: 20.0       # luc khoi dong coi camera +20 do ve mui = FC SERVO_CAM_BOOT_US 1762 us
-                                 # (user 10-28: nam tren bai chi thay tron tag nho), giu toi khi vang num RC
+    initial_tilt_deg: 28.0       # luc khoi dong coi camera +28 do ve mui = FC SERVO_CAM_BOOT_US 1850 us
+                                 # (user 10-28: nam tren bai chi thay tron tag nho; cang moi 10-29 +20 -> +28
+                                 # = mission_fsm.CAM_LAND_LOW_DEG), giu toi khi vang num RC
     # Hinh hoc tu URDF khung Version2.0 (3DModels/Version2.0/assembly_urdf/drone_v2.urdf, 10-22): truc
     # servo (camera_tilt_joint) va tam ong kinh (day ong kinh trong mesh camera_tilt_link). z tinh tu
     # MAT ToF (MTF-01 0,009 m duoi mat FC) vi optical_flow coi laser o goc base_link: truc servo

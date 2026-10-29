@@ -71,10 +71,10 @@ TAKEOFF_CLIMB_MPS = 0.5
 LAND_DESCENT_FAR_MPS = 0.25
 LAND_DESCENT_NEAR_MPS = 0.10
 LAND_NEAR_BELOW_M = 1.2
-# Doan cuoi (10-10, yeu cau user): laser <= 0,25 m (cang con ~5-8 cm, laser doc ~0,17 m khi cham dat)
-# thi ha NHANH. Sat dat khong nghieng sua vi tri duoc (de quet cang) va da can tam xong; xuong
+# Doan cuoi (10-10, yeu cau user): cang con ~5-8 cm thi ha NHANH. Cang moi 10-29 (chan 0,205 m duoi FC,
+# cao hon 5 cm): laser doc ~0,22 m khi cham dat -> 0,25 -> 0,30 m. Sat dat khong nghieng sua vi tri duoc (de quet cang) va da can tam xong; xuong
 # nhanh bot thoi gian gio day troi. 0,3 = tran xuong cham cua FC duoi 1,2 m (Pi tu kep 0,285).
-LAND_FINAL_BELOW_M = 0.25
+LAND_FINAL_BELOW_M = 0.30
 LAND_FINAL_MPS = 0.3
 OB_STATE_KHOA = 0          # trung fc_link.OB_STATE_KHOA - FSM khong import ROS
 
@@ -114,11 +114,13 @@ PRECISION_ALIGN_PER_M = 0.10
 # ra khoi khung tu ~0,29 m) - xuong tiep khong can tag. Tren muc nay mat tag la dung, KHONG ha mu.
 PRECISION_BLIND_BELOW_M = 0.32
 # Bai co tag nho (khai huong, mui theo bai - user 10-28): duoi PRECISION_CAM_TILT_BELOW_M nghieng camera
-# CAM_LAND_LOW_DEG ve mui. Camera thang xuong mat ca tag nho (tam +0,21 m) tu ~0,28 m; +20 do con thay
-# tron ven toi camera ~0,14 m -> chi ha mu duoi PRECISION_BLIND_TILT_BELOW_M (cham dat ToF ~0,18 m).
+# CAM_LAND_LOW_DEG ve mui. Camera thang xuong mat ca tag nho (tam +0,21 m) tu ~0,28 m. Cang moi 10-29:
+# nam dat ong kinh cao ~0,12 m; +20 do cat mep xa tag nho ngay khi drone dung giua bai (lech lui -1 cm),
+# +28 do (1850 us) can hai phia: tag nho tron khung khi drone lech toi 5,3 / lui 5,0 cm, o 0,35 m con
+# 7,2 / 27 cm. Chi ha mu duoi PRECISION_BLIND_TILT_BELOW_M (cham dat ToF ~0,22 m).
 PRECISION_CAM_TILT_BELOW_M = 0.35
-CAM_LAND_LOW_DEG = 20.0
-PRECISION_BLIND_TILT_BELOW_M = 0.20
+CAM_LAND_LOW_DEG = 28.0
+PRECISION_BLIND_TILT_BELOW_M = 0.24
 # Mat tag giua chung khi ha (10-10, yeu cau user): bong drone che tag, khung hinh hong... ma theo EKF
 # drone van trong vung can tam (cung nguong PRECISION_ALIGN_*) thi HA TIEP toi da chung nay, truc
 # ngang bam tam bai da biet (pad_obs) theo EKF. Troi ra ngoai (mat vi troi, khong phai vi nghieng
@@ -162,7 +164,9 @@ ALIGN_HEADING_HOLD_S = 1.0
 ALIGN_HEADING_TIMEOUT_S = 20.0  # qua han (gio xoay) -> ha voi mui dang co
 # Gap / tha hang khi TREO: co cau gap o tam drone, ToF (10 cm sau tam) chieu xuong dat chu khong
 # vao hop. User 10-22: gap khi nap hop (12 cm) NGANG CHAN: chan 0,155 - mat ToF 0,009 + hop 0,12 =
-# 0,266 m (truoc: 0,20). Tha cung muc nay: day hop vua cham dat.
+# 0,266 m (truoc: 0,20). Tha cung muc nay: day hop vua cham dat. Cang moi 10-29 (chan 0,205 m, user
+# giu treo roi kep): muc gap theo vi tri ngon kep nen KHONG doi; chan con cach dat ~7 cm o GRIP_HOVER_M,
+# ~5 cm o GRIP_CLOSE_M (ngon kep dong cao hon chan 1,2 cm - cham dat cung khong ket ngon).
 GRIP_HOVER_M = 0.27
 # Toi uu gap (user 10-25): o GRIP_HOVER_M day ngon kep (0,193 m duoi mat FC, URDF kep MG90) chi an
 # 2,4 cm duoi nap hop - nhap nho 3 cm la kep hut (mo phong 10-25). Ham bam tag hop toi GRIP_HOVER_M
@@ -247,7 +251,7 @@ MAX_WAYPOINT_VEL_MPS = 1.9  # 95 % tran ngang FC (giao uoc 9.6, P9)
 
 
 # Goc camera khi VAO trang thai (trang thai khac giu goc dang co). FINAL_APPROACH tu doi sang
-# CAM_BOX_DEG khi thay tag hop. IDLE / TAKEOFF (user 10-28): nam tren bai camera chi cao ~0,15 m, thang
+# CAM_BOX_DEG khi thay tag hop. IDLE / TAKEOFF (user 10-28): nam tren bai camera chi cao ~0,12 m, thang
 # xuong khong thay tron tag to lan tag nho; CAM_LAND_LOW_DEG ve mui thay tron tag nho -> neo EKF ngay tren dat.
 CAM_FOR_STATE = {IDLE: CAM_LAND_LOW_DEG, TAKEOFF: CAM_LAND_LOW_DEG, ENROUTE: CAM_ENROUTE_DEG,
                  MARKER_SEARCH: CAM_DOWN_DEG, ALIGN_HEADING: CAM_DOWN_DEG,

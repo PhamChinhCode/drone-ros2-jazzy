@@ -38,10 +38,11 @@ DRONES = {
                range_node=False, vel_ki=0.0, vel_ki_z=0.0, gripper=False,
                # Camera thap hon base_link 6 cm: tag hop ra khoi khung tu ToF ~0,30 m.
                box_cam_switch_m=0.32),
-    # Khung Version2.0 (models/drone_v2 <- drone_v2.urdf): truc servo + ong kinh theo URDF, laser 0,146 m
-    # khi nam dat (chan 0,155 m, mat MTF-01 0,009 m duoi mat FC = goc base_link), servo camera that.
+    # Khung Version2.0 (models/drone_v2 <- drone_v2.urdf): truc servo + ong kinh theo URDF, laser 0,196 m
+    # khi nam dat (cang moi 10-29: chan 0,205 m, mat MTF-01 0,009 m duoi mat FC = goc base_link), servo
+    # camera that.
     'v2': dict(world='drone_v2.sdf', model='drone_v2', pivot=[0.09525, -0.018, -0.05218], lens=[0.0, 0.017, -0.0418],
-               ground_range_m=0.146, camera_joint_topic='/X3/camera_tilt/cmd',
+               ground_range_m=0.196, camera_joint_topic='/X3/camera_tilt/cmd',
                # Laser theo tia (sim_tof): MTF-01 0,10 m sau tam, 0,009 m duoi FC (URDF); hop hang 12 cm
                # [x, y, yaw] - PHAI khop hop_a trong worlds/drone_v2.sdf (bai B trong de tha). Hop phia
                # "duoi" bai A, xoay 120 do so voi bai (10-27): drone phai quay mui 30 do moi kep duoc.
