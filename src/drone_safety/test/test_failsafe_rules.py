@@ -45,6 +45,22 @@ def test_mat_gcs_chi_khi_da_bao_false_du_lau():
     assert r.evaluate(inp(gcs_disconnected_since_s=85.0), L)[r.FS_LINK_LOST][0] == r.ESCALATE_RTH
 
 
+def test_mat_gcs_khi_dang_bay_nhiem_vu_thi_bay_tiep_neu_cho_phep():
+    # Bay that 10-29: mang chap chon -> mat GCS 10 s giua chang -> RTH huy nhiem vu.
+    tiep = r.Limits(link_lost_continue_mission=True)
+    mat = dict(gcs_disconnected_since_s=85.0, state_entered_s=99.0)
+    for st in ('TAKEOFF', 'ENROUTE', 'ACTUATE_GRIPPER', 'PRECISION_LAND'):
+        ev = r.evaluate(inp(mission_state=st, **mat), tiep)
+        assert ev[r.FS_LINK_LOST][0] == r.ESCALATE_NONE
+    # Nam dat (IDLE) hay chua biet trang thai: van chan cat canh.
+    for st in ('IDLE', None):
+        ev = r.evaluate(inp(mission_state=st, **mat), tiep)
+        assert ev[r.FS_LINK_LOST][0] == r.ESCALATE_RTH
+    # Mac dinh van RTH ca khi dang bay.
+    ev = r.evaluate(inp(gcs_disconnected_since_s=85.0, mission_state='ENROUTE'), L)
+    assert ev[r.FS_LINK_LOST][0] == r.ESCALATE_RTH
+
+
 def test_marker_timeout_va_gripper_chi_trong_dung_trang_thai():
     out = r.evaluate(inp(mission_state='MARKER_SEARCH', state_entered_s=70.0), L)
     assert out[r.FS_MARKER_TIMEOUT][0] == r.ESCALATE_RETRY_LOITER

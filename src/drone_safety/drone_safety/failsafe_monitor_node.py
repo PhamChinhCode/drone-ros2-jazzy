@@ -51,13 +51,15 @@ class FailsafeMonitorNode(Node):
         self.declare_parameter('fc_comm_timeout_s', 3.0)
         # Phat hien gripper khong xac nhan - KHONG thay cho sensor_confirmed (nguyen tac 3 FSM).
         self.declare_parameter('grip_confirm_timeout_s', 5.0)
+        self.declare_parameter('link_lost_continue_mission', False)
         self.declare_parameter('max_retries', 3)
         self.declare_parameter('check_rate_hz', 2.0)
 
         g = lambda k: self.get_parameter(k).value  # noqa: E731
         self.limits = rules.Limits(g('low_battery_pct'), g('critical_battery_pct'),
                                    g('link_lost_timeout_s'), g('marker_search_timeout_s'),
-                                   g('fc_comm_timeout_s'), g('grip_confirm_timeout_s'))
+                                   g('fc_comm_timeout_s'), g('grip_confirm_timeout_s'),
+                                   g('link_lost_continue_mission'))
 
         self.node_start_s = self.now_s()
         self.battery_pct = None

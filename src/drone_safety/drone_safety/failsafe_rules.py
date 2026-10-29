@@ -33,6 +33,10 @@ class Limits:
     marker_search_timeout_s: float = 20.0
     fc_comm_timeout_s: float = 3.0
     grip_confirm_timeout_s: float = 5.0
+    # Mat GCS khi DANG lam nhiem vu (khac IDLE): True = chi bao (ESCALATE_NONE), bay tiep toi het ke
+    # hoach; False = RTH. Nam dat (IDLE / chua biet trang thai) van RTH = chan cat canh. User 10-29:
+    # mang PC <-> Pi chap chon (Tailscale qua relay) huy nhiem vu giua chung; RC van gianh quyen duoc.
+    link_lost_continue_mission: bool = False
 
 
 @dataclass
@@ -76,8 +80,11 @@ def evaluate(inp, lim):
 
     if (inp.gcs_disconnected_since_s is not None
             and now - inp.gcs_disconnected_since_s > lim.link_lost_timeout_s):
-        out[FS_LINK_LOST] = (ESCALATE_RTH,
-                             f'mat GCS {now - inp.gcs_disconnected_since_s:.0f} s')
+        lost = now - inp.gcs_disconnected_since_s
+        if lim.link_lost_continue_mission and inp.mission_state not in (None, 'IDLE'):
+            out[FS_LINK_LOST] = (ESCALATE_NONE, f'mat GCS {lost:.0f} s - bay tiep nhiem vu')
+        else:
+            out[FS_LINK_LOST] = (ESCALATE_RTH, f'mat GCS {lost:.0f} s')
 
     in_state = None if inp.state_entered_s is None else now - inp.state_entered_s
     if inp.mission_state == 'MARKER_SEARCH' and in_state > lim.marker_search_timeout_s:

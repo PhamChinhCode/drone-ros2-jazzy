@@ -5,6 +5,9 @@ failsafe_monitor_node:
     low_battery_pct: 25.0
     critical_battery_pct: 15.0
     link_lost_timeout_s: 10.0
+    # Mat GCS qua link_lost_timeout_s khi DANG bay nhiem vu: true = bay tiep, chi bao (user 10-29);
+    # false = RTH. Nam dat chua cat canh thi luon chan cat canh. Dung lai bang RC (ch8 / ch5).
+    link_lost_continue_mission: true
     marker_search_timeout_s: 20.0
     fc_comm_timeout_s: 3.0
     grip_confirm_timeout_s: 5.0  # chi de PHAT HIEN gripper khong xac nhan, khong thay sensor_confirmed
