@@ -167,16 +167,19 @@ ALIGN_HEADING_TIMEOUT_S = 20.0  # qua han (gio xoay) -> ha voi mui dang co
 # 0,266 m (truoc: 0,20). Tha cung muc nay: day hop vua cham dat. Cang moi 10-29 (chan 0,205 m, user
 # giu treo roi kep): muc gap theo vi tri ngon kep nen KHONG doi; chan con cach dat ~7 cm o GRIP_HOVER_M,
 # ~5 cm o GRIP_CLOSE_M (ngon kep dong cao hon chan 1,2 cm - cham dat cung khong ket ngon).
-GRIP_HOVER_M = 0.27
+# User 10-29: nang ca treo lan kep them 3 cm (0,27 -> 0,30, 0,245 -> 0,275): chan cach dat ~8 cm luc kep,
+# ngon kep dong con an ~3 cm duoi nap hop (truoc ~6 cm). DROP_HOVER_M theo GRIP_HOVER_M nen day hop luc
+# tha van cach dat nhu cu (hop kep thap hon 3 cm so voi than).
+GRIP_HOVER_M = 0.30
 # Toi uu gap (user 10-25): o GRIP_HOVER_M day ngon kep (0,193 m duoi mat FC, URDF kep MG90) chi an
 # 2,4 cm duoi nap hop - nhap nho 3 cm la kep hut (mo phong 10-25). Ham bam tag hop toi GRIP_HOVER_M
 # (duoi nua ong kinh qua sat nap, khong doc duoc tag), roi ACTUATE_GRIPPER ha them theo EKF tai tam hop
 # da do toi GRIP_CLOSE_M: day ngon giua than hop, du 4,6 cm ca tren lan duoi.
-GRIP_CLOSE_M = 0.245
+GRIP_CLOSE_M = 0.275
 GRIP_HOLD_KP = 1.0              # giu do cao: vz = kp x (dich - ToF), kep +-LAND_DESCENT_NEAR_MPS
 # Doan cuoi toi do cao gap/tha ha cham: mo phong ToF theo tia 10-22, xuong 0,10 m/s thi FC tre lam lo
 # xuong 0,15 m (drone ngoi len chan).
-GRIP_SLOW_BELOW_M = 0.33
+GRIP_SLOW_BELOW_M = 0.36
 GRIP_FINAL_MPS = 0.05
 GRIP_STOP_LEAD_M = 0.015        # dung ha som chung nay: FC tre con xuong them ~2 cm (mo phong 10-22)
 # Chi kep khi EKF bao da vao tam hop: luc doi tu ha sang treo, luc day doi + trong tam lech day ngang
